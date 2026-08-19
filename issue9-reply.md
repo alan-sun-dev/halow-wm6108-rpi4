@@ -83,3 +83,7 @@ spi.c: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werr
 ```
 
 `SPI_CONTROLLER_ENABLE_CS_GPIOD` is a vendor-kernel flag; mainline 6.18 only has `HALF_DUPLEX`/`NO_RX`/`NO_TX`/`MUST_RX`/`MUST_TX`/`GPIO_SS`/`SUSPENDED`/`MULTI_CS`. Because `ccflags-y` carries `-Werror`, the `#warning` in the `#else` branch is fatal rather than advisory. Also worth checking: on mainline, `spi_add_device()` forces `SPI_CS_HIGH` on for any `cs-gpios` target so gpiolib applies the active-low inversion once, which means `morse_spi_initsequence()`'s set-then-clear of `SPI_CS_HIGH` leaves the bus with an inverted chip select afterwards. Flipping *away* from whatever state the core hands you, then restoring it, works on both vendor and mainline kernels.
+
+---
+
+Full measurements, the patches, both device tree overlays and the userspace probes used above are at <https://github.com/alan-sun-dev/halow-wm6108-rpi4>, in case any of it is useful for narrowing this down.
