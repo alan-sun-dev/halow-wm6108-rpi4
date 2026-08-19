@@ -1,0 +1,5 @@
+# Third-party binaries are not redistributed here
+*.img
+*.img.gz
+*.ko
+*.dtbo

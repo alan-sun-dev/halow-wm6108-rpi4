@@ -1,0 +1,81 @@
+/*
+ * mm610x-spi overlay rebuilt for the SenseCAP M1 mPCIe slot.
+ *
+ * The stock overlay in the prebuilt OpenWrt image is for Morse's own EKH01
+ * board and uses a different pin map:
+ *     stock EKH01 : RESET gpio5,  SPI_INT gpio25, WAKE gpio3, BUSY gpio7
+ *     WM1302 HAT  : RESET gpio17, SPI_INT gpio5,  WAKE gpio23, BUSY gpio24
+ * The M1's mPCIe slot follows the WM1302 HAT map, so the stock file drives
+ * gpio5 (which is the module's SPI_INT here) as a reset line and looks for the
+ * interrupt on gpio25, which is not connected.
+ *
+ * WAKE/BUSY are deliberately absent: measured floating on the M1 carrier, so
+ * power-gpios is left out and the driver will simply report that power save is
+ * unavailable rather than arming it against pins that are not there.
+ *
+ * gpio18 is the M1's slot power enable - not part of the HAT map and not in any
+ * stock overlay. Without it the slot is unpowered and the module is invisible.
+ *
+ * gpio17 is set pull-up because morse_hw_reset() releases RESET_N by floating
+ * the pin; the BCM2711 default pull is down, which would hold the radio in
+ * reset forever.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	fragment@0 {
+		target = <&spi0>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi0_pins &spi0_cs_pins &halow_ctrl_pins>;
+			cs-gpios = <&gpio 8 1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			mm6108@0 {
+				compatible = "morse,mm610x-spi";
+				reg = <0>;
+				reset-gpios = <&gpio 17 0>;
+				spi-irq-gpios = <&gpio 5 0>;
+				spi-max-frequency = <50000000>;
+				status = "okay";
+			};
+
+			spidev@0 { reg = <0>; status = "disabled"; };
+			spidev@1 { reg = <1>; status = "disabled"; };
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio>;
+		__overlay__ {
+			spi0_pins {
+				brcm,pull = <2 2 2>;
+			};
+
+			spi0_cs_pins {
+				brcm,pins = <8>;
+				brcm,function = <1>;
+				brcm,pull = <2>;
+			};
+
+			halow_ctrl_pins: halow_ctrl_pins {
+				brcm,pins = <17 5>;
+				brcm,function = <0 0>;	/* both inputs */
+				brcm,pull = <2 1>;	/* 17 up = reset released, 5 down */
+			};
+
+			halow_pwr_hog {
+				gpio-hog;
+				gpios = <18 0>;
+				output-high;
+				line-name = "halow-slot-power";
+			};
+		};
+	};
+};

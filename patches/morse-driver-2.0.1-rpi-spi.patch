@@ -1,0 +1,196 @@
+diff --git a/spi.c b/spi.c
+index e5facbd..f5d085b 100644
+--- a/spi.c
++++ b/spi.c
+@@ -230,6 +230,21 @@ static int morse_spi_setup(struct spi_device *spi, u32 max_speed_hz)
+ 	return ret;
+ }
+ 
++static uint spi_pre_token_bytes = 4;
++module_param(spi_pre_token_bytes, uint, 0644);
++MODULE_PARM_DESC(spi_pre_token_bytes,
++		 "Bytes to wait for MISO-ready between a write command's R1 and the data token");
++
++static uint spi_tx_rshift;
++module_param(spi_tx_rshift, uint, 0644);
++MODULE_PARM_DESC(spi_tx_rshift,
++		 "Right-shift every transmitted SPI buffer by N bits, to land on a byte grid the chip agrees with");
++
++static uint spi_rx_lshift;
++module_param(spi_rx_lshift, uint, 0644);
++MODULE_PARM_DESC(spi_rx_lshift,
++		 "Left-shift every received SPI buffer by N bits to re-align a chip that responds off a byte boundary");
++
+ /* Hack to shift bits for problematic SPI controllers */
+ static void morse_shift_buffer(u8 *data, unsigned int len, u8 right_shift_bits)
+ {
+@@ -248,6 +263,30 @@ static void morse_shift_buffer(u8 *data, unsigned int len, u8 right_shift_bits)
+ 	}
+ }
+ 
++/*
++ * Compensate a chip that starts its response a fixed number of bit times after
++ * the command instead of on the next byte boundary. The MM6108 on the Wio-WM6108
++ * answers 2 bits late and consistently: with CS/clock/CRC all verified good (a
++ * deliberately corrupted CMD0 CRC comes back as R1=0x09, CMD13 as R1=0x05), the
++ * only thing wrong with the received stream is its byte framing. is_rk3288 above
++ * fixes the opposite skew, so it shifts the other way.
++ */
++static void morse_lshift_buffer(u8 *data, unsigned int len, u8 left_shift_bits)
++{
++	unsigned int ii;
++
++	left_shift_bits = min_t(u8, left_shift_bits, 7);
++	if (!left_shift_bits)
++		return;
++
++	for (ii = 0; ii < len; ii++) {
++		u8 next = (ii + 1 < len) ? data[ii + 1] : 0xFF;
++
++		data[ii] = (data[ii] << left_shift_bits) |
++			   (next >> (8 - left_shift_bits));
++	}
++}
++
+ static int morse_spi_xfer(struct morse_spi *mspi, unsigned int len)
+ {
+ 	int ret = 0;
+@@ -261,11 +300,18 @@ static int morse_spi_xfer(struct morse_spi *mspi, unsigned int len)
+ 	}
+ 
+ 	mspi->t.len = len;
++
++	if (spi_tx_rshift)
++		morse_shift_buffer(mspi->data, len, spi_tx_rshift);
++
+ 	ret = spi_sync_locked(mspi->spi, &mspi->m);
+ 
+ 	if (is_rk3288)
+ 		morse_shift_buffer(mspi->data, len, 1);
+ 
++	if (spi_rx_lshift)
++		morse_lshift_buffer(mspi->data, len, spi_rx_lshift);
++
+ 	return ret;
+ }
+ 
+@@ -288,17 +334,46 @@ static void morse_spi_initsequence(struct morse_spi *mspi)
+ {
+ 	struct spi_device *spi = mspi->spi;
+ 
+-	spi->mode |= SPI_CS_HIGH;
++	/*
++	 * The training clocks must go out with CS *deasserted*, which this
++	 * function achieves by flipping SPI_CS_HIGH and putting it back.
++	 *
++	 * Which way to flip depends on the kernel. On a vendor kernel carrying
++	 * SPI_CONTROLLER_ENABLE_CS_GPIOD, SPI_CS_HIGH starts clear and setting
++	 * it deasserts CS. On mainline (checked on 6.18), spi_add_device()
++	 * forces SPI_CS_HIGH on for any cs-gpios target so that gpiolib applies
++	 * the active-low inversion exactly once - there SPI_CS_HIGH set is the
++	 * normal, CS-active-low state, and *clearing* it is what deasserts CS.
++	 *
++	 * Blindly setting-then-clearing (the original code) therefore leaves a
++	 * mainline GPIO-CS bus with inverted chip select: CS is driven high for
++	 * every transfer afterwards, the chip is never selected, and probe dies
++	 * at CMD63 with -EPROTO. So flip whichever way is away from the state
++	 * the core handed us, and restore that state afterwards.
++	 */
++	const bool cs_high_default = !!(spi->mode & SPI_CS_HIGH);
++
++	if (cs_high_default)
++		spi->mode &= ~SPI_CS_HIGH;
++	else
++		spi->mode |= SPI_CS_HIGH;
++
+ 	if (spi_setup(spi) != 0) {
+ 		/* Just warn; most cards work without it. */
+ 		dev_warn(&spi->dev, "can't change chip-select polarity\n");
+-		spi->mode &= ~SPI_CS_HIGH;
++		if (cs_high_default)
++			spi->mode |= SPI_CS_HIGH;
++		else
++			spi->mode &= ~SPI_CS_HIGH;
+ 	} else {
+ 		/* We will send only 0xFF for training */
+ 		memset(mspi->data, 0xFF, MM610X_BUF_SIZE);
+ 		morse_spi_xfer(mspi, 18);
+ 
+-		spi->mode &= ~SPI_CS_HIGH;
++		if (cs_high_default)
++			spi->mode |= SPI_CS_HIGH;
++		else
++			spi->mode &= ~SPI_CS_HIGH;
+ 		if (spi_setup(spi) != 0) {
+ 			/* Wot, we can't get the same setup we had before? */
+ 			dev_err(&spi->dev, "can't restore chip-select polarity\n");
+@@ -348,7 +423,10 @@ static int morse_spi_find_response(struct morse_spi *mspi, u8 *data, u8 *end, u8
+ 	}
+ 
+ 	if (*cp != 0x00) {
+-		MORSE_SPI_DBG(mors, "%s: SPI response error\n", __func__);
++		MORSE_SPI_DBG(mors, "%s: SPI response error: got 0x%02x at +%td of %td\n",
++			      __func__, *cp, cp - data, end - data);
++		print_hex_dump(KERN_INFO, "morse rx: ", DUMP_PREFIX_OFFSET, 16, 1,
++			       data, min_t(size_t, (size_t)(end - data), (size_t)32), false);
+ 		if (resp)
+ 			*resp = NULL;
+ 		return -EPROTO;
+@@ -487,15 +565,21 @@ static u8 *morse_spi_find_data_ack(struct morse_spi *mspi, u8 *data, u8 *end)
+ 	if (cp == end)
+ 		goto exit;
+ 
+-	if (SPI_MMC_RESPONSE_CODE(*cp) != SPI_RESPONSE_ACCEPTED)
++	if (SPI_MMC_RESPONSE_CODE(*cp) != SPI_RESPONSE_ACCEPTED) {
++		pr_info("morse ack: got 0x%02x at +%td of %td\n", *cp, cp - data, end - data);
++		print_hex_dump(KERN_INFO, "morse ack: ", DUMP_PREFIX_OFFSET, 16, 1,
++			       data, min_t(size_t, (size_t)(end - data), (size_t)16), false);
+ 		goto exit;
++	}
+ 
+ 	/* point to the next byte */
+ 	cp++;
+ 	return cp;
+ 
+ exit:
+-	MORSE_PR_ERR(FEATURE_ID_SPI, "%s failed\n", __func__);
++	MORSE_PR_ERR(FEATURE_ID_SPI, "%s failed (window %td bytes)\n", __func__, end - data);
++	print_hex_dump(KERN_INFO, "morse ackwin: ", DUMP_PREFIX_OFFSET, 16, 1,
++		       data, min_t(size_t, (size_t)(end - data), (size_t)48), false);
+ 	return NULL;
+ }
+ 
+@@ -668,7 +752,7 @@ static int morse_spi_cmd53_write(struct morse_spi *mspi, u8 fn, u32 address, u8
+ 	cp += 4;
+ 
+ 	/* Allow 4 bytes to get 0xFF (i.e MISO ready) */
+-	cp += 4;
++	cp += spi_pre_token_bytes;
+ 
+ 	data_size = block ? MMC_SPI_BLOCKSIZE : count;
+ 	for (i = 0; i < (block ? count : 1); i++, data += MMC_SPI_BLOCKSIZE) {
+@@ -748,6 +832,8 @@ static int morse_spi_cmd53_write(struct morse_spi *mspi, u8 fn, u32 address, u8
+ 
+ exit:
+ 	MORSE_PR_ERR(FEATURE_ID_SPI, "%s failed\n", __func__);
++	print_hex_dump(KERN_INFO, "morse w53: ", DUMP_PREFIX_OFFSET, 16, 1,
++		       mspi->data, min_t(size_t, (size_t)(end - mspi->data), (size_t)64), false);
+ 	return -EPROTO;
+ }
+ 
+@@ -1516,7 +1602,14 @@ static int morse_spi_probe(struct spi_device *spi)
+ #ifdef SPI_CONTROLLER_ENABLE_CS_GPIOD
+ 	spi->controller->flags |= SPI_CONTROLLER_ENABLE_CS_GPIOD;
+ #else
+-#warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined"
++	/*
++	 * SPI_CONTROLLER_ENABLE_CS_GPIOD is a vendor-kernel flag and does not exist in
++	 * mainline (checked against 6.18: spi.h only has HALF_DUPLEX/NO_RX/NO_TX/MUST_RX/
++	 * MUST_TX/GPIO_SS/SUSPENDED/MULTI_CS). Mainline already forces SPI_CS_HIGH for
++	 * cs-gpios targets and lets gpiolib apply the active-low inversion, which is the
++	 * behaviour this flag was backporting. Nothing to do here; the original #warning
++	 * only broke the build because ccflags-y carries -Werror.
++	 */
+ #endif
+ #endif
+ 	morse_spi_xfer_init(mspi);
