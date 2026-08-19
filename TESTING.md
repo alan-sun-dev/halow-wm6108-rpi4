@@ -49,6 +49,40 @@ Then:
 - Web UI: <http://192.168.1.1>
 - SSH: `ssh root@192.168.1.1` — **root has no password** on a fresh image
 
+## Recommended: run Claude Code on that laptop and SSH in
+
+You already need a laptop on the other end of the Ethernet cable, so work from
+there rather than trying to install Claude Code onto OpenWrt:
+
+```sh
+git clone https://github.com/alan-sun-dev/halow-wm6108-rpi4
+cd halow-wm6108-rpi4
+claude
+```
+
+Then `ssh root@192.168.1.1` from that laptop, run the commands below and read
+the output together. This gives more context than any saved memory would - the
+memory is a compressed summary, this repository is the full detail, including
+every hypothesis that was eliminated and the measurements behind it.
+
+**Why not install Claude Code on the OpenWrt box:**
+
+- OpenWrt is built against **musl libc, not glibc**, and Claude Code's
+  distributed binaries and native modules target glibc. That is the hard wall.
+- OpenWrt is not a supported platform.
+- It needs Node.js, and building native dependencies against musl tends to fail.
+- The image comes up as a network appliance on LAN `192.168.1.1`; you would have
+  to configure a WAN before it can reach the internet at all.
+- You would have to authenticate again.
+
+Even if all of that were solved, the Pi 4 would then be running OpenWrt, Node.js
+and the HaLow driver you are trying to test, all at once.
+
+**If you try anyway, run the test and save the dmesg output first.** Then, if
+the install fails, you still have the result you came for. A copy of the memory
+files is at `/boot/claude-memory/` on the card - just tell Claude to read
+`/boot/claude-memory/`, no particular path is required.
+
 ## The three commands that matter
 
 ```sh

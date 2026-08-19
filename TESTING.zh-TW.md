@@ -46,6 +46,38 @@ OpenMANET 開機後在 **192.168.1.1**，而且**它自己會跑 DHCP 伺服器*
 - 網頁介面：<http://192.168.1.1>
 - SSH：`ssh root@192.168.1.1` —— 全新映像的 **root 沒有密碼**，直接進得去
 
+## 建議：在那台筆電上跑 Claude Code，SSH 進來
+
+反正你已經要拿一台筆電用網路線直連了，就在那台筆電上工作，不要試圖把 Claude Code
+裝到 OpenWrt 上：
+
+```sh
+git clone https://github.com/alan-sun-dev/halow-wm6108-rpi4
+cd halow-wm6108-rpi4
+claude
+```
+
+然後從筆電 `ssh root@192.168.1.1` 跑下面的指令，即時一起判讀輸出。
+
+這樣拿到的脈絡比記憶檔更完整 —— 記憶是壓縮過的摘要，這個倉庫是全部細節，
+包含每個已排除的假設和實測數據。
+
+**為什麼不要在 OpenWrt 上裝 Claude Code：**
+
+- OpenWrt 用 **musl libc 而非 glibc**，Claude Code 發佈的原生執行檔與相依模組
+  是對 glibc 建的，這是最根本的一道牆
+- OpenWrt 不在支援平台清單裡
+- 需要 Node.js，而 musl 上 `npm install` 原生相依套件很容易失敗
+- 這份映像預設是 LAN `192.168.1.1` 的網路設備角色，要先自己設好 WAN 才能連外
+- 還要重新登入帳號
+
+就算全部克服，這台 Pi 4 還得同時跑 OpenWrt、Node.js 和你要測的 HaLow 驅動。
+那些時間本來該花在讀 dmesg 上。
+
+**真的要試的話，先跑完測試、把 dmesg 存下來，再去折騰安裝。** 萬一裝不起來，
+至少該拿到的資料已經到手。卡上的 `/boot/claude-memory/` 有記憶檔副本，進去之後
+直接跟它說「讀 /boot/claude-memory/ 底下的檔案」即可，不需要放在特定路徑。
+
 ## 三行關鍵指令
 
 ```sh
