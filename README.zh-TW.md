@@ -146,6 +146,11 @@ gpio25 —— 和 WM1302 HAT 的腳位定義不同。在 HAT 佈線的載板上�
 分割區裡也有 `bcm2711-rpi-4-b.dtb`。`ekh01` 這個字串只出現在 OpenWrt 各板
 LED 與網路設定的 `case` 清單裡，而且與 `raspberrypi,*` 並列。
 
+## 實機測試
+
+[TESTING.zh-TW.md](TESTING.zh-TW.md) 是一份自足的操作流程：換上 OpenMANET 卡、
+判讀結果。寫成可以在手機上照著做，因為測試進行時，存放這些筆記的機器是關著的。
+
 ## 目錄結構
 
 ```

@@ -153,6 +153,12 @@ boot partition carries `bcm2711-rpi-4-b.dtb`. The `ekh01` string only appears in
 OpenWrt's per-board LED and network `case` lists, alongside the `raspberrypi,*`
 entries.
 
+## Testing on hardware
+
+[TESTING.md](TESTING.md) is a self-contained procedure for swapping in an
+OpenMANET card and reading the result — written to be followed from a phone,
+since the machine holding these notes is powered down while the test runs.
+
 ## Layout
 
 ```
