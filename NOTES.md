@@ -1,5 +1,7 @@
 # Wio-WM6108 (MM6108A1) on SenseCAP M1 — bring-up state, 2026-08-19
 
+*[中文版](NOTES.zh-TW.md)*
+
 ## Hardware: confirmed good
 - Chip identified by the driver over SPI: **chip ID 0x0306 = MM6108A1**
   (`MORSE_DEVICE_ID(0x6, rev 3, silicon)` in hw.h). Not a guess - the driver's
@@ -60,10 +62,9 @@ grid matters too.
 - `enable_ext_xtal_init=1` - no change.
 - Cold power cycle of the slot (GPIO18 low 3 s, not just a RESET_N pulse) -
   skew and write failure both survive it, so neither is a stuck-state artifact.
-- Driver tag 1.16.4: **dead end**. It needs a mac80211 patched with Morse's S1G
-  channel flags (IEEE80211_CHAN_1MHZ/2MHZ/4MHZ/8MHZ/IGNORE, from_timer,
-  del_timer_sync). 2.0.1 ships its own dot11ah/s1g_ieee80211.h and builds
-  against a stock kernel, so 2.0.1 is the right branch for Raspberry Pi OS.
+- Driver tag 1.16.4. It does not build against 6.18 without work, but the
+  reason is not what it first looks like - see "Driver version is ruled out"
+  below, which supersedes an earlier wrong conclusion here.
 
 ## Carrier wiring finding
 With the module powered and out of reset, tested by flipping the BCM2711
@@ -133,13 +134,22 @@ They also state the device "only supports the US and does not support other
 countries or regions".
 
 ## Next things to try, in order of expected value
-1. Driver tag `1.16.4` - the Morse community reports that exact version working
-   with this exact module (WM6108 + WM1302 Pi HAT) over SPI on a Pi.
-2. Seeed's prebuilt OpenWrt image, purely to confirm the hardware reaches a
-   working link, then port the delta back to Raspberry Pi OS.
-3. Establish whether the 2-bit skew comes from the BCM2835 SPI controller
+1. A prebuilt OpenWrt image on a spare microSD. It is the only configuration
+   Seeed document, and it pulls in a completely different kernel - 5.15.189
+   against the 6.18.34 here - so it also tests a different `spi-bcm2835`
+   generation, which is a variable that cannot be changed on the running
+   system. `overlays/openwrt/` has the corrected overlay and a script that
+   patches a freshly flashed boot partition; the stock image will not work
+   unmodified because its overlay is for Morse's EKH01 pin map.
+   Note the driver in those images is stock, with no `spi_rx_lshift`, so if the
+   skew is still present it will stop at CMD63 rather than reaching the write.
+   Either outcome is a result worth having.
+2. Establish whether the 2-bit skew comes from the BCM2835 SPI controller
    rather than the module - the driver already carries a 1-bit shift quirk for
    RK3288, so a controller-side skew has precedent.
+3. Failing both, this module and a Pi 4 may simply not work together. Every
+   documented success is on a Pi 5 / RP1, and a USB HaLow adapter would side-
+   step the SPI transport entirely.
 
 ## Nothing here persists across a reboot
 The device tree overlay was applied at runtime only; config.txt is untouched.

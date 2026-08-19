@@ -1,5 +1,7 @@
 # Wio-WM6108 (Morse Micro MM6108) over SPI on a Raspberry Pi 4
 
+*[中文版 README](README.zh-TW.md)*
+
 Bring-up notes, patches and measurement tools for a Seeed **Wio-WM6108** Wi-Fi
 HaLow mini-PCIe module (Quectel FGH100M-H, Morse Micro **MM6108A1**) driven over
 SPI from a Raspberry Pi 4.
