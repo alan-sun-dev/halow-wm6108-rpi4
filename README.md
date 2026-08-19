@@ -106,7 +106,39 @@ leaves the bus with an inverted chip select. Both are handled in `patches/`.
 **Regulatory:** the driver has no `TW` regdomain, but `SG` is 920–925 MHz /
 4 MHz / 22 dBm, which matches the Taiwan NCC allocation exactly.
 
-## Prebuilt OpenWrt images need their overlay replaced
+## OpenMANET ships an image built for exactly this wiring
+
+[OpenMANET](https://github.com/OpenMANET/firmware/releases) publishes
+`openmanet-<ver>-rpi4-mm6108-spi-squashfs-sysupgrade.img.gz`, and its device
+tree is the WM1302 HAT pin map, not the EKH01 one:
+
+```
+reset-gpios   = <&gpio 17 0>      morse_reset { pins 17, input, pull-up }
+spi-irq-gpios = <&gpio  5 0>      morse_irq   { pins  5, input, pull-up }
+power-gpios   = <&gpio 23 0>, <&gpio 24 0>
+cs-gpios      = <&gpio  8 1>      spi-max-frequency = 50 MHz
+```
+
+Note `morse_reset` is configured **pull-up** — independent confirmation of the
+RESET_N floating problem described above.
+
+1.8.0 (2026-08-16) is OpenWrt 24.10, kernel **6.6.138**, and carries morse
+driver **`0-rel_mm6108_2_0_1_2026_Jun_11`** — the same release built here — plus
+`mm6108.bin` and `bcf_fgh100mhaamd.bin` identical to the ones used here.
+
+That makes it a clean single-variable experiment. Same driver, same firmware,
+same pin map; the only thing that changes is the kernel, and with it the
+`spi-bcm2835` generation: 6.6.138 there against 6.18.34 here. If the 2-bit skew
+survives that, the skew is not coming from the SPI controller driver.
+
+On a carrier that gates slot power from a GPIO (the SenseCAP M1 uses GPIO18)
+that line still has to be added — it is in no upstream overlay:
+
+```
+gpio=18=op,dh
+```
+
+## Other prebuilt images need their overlay replaced
 
 The prebuilt images (Seeed's, and beyondlogic's newer 2.11.13 build) ship an
 `mm610x-spi.dtbo` for Morse's own EKH01 board — RESET on gpio5, SPI_INT on

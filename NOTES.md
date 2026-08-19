@@ -134,8 +134,14 @@ They also state the device "only supports the US and does not support other
 countries or regions".
 
 ## Next things to try, in order of expected value
-1. A prebuilt OpenWrt image on a spare microSD. It is the only configuration
-   Seeed document, and it pulls in a completely different kernel - 5.15.189
+1. **OpenMANET's `rpi4-mm6108-spi` image** on a spare microSD. Its device tree
+   is already the WM1302 HAT pin map with GPIO17 pulled up, and it carries the
+   same driver release and firmware built here, so the only variable left is
+   the kernel and its `spi-bcm2835` generation (6.6.138 there, 6.18.34 here).
+   Only the slot power line (`gpio=18=op,dh`) has to be added. A tip from
+   not5erpe on issue #9; the rpi4-mm6108-spi asset is by far the most
+   downloaded of that release, which suggests the combination is in real use.
+2. Seeed's own prebuilt image. It is the only configuration Seeed document, and it pulls in a completely different kernel - 5.15.189
    against the 6.18.34 here - so it also tests a different `spi-bcm2835`
    generation, which is a variable that cannot be changed on the running
    system. `overlays/openwrt/` has the corrected overlay and a script that
@@ -144,10 +150,10 @@ countries or regions".
    Note the driver in those images is stock, with no `spi_rx_lshift`, so if the
    skew is still present it will stop at CMD63 rather than reaching the write.
    Either outcome is a result worth having.
-2. Establish whether the 2-bit skew comes from the BCM2835 SPI controller
+3. Establish whether the 2-bit skew comes from the BCM2835 SPI controller
    rather than the module - the driver already carries a 1-bit shift quirk for
    RK3288, so a controller-side skew has precedent.
-3. Failing both, this module and a Pi 4 may simply not work together. Every
+4. Failing all of that, this module and a Pi 4 may simply not work together. Every
    documented success is on a Pi 5 / RP1, and a USB HaLow adapter would side-
    step the SPI transport entirely.
 

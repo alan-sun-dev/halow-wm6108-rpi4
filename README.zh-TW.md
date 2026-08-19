@@ -103,7 +103,37 @@ S1G 的定義，所以 `dot11ah/s1g_ieee80211.h` 需要 2.0.1 才加上的那個
 **法規：** 驅動沒有 `TW` 區域，但 `SG` 是 920–925 MHz / 4 MHz / 22 dBm，與台灣
 NCC 的開放頻段完全吻合。
 
-## 預建 OpenWrt 映像必須換掉 overlay
+## OpenMANET 有一份正好就是這套佈線的映像
+
+[OpenMANET](https://github.com/OpenMANET/firmware/releases) 發佈的
+`openmanet-<版本>-rpi4-mm6108-spi-squashfs-sysupgrade.img.gz`，其 device tree
+用的是 WM1302 HAT 的腳位，不是 EKH01 那套：
+
+```
+reset-gpios   = <&gpio 17 0>      morse_reset { 腳位 17, 輸入, 上拉 }
+spi-irq-gpios = <&gpio  5 0>      morse_irq   { 腳位  5, 輸入, 上拉 }
+power-gpios   = <&gpio 23 0>, <&gpio 24 0>
+cs-gpios      = <&gpio  8 1>      spi-max-frequency = 50 MHz
+```
+
+注意 `morse_reset` 設成**上拉** —— 這獨立驗證了前面講的 RESET_N 浮接問題。
+
+1.8.0（2026-08-16）是 OpenWrt 24.10、核心 **6.6.138**，內附的 morse 驅動是
+**`0-rel_mm6108_2_0_1_2026_Jun_11`** —— 與本倉庫編譯的是同一個 release ——
+`mm6108.bin` 與 `bcf_fgh100mhaamd.bin` 也和這裡用的完全相同。
+
+這讓它成為一個乾淨的**單變數實驗**：驅動相同、韌體相同、腳位相同，唯一改變的
+是核心，連帶改變 `spi-bcm2835` 的世代 —— 那邊是 6.6.138，這裡是 6.18.34。
+如果 2-bit 偏移在那上面依然存在，就代表偏移不是 SPI 控制器驅動造成的。
+
+若載板是用 GPIO 控制插槽電源（SenseCAP M1 用 GPIO18），那一行仍然要自己補，
+上游沒有任何 overlay 會處理它：
+
+```
+gpio=18=op,dh
+```
+
+## 其他預建映像必須換掉 overlay
 
 預建映像（Seeed 官方版，以及 beyondlogic 較新的 2.11.13 版）內附的
 `mm610x-spi.dtbo` 是給 Morse 自家 EKH01 板用的 —— RESET 在 gpio5、SPI_INT 在
