@@ -2,6 +2,26 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-23 收尾 —— 目前留下的狀態
+
+工作已完成並送出上游。三個缺陷全在驅動的 `spi.c`：`-Werror` 下編不過的 `#warning`、
+初始化訓練 clock 在 CS 被選取的狀態下送出、以及交易間延遲被按時脈換算（但晶片是數
+clock 數的）。乾淨的 series 是 `patches/upstream/000{1,2,3}-*.patch`，對著 tag
+`mm6108-2.0.1`，在硬體上以「不帶模組參數」驗證過，已送出為
+[morse_driver#16](https://github.com/MorseMicro/morse_driver/pull/16)。
+`patches/morse-driver-2.0.1-rpi-spi.patch` 仍是調查用的工作檔（儀器與實驗參數），
+不要拿它給任何人。
+
+**板子 `E4:5F:01:52:55:04` 目前不是乾淨狀態。** 那台 Pi 的 `~/halow-test/morse_driver`
+裡，`spi.c`、`mac.c`、`hw_scan.c` 三個檔都被改過：`mac.c` 與 `hw_scan.c` 帶著六行
+`MORSE-PROBE` 的 `pr_info`，是為了追哪些 mac80211 callback 有被呼叫而加的；目前載入的
+模組有那些探針，但**沒有** SPI 修正（`strings morse.ko | grep -c SPI_NO_CS` 回 0）。
+要回到乾淨可運作的建置：在那裡 `git checkout -- .`，再重新套 `patches/upstream/`。
+安裝的 overlay 是「所有 DT 差異一次全上」的實驗版；原廠版備份在
+`/boot/firmware/overlays/mm610x-spi-sensecap.dtbo.orig` 與 `/boot/firmware/config.txt.orig`。
+
+還沒驗證的是連線與資料傳輸，那需要第二台 HaLow 裝置。
+
 ## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
 
 ```

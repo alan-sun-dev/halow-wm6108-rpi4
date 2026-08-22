@@ -2,6 +2,30 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-23, session close — where things were left
+
+The work is finished and submitted. Three defects, all in the driver's `spi.c`:
+the build `#warning` under `-Werror`, the init training burst going out with CS
+asserted, and the inter-transaction delay being scaled by clock rate when the
+chip counts clocks. The clean series is `patches/upstream/000{1,2,3}-*.patch`
+against tag `mm6108-2.0.1` — verified on hardware with no module parameters, and
+submitted as [morse_driver#16](https://github.com/MorseMicro/morse_driver/pull/16).
+`patches/morse-driver-2.0.1-rpi-spi.patch` remains the investigation's working
+file (instrumentation, experiment parameters); it is not the one to send anyone.
+
+**Board `E4:5F:01:52:55:04` is not in a clean state.** In `~/halow-test/morse_driver`
+on that Pi, `spi.c`, `mac.c` and `hw_scan.c` are all modified: `mac.c` and
+`hw_scan.c` carry six `MORSE-PROBE` `pr_info` lines added to find which mac80211
+callbacks fire, and the currently loaded module has those probes but **not** the
+SPI fixes (`strings morse.ko | grep -c SPI_NO_CS` returns 0). To get back to a
+clean working build: `git checkout -- .` there, then re-apply `patches/upstream/`.
+The installed overlay is the all-DT-matches experiment; stock is backed up at
+`/boot/firmware/overlays/mm610x-spi-sensecap.dtbo.orig` and
+`/boot/firmware/config.txt.orig`.
+
+What remains untested is association and data transfer, which needs a second
+HaLow device.
+
 ## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
 
 ```

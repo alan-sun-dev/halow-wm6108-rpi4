@@ -5,32 +5,53 @@
 Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Micro
 **MM6108A1**）在 Raspberry Pi 4 上以 SPI 驅動的移植紀錄、patch 與量測工具。
 
-> ## 2026-08-23 更新 —— 已解決：晶片從來沒有被切進 SPI 模式
+> ## 2026-08-23 更新 —— 已解決：`wlan1` 在原廠 Raspberry Pi OS 上起來了
 >
-> **根本原因。** MM6108 必須先收到約 74 個 **CS 未選取**狀態下的 clock 才會進入 SPI
-> 模式。`morse_spi_initsequence()` 想用翻轉 `SPI_CS_HIGH` 來達成，但在 `cs-gpios`
-> 控制器上 `spi_setup()` 會把那個位元立刻設回去，於是訓練 clock 是在晶片**被選取**的
-> 狀態下送出的。它從未進入 SPI 模式，之後每一筆回應都偏離位元組格線兩個 bit。
+> ```
+> phy33 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+> wlan1 up，0 次寫入失敗、0 次讀取失敗、0 次 probe 失敗
+> SPI core 統計：errors 0、timedout 0
+> ```
 >
-> **修正。** 改用 `SPI_NO_CS` 送那串訓練：控制器完全不碰 CS 線，GPIO 全程保持高電位。
-> 已在 `patches/` 裡，由 `spi_init_no_cs`（預設開啟）控制。
+> 不帶任何模組參數，不需要 `spi_rx_lshift`，原廠核心 6.6.51+rpt-rpi-v8。驅動的
+> `spi.c` 裡有**三個**缺陷要修，而且每一個都擋住了下一個。
 >
-> 套用之後：偏移消失、CMD63 通過、韌體與 BCF 載入，而且 **`spi_rx_lshift` 完全不再
-> 需要** —— 讀取路徑原生就正確。
+> **1. 在 `SPI_CONTROLLER_ENABLE_CS_GPIOD` 未定義的地方，這個驅動根本編不過** ——
+> `-Werror` 下的一行 `#warning`。那包含 raspberrypi/linux 6.6.51，不是只有 mainline。
+>
+> **2. 晶片從來沒有被切進 SPI 模式。** 它必須先收到約 74 個 **CS 未選取**狀態下的
+> clock 才會進入 SPI 模式。`morse_spi_initsequence()` 想用翻轉 `SPI_CS_HIGH` 來達成，
+> 但在 `cs-gpios` 控制器上 `spi_setup()` 會把那個位元立刻設回去，於是訓練 clock 是在
+> 晶片**被選取**的狀態下送出的。它從未進入 SPI 模式，之後每一筆回應都偏離位元組格線
+> 兩個 bit。**修正：改用 `SPI_NO_CS` 送那串訓練**，控制器完全不碰 CS 線，GPIO 全程
+> 保持高電位。順序也有講究 —— 這串訓練必須在 reset 之後、任何其他交易之前送出；晶片
+> 一旦在 CS 被選取的狀態下被定址過，就救不回來了。
+>
+> **3. 交易之間的延遲是以 SPI clock 數計算的，不是時間。** 驅動用
+> `40000ns / (clk_period * 8)` 換算 —— 50 MHz 得到 250 bytes，10 MHz 得到 50。兩者
+> 都是 40 µs，但 50 會失敗、250 可以。**修正：三處延遲全部設 250 bytes 下限。**
+> Morse 自己的 OpenWrt feed 早就有這個下限，只是沒進到釋出的驅動裡。這也解釋了為什麼
+> 能動的環境清一色跑 50 MHz。
 >
 > 以同一個驅動二進位、同一塊板子、單一參數的 A/B 驗證，並在使用者空間手動控制 CS
 > 複驗。細節見
-> [`logs/2026-08-23-nocs-init-fix-environment.txt`](logs/2026-08-23-nocs-init-fix-environment.txt)。
+> [`logs/2026-08-23-nocs-init-fix-environment.txt`](logs/2026-08-23-nocs-init-fix-environment.txt)
+> 與 [`logs/2026-08-23-WORKING-environment.txt`](logs/2026-08-23-WORKING-environment.txt)。
 >
-> **這不是這片載板特有的問題。** 任何 `spi_setup()` 會對 `cs-gpios` 裝置強制
-> `SPI_CS_HIGH` 的主機都一樣 —— 那包含 mainline，以及所有帶 `950-0204` 的 rpi 核心。
-> 修正應該做在驅動裡。
+> **乾淨的修正在 [`patches/upstream/`](patches/upstream/)** —— 對著 tag
+> `mm6108-2.0.1` 的三個 patch，不含任何儀器程式碼，且在硬體上以「不帶模組參數」驗證
+> 過。已送出為 [morse_driver#16](https://github.com/MorseMicro/morse_driver/pull/16)；
+> 初始化那個缺陷另外獨立回報為
+> [issue #15](https://github.com/MorseMicro/morse_driver/issues/15)。
+> `patches/morse-driver-2.0.1-rpi-spi.patch` 是調查用的工作檔（儀器與實驗參數），
+> 不要拿它。
 >
-> 已回報上游：[morse_driver issue #15](https://github.com/MorseMicro/morse_driver/issues/15)。
+> **這不是這片載板特有的問題。** 缺陷 2 是在 6.6.51 上實測的；就程式碼判讀，任何
+> `spi_setup()` 會對 `cs-gpios` 裝置強制 `SPI_CS_HIGH` 的主機都一樣 —— 那包含
+> mainline 以及所有帶 `950-0204` 的 rpi 核心。修正應該做在驅動裡。
 >
-> **仍未解決：** CMD53 寫入。失敗點從「`fn=1 0x00004050:4`、晶片沉默」變成
-> 「`fn=2 0x00000000:14`、晶片有回應」—— 那是韌體下載階段，比先前深得多。這是另一個
-> 問題，現在才第一次看得見。
+> **尚未驗證的是**連線與資料傳輸，因為手上沒有第二台 HaLow 裝置 —— 不是驅動本身有
+> 疑慮。掃描確實有打到晶片，掃不到東西是因為附近沒有 HaLow 網路。
 
 > **2026-08-22 進度更新。** 同硬體四次實測，只換作業系統映像：
 >
@@ -49,8 +70,9 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 >
 > issue #9 上有四則追加 comment，每次實測的 dmesg + 環境快照在 [`logs/`](logs/)。以下為走到這一步之前的原始移植紀錄。
 
-**狀態：可運作。** `wlan1` 在原廠 Raspberry Pi OS 上起得來、綁在 `spi0.0`，351 筆交易零讀寫失敗。
-過程中修掉兩個驅動缺陷，都在 `patches/` 裡，說明見上方與 [NOTES.zh-TW.md](NOTES.zh-TW.md)。這看起來就是
+**狀態：可運作。** `wlan1` 在原廠 Raspberry Pi OS 上起得來、綁在 `spi0.0`，零讀寫失敗。
+過程中修掉三個驅動缺陷，乾淨的修正在 [`patches/upstream/`](patches/upstream/)，說明見上方與
+[NOTES.zh-TW.md](NOTES.zh-TW.md)。這看起來就是
 [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9)
 撞到的同一道牆 —— 那個 issue 至今未解，而且對方用的是**官方支援的硬體**
 （Raspberry Pi 4 + 原廠 Seeed WM1302 Pi HAT + 打過 Morse patch 的核心）。

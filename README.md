@@ -6,36 +6,62 @@ Bring-up notes, patches and measurement tools for a Seeed **Wio-WM6108** Wi-Fi
 HaLow mini-PCIe module (Quectel FGH100M-H, Morse Micro **MM6108A1**) driven over
 SPI from a Raspberry Pi 4.
 
-> ## Update 2026-08-23 — SOLVED: the chip was never put into SPI mode
+> ## Update 2026-08-23 — SOLVED. `wlan1` is up on stock Raspberry Pi OS
 >
-> **Root cause.** The MM6108 needs ~74 clocks with chip select **deasserted** to
-> enter SPI mode. `morse_spi_initsequence()` tries to arrange that by flipping
-> `SPI_CS_HIGH` around the training burst — but on a `cs-gpios` controller
-> `spi_setup()` forces that bit straight back on, so the burst goes out with the
-> chip *selected*. It never enters SPI mode, and every response afterwards sits
-> two bit times off the byte grid.
+> ```
+> phy33 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+> wlan1 up, 0 write failures, 0 read failures, 0 probe failures
+> SPI core statistics: errors 0, timedout 0
+> ```
 >
-> **Fix.** Use `SPI_NO_CS` for the burst instead: the controller leaves the CS
-> line alone and the GPIO stays high throughout. In `patches/`, behind
-> `spi_init_no_cs` (default on).
+> No module parameters, no `spi_rx_lshift`, stock kernel 6.6.51+rpt-rpi-v8.
+> Three defects in the driver's `spi.c` had to be fixed, and each one hid the
+> next.
 >
-> With it: no skew, CMD63 passes, firmware and BCF load, and **`spi_rx_lshift` is
-> no longer needed at all** — the read path works natively.
+> **1. The driver does not build** where `SPI_CONTROLLER_ENABLE_CS_GPIOD` is
+> undefined — a `#warning` under `-Werror`. That includes raspberrypi/linux
+> 6.6.51, not just mainline.
 >
-> Verified by a single-parameter A/B in one driver binary on one board, and in
+> **2. The chip was never put into SPI mode.** It needs ~74 clocks with chip
+> select **deasserted** to enter it. `morse_spi_initsequence()` tries to arrange
+> that by flipping `SPI_CS_HIGH` around the training burst — but on a `cs-gpios`
+> controller `spi_setup()` forces that bit straight back on, so the burst goes out
+> with the chip *selected*. It never enters SPI mode, and every response
+> afterwards sits two bit times off the byte grid. **Fix: `SPI_NO_CS` for the
+> burst**, so the controller leaves the CS line alone and the GPIO stays high
+> throughout. Order matters — the burst must come after reset and before any other
+> transaction; once the chip has been addressed with CS asserted it does not
+> recover.
+>
+> **3. The inter-transaction delay is counted in SPI clocks, not in time.** The
+> driver derives it as `40000ns / (clk_period * 8)` — 250 bytes at 50 MHz, 50 at
+> 10 MHz. Both are 40 µs, yet 50 fails and 250 works. **Fix: floor all three
+> delay sites at 250 bytes.** Morse's own OpenWrt feed already carries that floor;
+> it is simply not in the released driver. This is why every setup that works runs
+> at 50 MHz.
+>
+> Verified by single-parameter A/B inside one driver binary on one board, and in
 > userspace with the chip select driven by hand. Detail in
-> [`logs/2026-08-23-nocs-init-fix-environment.txt`](logs/2026-08-23-nocs-init-fix-environment.txt).
+> [`logs/2026-08-23-nocs-init-fix-environment.txt`](logs/2026-08-23-nocs-init-fix-environment.txt)
+> and [`logs/2026-08-23-WORKING-environment.txt`](logs/2026-08-23-WORKING-environment.txt).
 >
-> **This is not specific to this carrier.** Any host where `spi_setup()` forces
-> `SPI_CS_HIGH` for a `cs-gpios` device has the same problem — that is mainline,
-> and every rpi kernel carrying `950-0204`. The fix belongs in the driver.
+> **The clean fixes are in [`patches/upstream/`](patches/upstream/)** — three
+> patches against tag `mm6108-2.0.1`, no instrumentation, verified on hardware
+> with no module parameters. Submitted as
+> [morse_driver#16](https://github.com/MorseMicro/morse_driver/pull/16); the init
+> defect is also reported on its own as
+> [issue #15](https://github.com/MorseMicro/morse_driver/issues/15).
+> `patches/morse-driver-2.0.1-rpi-spi.patch` is the investigation's working file
+> — instrumentation and experiment parameters — and is not the one to use.
 >
-> Reported upstream as [morse_driver issue #15](https://github.com/MorseMicro/morse_driver/issues/15).
+> **Not specific to this carrier.** Defect 2 measured on 6.6.51; by inspection it
+> applies to any host where `spi_setup()` forces `SPI_CS_HIGH` for a `cs-gpios`
+> device, which is mainline and every rpi kernel carrying `950-0204`. The fix
+> belongs in the driver.
 >
-> **Still open:** CMD53 writes. The failure moved from `fn=1 0x00004050:4` with
-> the chip silent, to `fn=2 0x00000000:14` with the chip answering — the firmware
-> download, much further into init. A separate problem, now visible for the first
-> time.
+> **Untested:** association and data transfer, for want of a second HaLow device
+> — not anything about the driver. Scans reach the chip and find nothing because
+> there is no HaLow network in range.
 
 > **Update 2026-08-22.** Four end-to-end tests on the same board, changing only the OS image:
 >
@@ -55,8 +81,9 @@ SPI from a Raspberry Pi 4.
 > Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led here.
 
 **Status: working.** `wlan1` comes up on stock Raspberry Pi OS, bound to `spi0.0`, with zero
-SPI read or write failures over 351 transactions. Two driver defects had to be fixed; both are in
-`patches/` and described above and in [NOTES.md](NOTES.md). This appears to be the
+SPI read or write failures. Three driver defects had to be fixed; the clean series is in
+[`patches/upstream/`](patches/upstream/) and all three are described above and in
+[NOTES.md](NOTES.md). This appears to be the
 same wall as [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9),
 which is open and unanswered — and which was hit on the officially supported
 hardware (Raspberry Pi 4 + genuine Seeed WM1302 Pi HAT + a Morse-patched kernel).
