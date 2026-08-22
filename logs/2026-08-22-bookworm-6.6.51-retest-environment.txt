@@ -1,7 +1,7 @@
 Captured: 2026-08-22 (~20:35-20:40 UTC+8), run over SSH from the laptop
 Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
 Image: Raspberry Pi OS Lite (64-bit), Debian 12 (bookworm), dated 2024-11-19
-Result: TEN HYPOTHESES ELIMINATED, none of them fixed the failure.
+Result: FOURTEEN HYPOTHESES ELIMINATED, none of them fixed the failure.
         The CMD53 write still dies at 0x00004050:4 with ret:-71, and the
         2-bit RX skew is unchanged by everything tested here.
         Runs 0-4 go through the driver; 5-6 take it out entirely; 7 closes
@@ -357,3 +357,106 @@ RUN 7 — the four device-tree differences from the A/B   ALL ELIMINATED
   one -- it configures the SoC clock tree before the kernel starts, the symptom
   is a bit-level timing offset, and it is the one thing guaranteed to differ
   between the two images that has never been looked at.
+
+
+================================================================
+CORRECTION to RUN 5 — the preamble sweep does not rule out what it
+was said to rule out
+================================================================
+RUN 5 swept 0..32 bytes of 0xff before the command inside one CS assertion, saw
+`@bit10` every time, and concluded "this is NOT the host mis-sampling the start
+of a transfer". That inference is wrong and is withdrawn.
+
+Suppose the controller emits two extra clock edges after CS goes active and
+before the first data bit. The chip takes those two bits, and its byte grid is
+then offset from ours by two for the rest of the transfer. It still parses the
+command correctly, because MMC-SPI commands are self-framing on the '01' start
+bit and need no byte alignment -- which is exactly why it can validate our CRC7.
+Its response goes out on its own grid, and we capture it two bits late.
+
+Adding preamble bytes does not move that: the spurious clocks come before
+everything, so the offset stays at +2 no matter how much 0xff follows. The
+observation is what the hypothesis predicts, not evidence against it.
+
+So "extra clocks at CS assert" is a live hypothesis again, and it is a host-side
+behaviour, which fits the one stubborn fact -- that this is OS-dependent on
+identical hardware. The measurement in RUN 5 stands; only its conclusion was
+wrong.
+
+
+================================================================
+RUNS 8-11 — the rest of the device-tree surface   ALL ELIMINATED
+================================================================
+  Board E4:5F:01:52:55:04, serial 100000004851d437, Raspberry Pi OS 6.6.51.
+  (Second SenseCAP M1 unit. It reproduces the failure byte for byte, so it is
+  a valid vehicle for these tests.)
+
+  RUN 8 — slot power applied by the firmware rather than by a DT gpio-hog.
+    OpenMANET carries `gpio=18=op,dh` in config.txt, which the VideoCore
+    firmware applies before the kernel starts. Ours relied on the overlay's
+    halow_pwr_hog, applied by gpiolib much later -- so the module had seconds
+    less power-on lead time before the driver probed it. A chip that has not
+    finished its internal power-on init emitting a misframed response would be
+    deterministic, clock-independent and present from the first transaction,
+    which fits every observed feature.
+    Added `gpio=18=op,dh` to /boot/firmware/config.txt. Verified in effect:
+    `18: op -- pd | hi`. Result: unchanged. ELIMINATED.
+
+  RUN 9 — the auxiliary pin pulls.
+    A difference missed earlier: this repo's overlay sets halow_pins with
+    brcm,pull = <2 1 1 1>, i.e. GPIO17 up but 5, 23 and 24 down. OpenMANET has
+    morse_reset{17 up}, morse_irq{5 up}, morse_wake{23 up}, morse_busy{24 down}
+    -- so SPI_INT and WAKE are pulled the opposite way.
+    Changed to <2 2 2 1>. Verified: 17 pu, 5 pu, 23 pu, 24 pd. Unchanged.
+    ELIMINATED.
+
+  RUN 10 — spi0_pins pull-up from boot, not at runtime.
+    RUN 6 flipped MISO/MOSI/SCLK pulls with pinctrl while the system was
+    running, after the SPI block was long initialised. The idle level of SCLK at
+    the moment the pin is muxed to ALT0 is a different thing, and only the
+    overlay can set that. OpenMANET's overlay declares spi0_pins with
+    brcm,pull = <2 2 2>; the base rpi DT leaves the BCM2711 default, pull-down.
+    Added the same override. Verified: 9/10/11 all `a0 pu`. Unchanged.
+    ELIMINATED.
+
+  RUN 11 — every device-tree difference applied simultaneously.
+    Each match above had only ever been tested on its own, which leaves open
+    the objection that the cause is a combination. One overlay carrying all of
+    them at once:
+      cs-gpios = <&gpio 8 1>          (single chip select)
+      spi0_cs_pins { brcm,pins = <8> } (GPIO7 not claimed as CS)
+      reset-gpios = <&gpio 17 0>      (flag matching OpenMANET)
+      spi0_pins { brcm,pull = <2 2 2> }
+      halow_pins { brcm,pull = <2 2 2 1> }
+    plus `gpio=18=op,dh` in config.txt from RUN 8.
+
+    Verified in effect after reboot:
+      cs-gpios property is 12 bytes; reset-gpios flag word is 0
+      7: ip pu    8: op pu    9/10/11: a0 pu
+      17: ip pu   5: ip pu    23: ip pu   24: ip pd   18: op hi
+
+    Result: morse rx c0 3f / c0 7f, CMD63 ret:-71. Unchanged.
+
+    So with the device tree matching the working configuration on every property
+    that has been found to differ, the failure is byte-identical. The
+    device-tree surface is genuinely exhausted now, combinations included.
+
+  The experiment overlay is still installed on 55:04. Stock is at
+  /boot/firmware/overlays/mm610x-spi-sensecap.dtbo.orig and config.txt.orig,
+  and overlays/mm610x-spi-sensecap-experiment-all.dts in the repo is the source.
+
+
+================================================================
+WHERE THIS LINE ENDS
+================================================================
+Fourteen tests, no cause. Same board and module, wire-level skew under Raspberry
+Pi OS and none under OpenMANET, with the SPI driver source byte-identical, the
+device tree matched property for property, the core clock identical at 500 MHz,
+and the module powered from the firmware stage on both.
+
+The remaining candidates cannot be separated by more of this kind of testing.
+The honest next step is a logic analyser on SCLK / MOSI / MISO / CS: it shows
+directly whether the controller emits clocks between CS going active and the
+first data bit, and whether the chip starts driving MISO where it should. Every
+hypothesis left is about what happens on the wire in the first few microseconds
+of a transfer, and that is the one thing none of this can see.

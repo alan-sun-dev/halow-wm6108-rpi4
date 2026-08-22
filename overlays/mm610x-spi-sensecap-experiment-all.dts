@@ -22,6 +22,18 @@
 	fragment@0 {
 		target = <&gpio>;
 		__overlay__ {
+			/* EXPERIMENT: OpenMANET's overlay sets spi0_pins (MISO/MOSI/SCLK)
+			 * to pull-up from boot; the base rpi DT leaves them at the
+			 * BCM2711 default, which is pull-down. RUN 6 flipped these at
+			 * runtime with pinctrl and saw nothing, but that was after the
+			 * SPI block was already initialised. The idle level of SCLK at
+			 * the moment the pin is muxed to ALT0 is a different thing. */
+			spi0_pins {
+				brcm,pins = <9 10 11>;
+				brcm,function = <4>;	/* ALT0 */
+				brcm,pull = <2 2 2>;	/* up, matching OpenMANET */
+			};
+
 			halow_pwr_hog {
 				gpio-hog;
 				gpios = <18 0>;
@@ -29,18 +41,20 @@
 				line-name = "halow-slot-power";
 			};
 
-			/* EXPERIMENT: base DT declares spi0_cs_pins as <8 7>; OpenMANET
-			 * declares only <8>. Override to match. */
 			spi0_cs_pins {
 				brcm,pins = <8>;
 				brcm,function = <1>;	/* output */
-				brcm,pull = <2>;	/* up, same as current effective state */
+				brcm,pull = <2>;
 			};
 
 			halow_pins: halow_pins {
 				brcm,pins = <17 5 23 24>;
 				brcm,function = <0 0 0 0>;	/* all inputs */
-				brcm,pull = <2 1 1 1>;		/* 17 up (reset release), rest down */
+				/* EXPERIMENT: match OpenMANET's pulls exactly.
+				 * It has morse_reset{17 up}, morse_irq{5 up},
+				 * morse_wake{23 up}, morse_busy{24 down}.
+				 * Ours had 5 and 23 pulled down instead. */
+				brcm,pull = <2 2 2 1>;		/* 17 up, 5 up, 23 up, 24 down */
 			};
 		};
 	};
@@ -51,8 +65,6 @@
 			status = "okay";
 			#address-cells = <1>;
 			#size-cells = <0>;
-
-			/* EXPERIMENT: one chip select, not two. */
 			cs-gpios = <&gpio 8 1>;
 
 			mm610x@0 {
@@ -61,7 +73,7 @@
 				spi-max-frequency = <10000000>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&halow_pins>;
-				reset-gpios = <&gpio 17 0>;		/* EXPERIMENT: flag 0, matching OpenMANET */
+				reset-gpios = <&gpio 17 0>;		/* matching OpenMANET */
 				spi-irq-gpios = <&gpio 5 0>;
 				power-gpios = <&gpio 23 0>, <&gpio 24 0>;	/* wake, busy */
 				status = "okay";

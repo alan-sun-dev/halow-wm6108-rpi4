@@ -2,7 +2,56 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
-## 2026-08-23: every device-tree difference is now eliminated
+## 2026-08-23: fourteen eliminations, and where this line ends
+
+The device tree on the failing board now matches the working one **property for
+property, all at once** — single `cs-gpios`, GPIO7 not claimed as a chip select,
+`reset-gpios` flag 0, `spi0_pins` and the auxiliary pins pulled the same way, and
+slot power applied by the VideoCore firmware rather than a DT hog. Verified in
+effect after reboot. The failure is byte-identical: `c0 3f` / `c0 7f`, CMD63
+`ret:-71`.
+
+Four more eliminations beyond the ten below:
+
+| Test | Why it looked plausible | Result |
+|---|---|---|
+| `gpio=18=op,dh` in config.txt | OpenMANET powers the slot from the **firmware stage**, seconds before the kernel; ours waited for gpiolib's hog. A chip that hasn't finished its power-on init emitting a misframed response would be deterministic, clock-independent and present from the first transaction — it fits every observed feature | unchanged |
+| auxiliary pin pulls | our overlay pulls GPIO5 (SPI_INT) and GPIO23 (WAKE) **down**; OpenMANET pulls both **up** — a difference missed on the first pass | unchanged |
+| `spi0_pins` pull-up **from boot** | RUN 6 flipped these at runtime, long after the SPI block was initialised. The idle level of SCLK at the moment the pin is muxed to ALT0 is a different thing, and only the overlay can set it | unchanged |
+| all of the above simultaneously | each had only been tested alone, leaving "maybe it's a combination" open | unchanged |
+
+### Correction: RUN 5's conclusion is withdrawn
+
+RUN 5 swept 0…32 bytes of `0xff` before the command inside one CS assertion, saw
+`@bit10` every time, and concluded it was *not* the host mis-sampling the start
+of a transfer. **That inference is wrong.**
+
+If the controller emits two extra clock edges after CS goes active and before the
+first data bit, the chip takes those two bits and its byte grid is offset from
+ours by two for the rest of the transfer. It still parses the command, because
+MMC-SPI commands are self-framing on the `01` start bit and need no byte
+alignment — which is exactly why it can validate our CRC7. Adding preamble does
+not move that, because the spurious clocks come first. **The observation is what
+the hypothesis predicts, not evidence against it.**
+
+So "extra clocks at CS assert" is live again, and it is a host-side behaviour,
+which fits the one stubborn fact: this is OS-dependent on identical hardware. The
+measurement stands; only the conclusion was wrong.
+
+### Where this line ends
+
+Fourteen tests, no cause. The remaining candidates cannot be separated by more of
+this kind of testing — every one of them is about what happens on the wire in the
+first few microseconds of a transfer, and none of this can see that.
+
+**The honest next step is a logic analyser** on SCLK / MOSI / MISO / CS. It shows
+directly whether the controller clocks anything between CS going active and the
+first data bit, and where the chip starts driving MISO. The pins are all on the
+40-pin header.
+
+---
+
+## 2026-08-23: every device-tree difference the A/B found is eliminated
 
 The A/B's four differences were closed with two overlay changes on the failing
 side, and the failure is byte-identical throughout.
