@@ -281,3 +281,122 @@ The one experiment I have not done is the direct A/B: boot the OpenMANET card an
 If any of this suggests something checkable on the chip side — an output-delay or drive-strength field in the BCF, a required init step this host is skipping — I'm happy to run it. The board is set up for quick turnaround.
 
 Full method, per-run logs and the instrumented patch: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — the retest logs are `logs/2026-08-22-bookworm-6.6.51-retest-*`.
+
+---
+
+> **DRAFT — not yet posted to issue #9.** Everything above this line is verbatim
+> what was posted. Below is the prepared sixth comment.
+
+## Update 5, 2026-08-23 — my board had a second, separate bug; fixing it lands me on exactly the failure at the top of this thread
+
+Short version: the 2-bit response offset I reported was **not** the same problem as the one this issue was opened about. It was an additional bug on top of it, in `morse_spi_initsequence()`, and it affects any host with a `cs-gpios` SPI controller. With it fixed, my board now fails at `cmd53_write fn=2 0x00000000:14` — the same function and address as the original report's `fn=2 0x00000000:10`.
+
+### The init bug
+
+The MM6108 needs ~74 clocks with chip select **deasserted** to enter SPI mode. That requirement is stated by Morse in the [i.MX93 porting thread](https://community.morsemicro.com/t/i-mx93-spi-driver-for-mm6108/506):
+
+> in order to put it into SPI mode, the host needs to toggle the SPI clock line ~74 times while the CS pin is held high - ie, inverted compared to normal operation.
+
+and in the same thread, of a host that failed the way mine did:
+
+> The original configuration had the chip select driven low during initialization, preventing the device from responding to subsequent commands.
+
+`morse_spi_initsequence()` arranges that by flipping `SPI_CS_HIGH` around the training burst. **On a `cs-gpios` controller that does not work** — `spi_setup()` forces the bit back on. Logging `spi->mode` through the function:
+
+```
+init: mode=0x4 cs_high_default=1 train=18 flip=1
+init: CS deasserted for training, mode=0x4     <-- expected 0x0
+init: CS polarity restored, mode=0x4
+```
+
+`0x4` is `SPI_CS_HIGH`, still set immediately after `spi->mode &= ~SPI_CS_HIGH; spi_setup(spi);`. So the burst goes out with the chip *selected*, it never enters SPI mode, and every response afterwards sits two bit times off the byte grid — `c0 7f` where `01 ff` is expected. That is the offset I described in my first post.
+
+### The fix
+
+`SPI_NO_CS` achieves what the flip cannot: the controller leaves the CS line alone, so the GPIO stays at its inactive level for the whole burst.
+
+```c
+spi->mode |= SPI_NO_CS;
+if (spi_setup(spi) == 0 && (spi->mode & SPI_NO_CS)) {
+        memset(mspi->data, 0xFF, MM610X_BUF_SIZE);
+        morse_spi_xfer(mspi, train);      /* CS stays deasserted */
+        spi->mode = saved_mode;
+        spi_setup(spi);
+}
+```
+
+**Order matters.** The burst has to happen after reset and before any other transaction. Once the chip has been addressed with CS asserted it does not recover, and a later burst does not fix it — an earlier attempt of mine did the training after a first CMD0, saw no change, and looked like a negative result.
+
+### Verification
+
+Userspace first, with `SPI_NO_CS` set and CS driven by hand so the controller could not interfere, full reset before each trial:
+
+| sequence | response |
+|---|---|
+| CS held HIGH throughout, CMD0 | `ff ff ff ff` — silent, confirming CS really was under manual control |
+| CS LOW, CMD0, no training | `ff c0 7f ff` — R1 at bit 10, offset |
+| 80 clocks @ CS HIGH, then CMD0 | `ff 01 ff ff` — R1 at bit 8, aligned |
+
+6/6 reproducible. After a correct init: `CMD0` → `0x01`, corrupted CRC → `0x09`, `CMD13` → `0x05`, `CMD63` → `0x01`, all on the byte boundary.
+
+Then in the driver, one boolean, same binary, same board:
+
+| `spi_init_no_cs` | result |
+|---|---|
+| on | `training with SPI_NO_CS, mode=0x44`; no offset, CMD63 passes, firmware and BCF load |
+| off | `CS deasserted for training, mode=0x4`; `c0 3f` / `c0 7f` returns |
+
+**`spi_rx_lshift` — the shift hack from my first post — is no longer needed at all.** The read path works natively; 468 KB of firmware and the BCF transfer correctly with no compensation.
+
+### Why this matters beyond my carrier
+
+Nothing about this is specific to a SenseCAP M1. Any host where `spi_setup()` forces `SPI_CS_HIGH` for a `cs-gpios` device gets the training burst delivered with the chip selected. That is mainline, and every rpi kernel carrying `950-0204` ("spi: Force CS_HIGH if GPIO descriptors are used"). If a board's SPI mode entry happens to survive it, the bug is invisible; if it doesn't, you get an offset that looks like a hardware or signal-integrity problem and is neither.
+
+I spent a long time eliminating the wrong things — kernel tree, device tree, clock rate, pin pulls, power sequencing, DMA — because every one of those is about the bus, and the chip was in the wrong *mode* the whole time. Logging `spi->mode` through `initsequence()` is one line and would have shown it immediately.
+
+### Why this doesn't bite everyone, and why a power cycle "fixes" it
+
+The chip comes out of a cold power-up **already in SPI mode**, and **RESET_N takes it back out**. Measured on my board, with the module's supply under my control:
+
+| | response |
+|---|---|
+| cold power-up, no training at all | `ff 01 ff` — aligned, already in SPI mode (3/3) |
+| same power-on, after a RESET_N pulse | `ff c0 7f` — offset, knocked out |
+| training after that | `ff c0 7f` — not recovered, because a CS-asserted command had already happened |
+
+Same power-on, nothing changed but a reset pulse, and it goes from aligned to offset.
+
+So whether the broken training burst matters depends entirely on whether anything reset the chip:
+
+- **A device tree with `reset-gpios` flag 0** means `gpiod_set_value(reset, 1)` drives the pin *high* and RESET_N never fires. The chip stays in the mode it powered up in, and the broken burst is harmless. That is exactly what the OpenWrt image I had been comparing against does, and why it looked like a kernel difference for so long. It works by *avoiding* the problem, not by handling it.
+- **Flag 1** — the correct polarity for an active-low reset — means the reset genuinely fires, the chip leaves SPI mode, and the broken burst cannot put it back.
+
+This also matches two things said in the community forum that I did not understand when I first read them: that *"the issue resolved after a physical power cycle rather than a soft reboot"*, and that *"most of our deployments use a reset script to toggle the reset line on boot"*. A physical power cycle puts the chip back into SPI mode. A soft reboot does not, because the module keeps power and stays wherever the last RESET_N pulse left it. That would explain a class of reports where the same hardware works one day and not the next.
+
+One caveat, stated because it is not tidy: the power-on state is not perfectly deterministic. One cold power-up in five came up already offset, and I do not know why.
+
+With the `SPI_NO_CS` fix none of this matters — the training is delivered correctly right after reset, so the chip ends up in SPI mode regardless of how it powered up or how many times it has been reset.
+
+### Where I am now — the original failure in this thread
+
+With the init fixed I get:
+
+```
+morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+morse_spi_find_data_ack failed: no accept token in the 3440 bytes clocked after CRC
+morse_spi spi0.0: spi: cmd53_write fn=2 0x00000000:14 r=0x10050002 b=0x001f0002 (ret:-71)
+```
+
+Compare the original report: `cmd53_write fn=2 0x00000000:10 ... (ret:-71)`, `morse_firmware_init failed: -5`. Same function, same address.
+
+What changed for me, and may be useful for narrowing it:
+
+- **Before the fix the chip was silent** — 519 bytes clocked after the CRC, every one `0xff`, `b=0xffffffff`.
+- **Now it answers.** `b=0x001f0002`. With the stock ack search the first non-`0xff` byte in that 3440-byte window is `0xeb` at offset +261, which is not an accept token.
+- I also implemented the `find_data_ack` change from your OpenWrt feed (scan for an accept token rather than stop at the first non-`0xff` byte). On this board **it makes no difference** — the scan runs the full window and finds no `0x05`.
+- Sweeping `spi_post_write_status_bytes`: 0 and 1 stop earlier, at `fn=1 0x00004050:4`; 2 and above all reach the `fn=2` firmware download and behave identically.
+
+So the question this issue was actually opened about is still open, and I can now reproduce it without the confounding offset. Happy to run whatever would help — a capture of the failing write, different block sizes, a logic analyser trace on SCLK/MOSI/MISO/CS, or a patch to try.
+
+Full detail, per-run logs and the patch: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — the fix is in `patches/` behind `spi_init_no_cs`, and `logs/2026-08-23-nocs-init-fix-environment.txt` has the derivation.

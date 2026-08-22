@@ -7,7 +7,8 @@ Driver: MorseMicro/morse_driver tag mm6108-2.0.1 (commit 98e1936) with
         patches/morse-driver-2.0.1-rpi-spi.patch
 
 RESULT: THE 2-BIT SKEW IS SOLVED. Root cause found, fix implemented and verified
-        by a single-parameter A/B inside one driver binary. The CMD53 write path
+        by a single-parameter A/B inside one driver binary. A follow-up section at
+        the end explains why OpenMANET never needed the fix. The CMD53 write path
         is a separate problem and is still open.
 
 
@@ -149,3 +150,77 @@ specific to this carrier: any host where spi_setup() forces SPI_CS_HIGH on for a
 cs-gpios device gets a training burst delivered with the chip selected, and the
 chip then never enters SPI mode. That is every mainline kernel and every rpi
 kernel carrying 950-0204. The fix belongs in the driver.
+
+
+================================================================
+FOLLOW-UP — why OpenMANET never needed the fix, and what RESET does
+================================================================
+  Board E4:5F:01:52:55:04, userspace, spidev via driver_override, SPI_NO_CS set
+  and CS driven by hand with pinctrl. Module power is GPIO18 on this carrier, so
+  a genuine cold power cycle of the module is possible: drive 18 low, wait, high.
+
+  QUESTION: OpenMANET runs the same driver with the same broken CS flip, so why
+  does it not show the offset?
+
+  HYPOTHESIS: its reset-gpios flag is 0 (GPIO_ACTIVE_HIGH), so
+  morse_hw_reset()'s gpiod_set_value(reset, 1) drives the pin *high* and RESET_N
+  never actually fires. If the chip powers up already in SPI mode it would simply
+  stay there, and a broken training burst would not matter.
+
+  RESULT: substantially confirmed, with one caveat.
+
+    cold power cycle, no training at all     -> ff 01 ff   ALIGNED  (3/3)
+    cold power cycle, then training          -> ff 01 ff   ALIGNED  (2/2)
+
+    within one power-on:
+      1. after cold power-up                 -> ff 01 ff   aligned, in SPI mode
+      2. after a RESET_N pulse               -> ff c0 7f   OFFSET, knocked out
+      3. training after step 2               -> ff c0 7f   not recovered
+
+  Step 1 -> 2 is the clean one: same power-on, nothing changed but a RESET_N
+  pulse, and the chip goes from aligned to offset. **RESET_N takes the chip out
+  of SPI mode.** Step 3 is the ordering rule again -- step 2 addressed the chip
+  with CS asserted, and after that a training burst does not recover it.
+
+  CAVEAT, and it matters: the power-on state is not perfectly deterministic. A
+  second round of the same sequence came up *offset* straight after the cold
+  power cycle -- 1 of 5 cold power-ons observed. Cause unknown; candidates are
+  how long power was actually off, residual charge on the module, or the level of
+  RESET_N / CS during the power ramp. So: the chip *usually* powers up in SPI
+  mode, not always.
+
+  A methodology note worth keeping. An earlier version of this test used a 1.5 s
+  wait after re-applying power and produced a completely different picture --
+  everything offset, including sequences already verified to work. The module
+  needs more than 1.5 s after power-up before it will accept anything; 5 s is
+  reliable. Re-running a known-good sequence first is what caught it, and without
+  that check the artefact would have been archived as a finding.
+
+
+================================================================
+WHAT THIS EXPLAINS
+================================================================
+OpenMANET, with reset-gpios flag 0, never asserts RESET_N. The chip stays in the
+SPI mode it powered up in, so the broken training burst is harmless there. This
+repo's overlay uses flag 1, RESET_N genuinely fires, the chip leaves SPI mode,
+and the broken burst cannot put it back.
+
+That also explains two community replies that were found early and not understood
+at the time (Morse Micro forum, RPi5 SPI thread):
+
+  "the issue resolved after a physical power cycle rather than a soft reboot"
+  "most of our deployments use a reset script to toggle the reset line on boot"
+
+A physical power cycle puts the chip back into SPI mode. A soft reboot does not,
+because the module keeps power and stays in whatever state the last RESET_N pulse
+left it in.
+
+It also explains why testing reset-gpios flag 0 on its own (RUN 7) changed
+nothing: by then the chip had already been taken out of SPI mode by earlier
+boots, and it was never power-cycled during that test.
+
+THE PRACTICAL POINT: with the SPI_NO_CS fix none of this matters. The driver
+delivers the training correctly, immediately after reset, so the chip ends up in
+SPI mode regardless of how it powered up or how many times it has been reset.
+OpenMANET works by avoiding the problem -- it does not reset the chip -- not by
+handling it. The fix makes it deterministic instead of lucky.

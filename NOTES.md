@@ -84,6 +84,50 @@ default on. **On this board it changes nothing** — the scan runs the full 3440
 bytes and finds no `0x05`. Recorded because it is vendor-sanctioned and would
 otherwise be tried again.
 
+### Why OpenMANET never needed the fix
+
+Because it never resets the chip. Its `reset-gpios` flag is 0
+(`GPIO_ACTIVE_HIGH`), so `morse_hw_reset()`'s `gpiod_set_value(reset, 1)` drives
+the pin *high* — RESET_N never actually fires. Measured on this board, with the
+module's power under our control on GPIO18:
+
+| | response |
+|---|---|
+| cold power-up, no training at all | `ff 01 ff` — **aligned, already in SPI mode** (3/3) |
+| same power-on, after a RESET_N pulse | `ff c0 7f` — **offset, knocked out of SPI mode** |
+| training after that | `ff c0 7f` — not recovered (a CS-asserted command had already happened) |
+
+Step 1 → 2 is the clean one: same power-on, nothing changed but a reset pulse,
+and the chip goes from aligned to offset. **RESET_N takes the chip out of SPI
+mode.** So OpenMANET stays in the mode it powered up in and the broken burst is
+harmless there; this repo's overlay uses flag 1, the reset genuinely fires, and
+the broken burst cannot put it back.
+
+**Caveat:** the power-on state is not perfectly deterministic — 1 of 5 cold
+power-ups came up already offset. Cause unknown. The chip *usually* powers up in
+SPI mode, not always.
+
+This also explains two community replies found early and not understood at the
+time — *"the issue resolved after a physical power cycle rather than a soft
+reboot"* and *"most of our deployments use a reset script to toggle the reset
+line on boot"*. A physical power cycle puts the chip back into SPI mode; a soft
+reboot does not, because the module keeps power and stays where the last RESET_N
+pulse left it. And it explains why testing `reset-gpios` flag 0 on its own
+changed nothing: by then the chip had long been taken out of SPI mode by earlier
+boots, and was never power-cycled during that test.
+
+**With the fix none of this matters.** The driver delivers the training correctly
+straight after reset, so the chip ends up in SPI mode regardless of how it powered
+up or how often it has been reset. OpenMANET works by *avoiding* the problem, not
+by handling it — the fix makes it deterministic instead of lucky.
+
+**A methodology note.** An earlier version of this test waited only 1.5 s after
+re-applying power and produced a completely different picture — everything
+offset, including sequences already verified to work. The module needs more than
+1.5 s before it will accept anything. Re-running a known-good sequence first is
+what caught it; without that check the artefact would have been archived as a
+finding.
+
 ### Why it took fifteen eliminations
 
 Every earlier hypothesis was about the bus — kernel tree, device tree, clock,
