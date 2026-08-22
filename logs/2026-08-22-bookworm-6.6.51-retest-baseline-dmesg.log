@@ -1,0 +1,37 @@
+[ 6538.828424] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 6538.828603] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[ 6538.828635] Resetting Morse Chip
+[ 6538.848642] Done
+[ 6538.928658] morse_spi spi0.0: init: mode=0x4 cs_high_default=1 train=18 flip=1
+[ 6538.928668] morse_spi spi0.0: init: CS deasserted for training, mode=0x4
+[ 6538.928701] morse_spi spi0.0: init: CS polarity restored, mode=0x4
+[ 6538.928843] uaccess char driver major number is 236
+[ 6538.929004] morse_io: Device node '/dev/morse_io' created successfully
+[ 6538.940584] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[ 6538.941063] morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+[ 6538.941131] morse_spi_find_data_ack failed: no non-0xff byte in the 11 bytes clocked after CRC
+[ 6538.941137] morse ackwin: 00000000: ff ff ff ff ff ff ff ff ff ff ff
+[ 6538.941141] morse_spi_cmd53_write failed
+[ 6538.941143] morse w53: 00000000: ff ff ff ff ff ff ff ff 00 00 ff ff ff ff ff ff
+[ 6538.941146] morse w53: 00000010: ff ff ff ff ff ff ff ff ff ff
+[ 6538.941150] morse_spi spi0.0: spi: cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0xffffffff (ret:-71)
+[ 6538.941157] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 6539.374858] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6539.374878] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6539.374905] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6539.374911] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6539.374935] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6539.374941] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6539.790849] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6539.790857] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6539.790881] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6539.790886] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6539.790909] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6539.790914] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6540.206852] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6540.206860] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6540.206884] morse_spi spi0.0: spi: set_address_base fn=1 0x00010000:1 r=0xffffffff b=0xffffffff (ret:-61)
+[ 6540.206889] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-95)
+[ 6540.206892] morse_spi spi0.0: morse_firmware_prepare failed: -5
+[ 6540.207171] morse_spi_probe: probe failed (ret:-5)
+[ 6540.207176] morse_spi: probe of spi0.0 failed with error -5

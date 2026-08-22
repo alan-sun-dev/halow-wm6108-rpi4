@@ -1,0 +1,136 @@
+Captured: 2026-08-22 (~20:35-20:40 UTC+8), run over SSH from the laptop
+Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
+Image: Raspberry Pi OS Lite (64-bit), Debian 12 (bookworm), dated 2024-11-19
+Result: FOUR HYPOTHESES ELIMINATED, none of them fixed the failure.
+        The CMD53 write still dies at 0x00004050:4 with ret:-71, and the
+        2-bit RX skew is unchanged by everything tested here.
+
+=== uname ===
+Linux Sensecap 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
+
+=== morse_driver ===
+Repo:   https://github.com/MorseMicro/morse_driver
+Tag:    mm6108-2.0.1  (commit 98e1936)
+Patch:  patches/morse-driver-2.0.1-rpi-spi.patch as of repo commit 000fbbe
+        — adds spi_init_train_bytes, spi_init_cs_flip, spi->mode logging
+          through morse_spi_initsequence(), and a find_data_ack() failure path
+          that reports the first non-0xff byte (or that there was none).
+Build:  make KERNEL_SRC=/lib/modules/6.6.51+rpt-rpi-v8/build \
+             CONFIG_WLAN_VENDOR_MORSE=m CONFIG_MORSE_SPI=y \
+             CONFIG_MORSE_USER_ACCESS=y CONFIG_MORSE_VENDOR_COMMAND=y -j4
+        Clean build, no warnings.
+
+=== firmware ===
+/lib/firmware/morse/mm6108.bin            468304 bytes, crc32 0xbe7b5c8f
+/lib/firmware/morse/bcf_fgh100mhaamd.bin    1251 bytes, crc32 0x941b2a82
+
+=== overlay in effect ===
+/boot/firmware/config.txt: dtparam=spi=on, dtoverlay=mm610x-spi-sensecap
+spi-max-frequency = 10 MHz (overridden per-run via spi_clock_speed=)
+
+
+================================================================
+RUN 0 — baseline, new parameters at their defaults
+================================================================
+  insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin spi_rx_lshift=2
+  log: 2026-08-22-bookworm-6.6.51-retest-baseline-dmesg.log
+
+  Reproduces the pre-patch failure exactly:
+      cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0xffffffff (ret:-71)
+  so the instrumentation did not change behaviour.
+
+  NEW FACT — spi_setup() puts SPI_CS_HIGH back:
+      init: mode=0x4 cs_high_default=1 train=18 flip=1
+      init: CS deasserted for training, mode=0x4     <-- expected 0x0
+      init: CS polarity restored, mode=0x4
+  mode is 0x4 (SPI_CS_HIGH) at all three points, including immediately after
+  `spi->mode &= ~SPI_CS_HIGH; spi_setup(spi);`. The SPI core forces SPI_CS_HIGH
+  back on for a cs-gpios device. So morse_spi_initsequence()'s whole purpose --
+  clocking the training burst with CS *deasserted* -- never happens on any
+  cs-gpios kernel. See RUN 2: this is a real driver defect but it is NOT the
+  cause of the skew.
+
+  NEW FACT — the default ack search window is 11 bytes, not 71:
+      find_data_ack failed: no non-0xff byte in the 11 bytes clocked after CRC
+  The "71 bytes" in earlier notes was the length of a hex dump, not the window.
+
+
+================================================================
+RUN 1 — is the CMD53 write ack window too narrow?   ELIMINATED
+================================================================
+  insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin spi_rx_lshift=2 \
+         spi_post_write_status_bytes=512
+  log: 2026-08-22-bookworm-6.6.51-retest-window512-dmesg.log
+
+      find_data_ack failed: no non-0xff byte in the 519 bytes clocked after CRC
+
+  519 bytes clocked after the CRC and the chip drives nothing at all. Morse's
+  own OpenWrt-only patch (003_fix_spi_inter_transaction_delay.patch) raises this
+  window to a floor of 250; 519 is twice that. The padding hypothesis is dead,
+  and with it the theory that the missing feed patch explains this failure.
+
+
+================================================================
+RUN 2 — is the 2-bit skew self-inflicted by the init burst?   ELIMINATED
+================================================================
+  Seven runs, all WITHOUT spi_rx_lshift so the raw framing is visible:
+      insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin [params]
+        (none)                                        -> c0 3f / c0 7f
+        spi_init_train_bytes=0                        -> c0 3f / c0 7f
+        spi_init_train_bytes=2                        -> c0 3f / c0 7f
+        spi_init_train_bytes=17                       -> c0 3f / c0 7f
+        spi_init_train_bytes=20                       -> c0 3f / c0 7f
+        spi_init_cs_flip=N                            -> c0 3f / c0 7f
+        spi_init_cs_flip=N spi_init_train_bytes=0     -> c0 3f / c0 7f
+  log: 2026-08-22-bookworm-6.6.51-retest-init-sweep-dmesg.log
+
+  Byte-identical in all seven. With `spi_init_cs_flip=N spi_init_train_bytes=0`
+  the driver does nothing between reset and CMD63 -- no training clocks, no
+  spi_setup() calls -- and the very first response is already misframed. The
+  init sequence is exonerated: the skew is upstream of anything the driver does.
+
+
+================================================================
+RUN 3 — is GPIO8 double-driven (ALT0 native CE0 + GPIO CS)?   ELIMINATED
+================================================================
+  log: 2026-08-22-bookworm-6.6.51-retest-dt-pinmux.txt
+
+      pin 7  (gpio7):  fe204000.spi ... function gpio_out group gpio7
+      pin 8  (gpio8):  fe204000.spi ... function gpio_out group gpio8
+      pin 9  (gpio9):  fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio9
+      pin 10 (gpio10): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio10
+      pin 11 (gpio11): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio11
+
+  Textbook correct: CS pins as GPIO outputs, MISO/MOSI/SCLK as ALT0, no pin
+  claimed twice. DT has cs-gpios = <&gpio 8 1>, <&gpio 7 1> and
+  pinctrl-0 = <&spi0_pins &spi0_cs_pins> as expected.
+
+
+================================================================
+RUN 4 — is the skew clock-dependent on this kernel?   ELIMINATED
+================================================================
+  insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=<hz>
+        50000000  -> c0 3f / c0 7f     (the rate OpenMANET runs at)
+        20000000  -> c0 3f / c0 7f
+         1000000  -> c0 3f / c0 7f
+          400000  -> c0 3f / c0 7f
+  log: 2026-08-22-bookworm-6.6.51-retest-clock-sweep-dmesg.log
+
+  Confirms on this kernel what was previously only measured on Trixie 6.18.34
+  via spidev. Notably 50 MHz -- OpenMANET's rate -- is no different, so the
+  overlay's 10 MHz is not the variable either.
+
+
+================================================================
+WHERE THIS LEAVES IT
+================================================================
+Same board, same wiring, SPI source byte-identical between the two kernel trees,
+pinmux correct, clock irrelevant, driver init sequence irrelevant. The skew is
+present under Raspberry Pi OS and absent under OpenMANET.
+
+Not yet done:
+  (a) boot the OpenMANET card and dump its live DT + pinmux for comparison --
+      needs a physical card swap;
+  (b) measure the skew on this kernel with the driver entirely out of the
+      picture, via /dev/spidev0.0 -- needs config.txt edited to drop the
+      overlay, and a reboot.

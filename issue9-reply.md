@@ -204,12 +204,14 @@ Still happy to run either the diff or the bisect if it would be useful.
 ---
 
 > **DRAFT — not yet posted to issue #9.** Everything above this line is verbatim
-> what was posted. Everything below is the prepared fifth comment, held back
-> until the hardware retest described in its Status section has been run.
+> what was posted. Everything below is the prepared fifth comment. The hardware
+> retest it was waiting on has now been run; it is ready to post.
 
-## Update 4, 2026-08-22 — retracting the kernel-tree claim; the difference is in your own OpenWrt feed
+## Update 4, 2026-08-22 — retracting the kernel-tree claim, plus four more eliminations
 
-**Update 3 above is wrong and I'm retracting it.** I did the tree diff I proposed there, and it comes up empty.
+### 1. Update 3 above is wrong and I'm retracting it
+
+I did the tree diff I proposed there, and it comes up empty.
 
 Method: `raspberrypi/linux` at tag `stable_20241008` (= 6.6.51, the exact kernel in the failing Bookworm image) against OpenWrt's tree, reconstructed as mainline stable plus every patch in `target/linux/bcm27xx/patches-6.6/` that touches the file.
 
@@ -223,45 +225,53 @@ Method: `raspberrypi/linux` at tag `stable_20241008` (= 6.6.51, the exact kernel
 
 OpenWrt imports the rpi commits verbatim. The rpi tree's only changes to `spi-bcm2835.c` are three commits — phys-addr slave DMA config, the zero-length-transfer workaround, and `spi0-0cs`/`SPI_NO_CS` support — and OpenWrt carries all three (`950-0276` / `950-0467` / `950-0821`), plus the SPI-core one (`950-0204`, "Force CS_HIGH if GPIO descriptors are used"). Mainline's `spi-bcm2835.c` is also unchanged between v6.6.51 and v6.6.138.
 
-So there is no `spi-bcm2835` delta, and nothing to bisect. **Please disregard the "kernel tree" framing in Update 3.** The four measurements themselves still stand; only my interpretation was wrong.
+**Please disregard the "kernel tree" framing in Update 3.** The four measurements still stand; only my interpretation was wrong.
 
-### What the difference actually is
+### 2. Your OpenWrt feed carries an SPI patch that the release tag does not
 
-The OpenMANET image that works is not built from the `morse_driver` git tag. `OpenMANET/firmware@1.8.0`'s `feeds.conf.default` pins:
-
-```
-src-git morse https://github.com/MorseMicro/morse-feed.git^fc332b01aa2df952e057efe73763de3ff71cb3b0
-```
-
-and that feed applies `essentials/morse_driver/patches/mm61x/003_fix_spi_inter_transaction_delay.patch` before building. Its own header describes this thread's failure:
+While looking for what else differs, I found that the working OpenMANET image is not built from the `morse_driver` git tag. Its `feeds.conf.default` pins `MorseMicro/morse-feed` at `fc332b0`, and that feed applies `essentials/morse_driver/patches/mm61x/003_fix_spi_inter_transaction_delay.patch` before building. The patch header describes this thread's failure almost word for word:
 
 > Add more delay between SPI transactions when not in block mode. […] Currently the driver has enough delay between blocks but not when the transaction isn't a block. Banff needs more delay than Eagle Crest, that's why this issue wasn't happening on Eagle Crest.
 
-It raises the padding clocked after the CRC of a **non-block** CMD53 write from `4` bytes to `max(250, count * inter_block_delay_bytes / MMC_SPI_BLOCKSIZE)`, and applies the same floor to non-block reads.
+It raises the padding clocked after the CRC of a **non-block** CMD53 write from `4` bytes to `max(250, count * inter_block_delay_bytes / MMC_SPI_BLOCKSIZE)`. In `mm6108-2.0.1` that line is parameterised instead, as `spi_post_write_status_bytes`, **defaulting to 4** — so a build from the release tarball gets a 4-byte window where your own OpenWrt builds get at least 250.
 
-The numbers line up exactly:
+**Question for the maintainers:** is that default intentional, or did the parameterisation drop the floor that patch puts in? It is the kind of divergence that would bite anyone building from the tag, on any host.
 
-- `MM6108_SPI_INTER_BLOCK_DELAY_NANO_S` = 40000 ns, and `inter_block_delay_bytes = 40000 / (clk_period_ns * 8)` → **250 bytes at 50 MHz**, 50 bytes at 10 MHz. The patch's `max(250, …)` is one full inter-block delay at full clock, applied regardless of clock.
-- Every failure in this thread is a non-block write — mine is `cmd53_write fn=1 0x00004050:4` (count 4), the OP's is `fn=2 0x00000000:10`.
-- In `mm6108-2.0.1` that line has been parameterised instead: `cp += block ? mspi->inter_block_delay_bytes : spi_post_write_status_bytes`, with **`spi_post_write_status_bytes` defaulting to 4**.
-- The widest window I ever tested was **64**. So my earlier "ruled out: `spi_post_write_status_bytes` 4…64" was never a valid elimination — I never got within 4× of the floor your own builds use.
+**But it does not fix this board.** I tested it — see below.
 
-**Question for the maintainers:** is the `4` default in `mm6108-2.0.1` intentional, or did the parameterisation drop the `max(250, …)` floor that `003_fix_spi_inter_transaction_delay.patch` puts in for OpenWrt builds? If it's the latter, everyone building from the release tarball on any host gets a 4-byte ack window on non-block writes, which would explain this thread without involving the kernel at all.
+### 3. Four eliminations from an instrumented run on 6.6.51
 
-Related: OpenMANET also runs `enable_ext_xtal_init=1`, which appends a further `XTAL_TRANSFER_DELAY_BYTES` (4096) to every CMD53 write window. Worth noting that this parameter can't be evaluated on its own while writes are broken — `mm610x_ext_xtal_init()` is itself a sequence of `morse_reg32_write()` calls.
+Same board, same driver, `mm6108.bin` crc32 `0xbe7b5c8f`, `bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`. I patched `morse_spi_find_data_ack()` to report *where* in the ack window the chip answers rather than dumping a fixed 48 bytes, and made the init training burst adjustable.
 
-### One thing that argues against my own hypothesis
+| Hypothesis | Test | Result |
+|---|---|---|
+| the ack window is too narrow | `spi_post_write_status_bytes=512` | **eliminated** — `no non-0xff byte in the 519 bytes clocked after CRC`. Twice the floor your OpenWrt builds use, and the chip drives nothing at all. |
+| the 2-bit skew is caused by the init training burst | 7 runs sweeping the burst length (0/2/17/18/20 bytes) and suppressing the CS flip entirely | **eliminated** — response is `c0 3f` then `c0 7f` in all seven, byte-identical. With no training clocks and no `spi_setup()` calls at all, the very first response after reset is already misframed. |
+| GPIO8 is driven twice (ALT0 native CE0 *and* GPIO CS) | `/sys/kernel/debug/pinctrl/*/pinmux-pins` | **eliminated** — pins 7/8 `gpio_out`, pins 9/10/11 `alt0`, nothing claimed twice. |
+| the skew is clock-dependent | `spi_clock_speed=` 400 kHz / 1 / 20 / **50 MHz** | **eliminated** — identical at every rate, including the 50 MHz the working OpenMANET image runs at. |
 
-In my original post I noted that the same transaction driven by hand from userspace returns the accept token `0x05` **two bytes after the CRC**. If that is what the chip really does, a 4-byte window would already have caught it, and padding is not the wall. That observation and "all `0xff` out to 71 bytes" from inside the driver cannot both describe the same chip state — card state (idle vs initialised) is the standing suspect and I never verified it. So the fit above is numerical, not confirmed.
+Also worth recording: the default ack search window is **11 bytes**, not the 71 I quoted in my first post — 71 was the length of a hex dump, not the window.
 
-### Correction to my Update 2
+### 4. A driver defect found on the way: `morse_spi_initsequence()` never actually deasserts CS
 
-The OpenMANET comparison was not the single-variable experiment I called it. Besides the driver patches above, that run loaded **`bcf_default.bin`** (1298 bytes, crc32 `0xf72450a7`), not `bcf_fgh100mhaamd.bin` (1251, `0x941b2a82`); its `dot11ah` is an mm8108 2.0.0 build; and it runs at 50 MHz rather than my 10 MHz — which by itself changes the computed `inter_block_delay_bytes` from 250 to 50.
+Logging `spi->mode` through that function on a `cs-gpios` device gives:
 
-### Status
+```
+morse_spi spi0.0: init: mode=0x4 cs_high_default=1 train=18 flip=1
+morse_spi spi0.0: init: CS deasserted for training, mode=0x4     <-- expected 0x0
+morse_spi spi0.0: init: CS polarity restored, mode=0x4
+```
 
-I have **not** retested on hardware yet — this is a code-and-packaging finding, not a confirmed fix. Next run is `spi_post_write_status_bytes=512` with everything else held at the last failing configuration, with the ack-window failure path instrumented to report whether any non-`0xff` byte appears at all and at what offset. I'll report either way.
+`0x4` is `SPI_CS_HIGH`, and it is still set immediately after `spi->mode &= ~SPI_CS_HIGH; spi_setup(spi);`. The SPI core forces `SPI_CS_HIGH` back on for any `cs-gpios` target — that is what `950-0204` does downstream and what mainline does too — so the flip is silently undone.
 
-The **2-bit RX skew** from my original post is still unexplained and is a separate issue: padding is a byte-level effect and can't cause bit-level misframing, and the same board needs no `spi_rx_lshift` at all under OpenMANET.
+The consequence is that the 74-clock training burst, whose entire purpose is to go out **with CS deasserted**, is clocked out with the chip *selected*, on every `cs-gpios` host. That is not what the function's comment says it does.
 
-Full write-up, diff method and per-test logs: https://github.com/alan-sun-dev/halow-wm6108-rpi4 (see [NOTES.md](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/NOTES.md)).
+On this board it is not the cause of the skew — eliminated in section 3, the skew survives with the burst suppressed entirely — but the function is not doing its job, and on a host where that burst matters it would fail silently.
+
+### 5. Where this leaves it
+
+The write path is dead in a way that padding cannot explain: 519 bytes clocked after the CRC and the chip drives `0xff` throughout. The 2-bit RX skew is still unexplained, and is now known to be independent of the kernel tree, the driver's init sequence, the pin mux, and the clock rate — on the same board where the OpenMANET image needs no compensation at all.
+
+Two things I have not done yet: booting the OpenMANET card to dump its live device tree and pin mux for a direct comparison, and measuring the skew through `/dev/spidev0.0` on this kernel with the driver out of the picture entirely. Both are queued.
+
+Full method, per-run logs and the instrumented patch: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — the retest logs are `logs/2026-08-22-bookworm-6.6.51-retest-*`.
