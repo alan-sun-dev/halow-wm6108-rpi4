@@ -76,7 +76,10 @@ for the CRC/illegal-command experiment that pins down which direction is broken.
 
 Same idea as the driver's existing `is_rk3288` 1-bit `morse_shift_buffer()`
 quirk, in the other direction. `patches/` adds a `spi_rx_lshift=N` module
-parameter. With `spi_rx_lshift=2`:
+parameter — plus `spi_tx_rshift`, `spi_pre_token_bytes`, and (since 2026-08-22)
+`spi_init_train_bytes` / `spi_init_cs_flip` for probing the init sequence, and a
+`morse_spi_find_data_ack()` that reports where in the ack window the chip
+answered. With `spi_rx_lshift=2`:
 
 ```
 morse_spi spi0.0: Morse Micro SPI device found, chip ID=0x0306

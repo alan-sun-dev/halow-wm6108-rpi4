@@ -93,25 +93,67 @@ OS runs, all from the archived logs:
   plus `reset-gpios = <&gpio 17 0>` against `<&gpio 17 1>` here, and pinctrl
   attached to the controller rather than to the child device node.
 
-### Next experiment
+### One thing that argues against the padding hypothesis
 
-No reflash needed. On Raspberry Pi OS, with the patched 2.0.1 already built:
+"The open problem" below records that the same transaction driven by hand from
+userspace returns token `0x05` **two bytes after the CRC**. If that is what the
+chip really does, a 4-byte window is already enough and padding is not the wall.
+That observation and "all 0xff out to 71 bytes" from inside the driver cannot
+both be describing the same chip state. Card state (idle vs initialised) is the
+standing suspect and was never verified. So the padding hypothesis is a good fit
+numerically but is not confirmed — it has to be measured, not assumed.
+
+### Next experiments, in order
+
+`patches/` was extended on 2026-08-22 to make these measurable:
+`spi_init_train_bytes` (default 18), `spi_init_cs_flip` (default Y),
+`spi->mode` logging through `morse_spi_initsequence()`, and a rewritten
+`morse_spi_find_data_ack()` failure path that reports the offset and value of
+the first non-`0xff` byte (or says there was none in N bytes) and dumps from
+that byte rather than from the head of the window.
+
+**1. Does the ack window matter at all?** One insmod, everything else exactly as
+the last failing run — 10 MHz, `spi_rx_lshift=2`, `bcf_fgh100mhaamd.bin`:
 
 ```
-spi_post_write_status_bytes=512    # Morse's floor is 250; 64 was never enough
-spi_inter_block_delay_bytes=250
-spi_rx_lshift=2
-enable_ext_xtal_init=1
-bcf=bcf_default.bin
+spi_post_write_status_bytes=512
 ```
 
-and set `spi-max-frequency = <50000000>` in the overlay, so the driver computes
-the same 250-byte inter-block delay OpenMANET runs with.
+Pass → padding was the wall. Still nothing in 512 bytes → the padding hypothesis
+is dead, which also rules out Morse's own OpenWrt fix as the explanation and
+sharpens the question to them.
+
+**2. Is the 2-bit skew self-inflicted by the init burst?** The training clocks go
+out with CS deliberately deasserted, via a `SPI_CS_HIGH` flip. If that flip goes
+the wrong way on this kernel, the chip sees those clocks *selected* and starts
+counting bits early — which would produce exactly a constant, clock-independent
+bit offset. Sweep:
+
+| `spi_init_cs_flip` | `spi_init_train_bytes` | reading |
+|---|---|---|
+| Y | 18 | baseline (stock behaviour) |
+| Y | 0 / 2 / 17 / 20 | does the skew track the burst length? |
+| N | 18 | does the skew depend on the flip rather than the clocks? |
+| N | 0 | neither burst nor flip |
+
+Watch the new `init: mode=0x…` lines to see which branch the kernel actually
+takes, and `morse rx:` for whether the offset moves.
+
+**3. Where else can a difference hide?** With the SPI source byte-identical
+between the two trees, only the live configuration is left. Dump
+`/proc/device-tree/soc/spi@7e204000/` (cs-gpios, pinctrl-0, dmas) and the GPIO
+7…11 rows of `/sys/kernel/debug/pinctrl/*/pinmux-pins` on both Raspberry Pi OS
+and OpenMANET and diff them. In particular, check whether GPIO8 is muxed ALT0
+(native CE0) while also being used as a GPIO chip select.
+
+**4. Only after 1 passes**, converge on OpenMANET's configuration one variable at
+a time: overlay to `spi-max-frequency = <50000000>` (which makes the driver
+compute the same 250-byte inter-block delay), then `enable_ext_xtal_init=1`,
+then `bcf=bcf_default.bin`.
 
 **Still unexplained: the 2-bit RX skew.** Padding is a byte-level effect and
 cannot produce bit-level misframing, and OpenMANET needs no `spi_rx_lshift` at
-all on the same hardware. That remains a separate open question — and if the
-padding fix clears the write path, it becomes the only one left.
+all on the same hardware. Experiment 2 is the direct attack on it.
 
 ---
 

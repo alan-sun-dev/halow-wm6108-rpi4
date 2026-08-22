@@ -73,7 +73,10 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 ## 把接收緩衝區左移 2 bit，讀取路徑就全通了
 
 概念和驅動裡既有的 `is_rk3288` 1-bit `morse_shift_buffer()` 補償相同，只是方向
-相反。`patches/` 加入了 `spi_rx_lshift=N` 模組參數。設 `spi_rx_lshift=2` 之後：
+相反。`patches/` 加入了 `spi_rx_lshift=N` 模組參數 —— 另外還有 `spi_tx_rshift`、
+`spi_pre_token_bytes`，以及（2026-08-22 起）用來探測 init 序列的
+`spi_init_train_bytes` / `spi_init_cs_flip`，還有一個會報出「晶片在 ACK 視窗的
+哪個位置回應」的 `morse_spi_find_data_ack()`。設 `spi_rx_lshift=2` 之後：
 
 ```
 morse_spi spi0.0: Morse Micro SPI device found, chip ID=0x0306

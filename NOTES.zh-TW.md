@@ -87,24 +87,60 @@ OpenMANET 的 UCI 裡設了 `enable_ext_xtal_init='1'`（見
   `reset-gpios = <&gpio 17 0>` 對上這裡的 `<&gpio 17 1>`，以及 pinctrl 是掛在
   controller 上而不是掛在子裝置節點上。
 
-### 下一個實驗
+### 有一項證據對 padding 假說不利
 
-不需要重刷卡。在 Raspberry Pi OS 上，用已經編好的 patched 2.0.1：
+下面「未解的問題」那一節記著：同一筆交易在使用者空間手動打的時候，會在 **CRC 之後
+兩個位元組**回傳 token `0x05`。如果晶片真的是這樣，4 個位元組的視窗本來就夠，
+padding 就不是那道牆。這個觀察和驅動裡「71 個位元組全是 0xff」不可能同時在描述
+同一個晶片狀態。卡片狀態（idle vs 已初始化）一直是嫌疑，但從未被驗證。所以
+padding 假說數字上吻合得很漂亮，卻**還沒被證實** —— 它必須被量，而不是被假設。
+
+### 接下來的實驗，依序
+
+`patches/` 在 2026-08-22 擴充過，就是為了讓這些可量測：新增
+`spi_init_train_bytes`（預設 18）與 `spi_init_cs_flip`（預設 Y）兩個模組參數、
+在 `morse_spi_initsequence()` 全程印出 `spi->mode`，並改寫
+`morse_spi_find_data_ack()` 的失敗路徑 —— 現在會報出**第一個非 `0xff` 位元組的
+offset 與值**（或明講「N 個位元組裡一個都沒有」），而且 hex dump 從那個位元組開始
+印，而不是從視窗開頭印。
+
+**1. ACK 視窗到底有沒有關係？** 一次 insmod，其餘完全維持上一次失敗的狀態 ——
+10 MHz、`spi_rx_lshift=2`、`bcf_fgh100mhaamd.bin`：
 
 ```
-spi_post_write_status_bytes=512    # Morse 的下限是 250；64 從來就不夠
-spi_inter_block_delay_bytes=250
-spi_rx_lshift=2
-enable_ext_xtal_init=1
-bcf=bcf_default.bin
+spi_post_write_status_bytes=512
 ```
 
-並把 overlay 的 `spi-max-frequency` 改成 `<50000000>`，讓驅動自己算出與 OpenMANET
-相同的 250 位元組 inter-block delay。
+通過 → padding 就是那道牆。到 512 個位元組還是什麼都沒有 → padding 假說死掉，
+連帶排除 Morse 自家的 OpenWrt 修正作為解釋，也讓要問維護者的問題更銳利。
+
+**2. 2-bit 偏移是不是 init burst 自己造成的？** 那串 training clock 是故意在 CS
+未選取的狀態下打出去的，靠翻 `SPI_CS_HIGH` 達成。如果這個翻轉在這顆核心上方向
+相反，晶片就會把那些 clock 當成「已選取」收下，從一開始就多數了位元 —— 那正好會
+產生一個固定、與時脈無關的位元偏移。掃描矩陣：
+
+| `spi_init_cs_flip` | `spi_init_train_bytes` | 讀什麼 |
+|---|---|---|
+| Y | 18 | 基準（原本的行為） |
+| Y | 0 / 2 / 17 / 20 | 偏移量會不會跟著 burst 長度動？ |
+| N | 18 | 偏移取決於翻轉本身而不是 clock？ |
+| N | 0 | 兩者都不是 |
+
+看新增的 `init: mode=0x…` 判斷核心實際走了哪個分支，看 `morse rx:` 判斷偏移有沒有
+移動。
+
+**3. 差異還可能藏在哪？** 既然兩條樹的 SPI 原始碼逐位元組相同，剩下的就只有實際
+生效的組態。在 Raspberry Pi OS 與 OpenMANET 兩邊各 dump 一份
+`/proc/device-tree/soc/spi@7e204000/`（cs-gpios、pinctrl-0、dmas）以及
+`/sys/kernel/debug/pinctrl/*/pinmux-pins` 裡 GPIO 7…11 的部分，然後 diff。
+特別要看 GPIO8 有沒有同時被 mux 成 ALT0（native CE0）又被當成 GPIO chip select 用。
+
+**4. 只有在第 1 項通過之後**，再一次一個變數地往 OpenMANET 的組態收斂：overlay 改
+`spi-max-frequency = <50000000>`（這會讓驅動算出同樣的 250 位元組 inter-block
+delay）→ `enable_ext_xtal_init=1` → `bcf=bcf_default.bin`。
 
 **仍未解釋：2-bit RX 偏移。** 墊底是位元組層級的效果，造不出位元層級的框架錯位；
-而且同一組硬體上，OpenMANET 完全不需要 `spi_rx_lshift`。這仍然是一個獨立的開放
-問題 —— 而且如果 padding 修好之後寫入就通了，它會變成唯一剩下的問題。
+而且同一組硬體上，OpenMANET 完全不需要 `spi_rx_lshift`。第 2 項就是對它的正面攻擊。
 
 ---
 
