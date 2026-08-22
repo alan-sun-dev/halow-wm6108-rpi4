@@ -186,10 +186,11 @@ entries.
 
 ## Testing on hardware
 
-[TESTING.md](TESTING.md) holds two self-contained procedures: the pending retest
-on Raspberry Pi OS (ack window, then the init training burst — no card swap, no
-reflash), and the completed OpenMANET card swap that produced the only passing
-result so far. Both list what each possible output means.
+[TESTING.md](TESTING.md) holds three self-contained procedures, pending first:
+the A/B that runs the userspace SPI probe on the OpenMANET card (the only
+experiment left), the completed Raspberry Pi OS retest that eliminated six
+hypotheses, and the completed OpenMANET card swap that produced the only passing
+result so far. Each lists what every possible output means.
 
 ## Layout
 

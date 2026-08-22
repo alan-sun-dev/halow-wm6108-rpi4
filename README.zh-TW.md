@@ -179,10 +179,10 @@ LED 與網路設定的 `case` 清單裡，而且與 `raspberrypi,*` 並列。
 
 ## 實機測試
 
-[TESTING.zh-TW.md](TESTING.zh-TW.md) 收了兩份自足的操作流程：待執行的
-Raspberry Pi OS 重測（ACK 視窗、接著是 init training burst —— 不換卡、不重刷），
-以及已完成、產出目前唯一通過結果的 OpenMANET 換卡測試。兩份都列出每種可能輸出
-各代表什麼。
+[TESTING.zh-TW.md](TESTING.zh-TW.md) 收了三份自足的操作流程，待執行的排最前面：
+在 OpenMANET 卡上跑 userspace SPI 探測的 A/B（唯一剩下的實驗）、已完成並消除六個
+假設的 Raspberry Pi OS 重測，以及已完成、產出目前唯一通過結果的 OpenMANET 換卡
+測試。每一份都列出每種可能輸出各代表什麼。
 
 ## 目錄結構
 

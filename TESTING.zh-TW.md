@@ -2,14 +2,119 @@
 
 *[English](TESTING.md)*
 
-兩份流程。第一份是待執行的；第二份保留下來，因為它是目前唯一產出通過結果的測試。
+三份流程，待執行的排在最前面。第 2、3 節都已完成，保留下來供重現，也因為它們的
+推理正是後續結果要對照的東西。
 
 ---
 
-# 1. 在 Raspberry Pi OS 上重測：ACK 視窗與 init burst
+# 1. A/B：在 OpenMANET 卡上跑同一支 userspace 探測
 
-**狀態：待執行。** 這是 2026-08-22 的發現所要求的測試。全程**不需要換卡也不需要
-重刷**，直接在機器裡現有的那張 Raspberry Pi OS 卡上跑。
+**狀態：待執行。這是唯一剩下的實驗。** 其他全部被消除了 —— 見
+[NOTES.zh-TW.md](NOTES.zh-TW.md)。它要回答的問題是：同一片板子，在 Raspberry Pi OS
+上晶片回應有固定 2-bit 偏移，在 OpenMANET 上完全沒有，而兩條核心樹的 SPI 原始碼
+逐位元組相同。直接在能動的那份映像上量線上行為，是剩下唯一的直接比較。
+
+## 換卡**之前**要準備的
+
+探測工具是 Python，需要 `python3` 加上 `spidev` 模組。原版 OpenWrt 映像大概率兩個
+都沒有，而 OpenMANET 開機後是 192.168.1.1 的 LAN 設備、沒有 WAN，`opkg update`
+連不到網際網路。先在筆電上把套件抓下來。
+
+目標是 **OpenWrt 24.10、`aarch64_cortex-a72`、核心 6.6.138**。需要
+`python3-light`（或 `python3-base`）與 `python3-spidev`，外加 `kmod-spi-dev`。
+OpenMANET 有預編套件庫 <https://github.com/OpenMANET/packages-repo>；
+OpenWrt 24.10 官方 feed 是備案。
+
+**我沒辦法確認確切的套件名稱、也不確定映像裡是不是本來就有** —— 那需要卡片開機才能
+查。所以換卡後第一件事是跑下面的檢查，再決定要不要那些 ipk。
+
+## 換卡之後
+
+```sh
+ssh root@192.168.1.1        # 或 10.41.254.1，看這份映像用哪個
+
+opkg list-installed | grep -iE 'python3|spi-dev'
+ls /dev/spidev* 2>/dev/null
+lsmod | grep -i spidev
+```
+
+缺套件的話，把 ipk `scp` 過去再 `opkg install ./*.ipk`。
+
+## 第 1 步 —— 一定跑得起來的那部分，不需要 Python
+
+不管 Python 的狀況如何，**先做這個**。它和
+`logs/2026-08-22-bookworm-6.6.51-retest-dt-pinmux.txt` 直接可比：
+
+```sh
+{
+echo "=== uname ==="; uname -r
+echo; echo "=== spi0 device-tree node ==="
+for f in /proc/device-tree/soc/spi@7e204000/*; do
+  n=$(basename "$f"); [ -d "$f" ] && { echo "  [child node] $n"; continue; }
+  printf "%-22s " "$n"; hexdump -e '16/1 "%02x " "\n"' "$f" 2>/dev/null | head -1
+done
+echo; echo "=== pinmux 7..11 ==="
+grep -E "^pin (7|8|9|10|11) " /sys/kernel/debug/pinctrl/*gpio*/pinmux-pins
+echo; echo "=== dmesg 裡的 morse 相關行 ==="
+dmesg | grep -iE 'morse|spi0'
+} > /tmp/openmanet-dt-pinmux.txt 2>&1
+cat /tmp/openmanet-dt-pinmux.txt
+```
+
+換回去之前把這個檔案複製出來。
+
+| 和 Raspberry Pi OS 那份的差異 | 代表什麼 |
+|---|---|
+| pinmux 不同 —— 例如 GPIO8 不是 `gpio_out`、或 9/10/11 不是 `alt0` | **那就是變數。** 驅動原始碼相同，但失敗那側的 mux 不一樣。 |
+| `cs-gpios`、`pinctrl-0` 或 `dmas` 不同 | 同樣的結論，只是差在 device tree 而不是 mux。 |
+| 兩份實質等價 | 差異根本不在看得見的組態裡，偏移只能來自核心沒有描述的時序。 |
+
+## 第 2 步 —— 探測本身，前提是 Python 可用
+
+用和 Raspberry Pi OS 一樣的方式把 spidev 綁到 chip select。**不要**為了拿到 spidev
+節點而移除 overlay —— 那會連模組的供電和 reset 一起拿掉。
+
+```sh
+rmmod mm6108_sdio 2>/dev/null            # 注意這份映像上的模組名稱
+echo spidev > /sys/bus/spi/devices/spi0.0/driver_override
+echo spi0.0 > /sys/bus/spi/drivers/spidev/bind
+ls -la /dev/spidev0.0
+```
+
+`driver_override` 是核心 SPI core 的功能、6.6 就有，所以在 OpenWrt 上理應也能用 ——
+但**沒實測過**，這正是第 1 步排在前面而且不依賴它的原因。
+
+然後把 `tools/mmcspi.py` 和 `tools/discriminate.py` 複製過去執行：
+
+```sh
+python3 discriminate.py
+python3 mmcspi.py
+```
+
+注意 `reset_module()` 用的是 `pinctrl`，那是 Raspberry Pi OS 的工具，**OpenWrt 上
+沒有**。要嘛用映像裡有的東西自己打 RESET_N pulse（`gpioset`、或寫
+`/sys/class/gpio`），要嘛接受晶片沒有被重新 reset —— 但記錄結果時要講明。
+
+| 你看到什麼 | 代表什麼 |
+|---|---|
+| `CMD0 → R1=0x01 @bit8` —— 沒有偏移 | **偏移是主機側造成的。** 同一顆晶片在這份映像下框架正確，所以是 Raspberry Pi OS 的某個組態把它移位了。拿第 1 步的擷取去比對找出是什麼。 |
+| `CMD0 → R1=0x01 @bit10` —— 同樣的 2-bit 偏移 | 偏移在**兩份映像上都存在**，只是能動的那個驅動容忍了它。那意味著 `spi_rx_lshift` 一直在治標，真正的差異在驅動怎麼處理回應 —— 這會是比目前任何開放問題都好的線索。 |
+| 完全沒有回應 | 先檢查供電和 reset：這片載板的 GPIO18 必須被驅動為高，RESET_N 必須已釋放。 |
+
+前兩種結果都是決定性的。這是少見的、**每一種結果都值得拿到**的實驗。
+
+## 還原
+
+清掉 `driver_override`、解綁 spidev、重新載入 morse 模組 —— 或直接重開機，因為
+上面所有動作都不會持久化。
+
+---
+
+# 2. 已完成：在 Raspberry Pi OS 上重測 —— ACK 視窗與 init burst
+
+**狀態：已於 2026-08-22 完成 —— 六個假設全部消除，沒有一個是成因。**
+結果在 `logs/2026-08-22-bookworm-6.6.51-retest-*`。流程保留下來，因為它是那份
+儀器化驅動的測試框架，之後要在那張卡上做任何參數測試都該照這個走。
 
 ## 這在測什麼
 
@@ -192,7 +297,7 @@ uname -r; cat /etc/os-release; dpkg -l | grep linux-image
 
 ---
 
-# 2. 已完成：在 SenseCAP M1 上實測 OpenMANET 映像
+# 3. 已完成：在 SenseCAP M1 上實測 OpenMANET 映像
 
 **狀態：已於 2026-08-22 完成 —— 通過。** `wlh0` 起在 SG 頻段、22 dBm。保留供
 重現用；結果已歸檔在 `logs/2026-08-22-openmanet-1.8.0-*`。

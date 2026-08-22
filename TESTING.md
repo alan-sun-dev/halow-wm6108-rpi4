@@ -2,16 +2,130 @@
 
 *[中文版](TESTING.zh-TW.md)*
 
-Two procedures. The first is the one that is pending; the second is kept because
-it is the test that produced the only passing result so far.
+Three procedures, pending first. Sections 2 and 3 are done and are kept for
+reproduction and because their reasoning is what later results are read against.
 
 ---
 
-# 1. Retest on Raspberry Pi OS: the ack window and the init burst
+# 1. The A/B: run the userspace probe on the OpenMANET card
 
-**Status: pending.** This is the test the 2026-08-22 findings ask for. Nothing
-here needs a card swap or a reflash — it runs on the Raspberry Pi OS card that is
-already in the machine.
+**Status: pending. This is the only experiment left.** Everything else has been
+eliminated — see [NOTES.md](NOTES.md). The question it answers: the same board
+shows a constant 2-bit offset on the chip's responses under Raspberry Pi OS and
+none at all under OpenMANET, with the SPI driver source byte-identical between
+the two kernel trees. Measuring the wire directly on the working image is the
+only direct comparison left.
+
+## Prepare *before* swapping the card
+
+The probe is Python and needs `python3` plus the `spidev` module. A stock
+OpenWrt image is unlikely to have either, and OpenMANET comes up as a LAN
+appliance on 192.168.1.1 with no WAN, so `opkg update` will not reach the
+internet. Fetch the packages onto the laptop first.
+
+Target is **OpenWrt 24.10, `aarch64_cortex-a72`, kernel 6.6.138**. You need
+`python3-light` (or `python3-base`) and `python3-spidev`, plus `kmod-spi-dev`.
+OpenMANET publishes prebuilt packages at
+<https://github.com/OpenMANET/packages-repo>; the OpenWrt 24.10 feed is the
+fallback.
+
+I have not been able to verify the exact package names or whether they are
+already in the image — that needs the card booted. So the first thing to run
+after swapping is the check below, and only then decide whether the ipks are
+needed.
+
+## After swapping in the card
+
+```sh
+ssh root@192.168.1.1        # or 10.41.254.1, whichever this image uses
+
+opkg list-installed | grep -iE 'python3|spi-dev'
+ls /dev/spidev* 2>/dev/null
+lsmod | grep -i spidev
+```
+
+If the packages are missing, `scp` the ipks over and `opkg install ./*.ipk`.
+
+## Step 1 — the part that always works, no Python needed
+
+Do this first, whatever the Python situation. It is directly comparable to
+`logs/2026-08-22-bookworm-6.6.51-retest-dt-pinmux.txt`:
+
+```sh
+{
+echo "=== uname ==="; uname -r
+echo; echo "=== spi0 device-tree node ==="
+for f in /proc/device-tree/soc/spi@7e204000/*; do
+  n=$(basename "$f"); [ -d "$f" ] && { echo "  [child node] $n"; continue; }
+  printf "%-22s " "$n"; hexdump -e '16/1 "%02x " "\n"' "$f" 2>/dev/null | head -1
+done
+echo; echo "=== pinmux 7..11 ==="
+grep -E "^pin (7|8|9|10|11) " /sys/kernel/debug/pinctrl/*gpio*/pinmux-pins
+echo; echo "=== morse lines from dmesg ==="
+dmesg | grep -iE 'morse|spi0'
+} > /tmp/openmanet-dt-pinmux.txt 2>&1
+cat /tmp/openmanet-dt-pinmux.txt
+```
+
+Copy that file off the card before swapping back.
+
+| what differs from the Raspberry Pi OS capture | what it means |
+|---|---|
+| the pin mux differs — e.g. GPIO8 not `gpio_out`, or 9/10/11 not `alt0` | that is the variable. The failing side is mux'd differently despite identical driver source. |
+| `cs-gpios`, `pinctrl-0` or `dmas` differ | same conclusion, in the device tree rather than the mux. |
+| both captures are equivalent | the difference is not in the visible configuration at all, and the skew has to come from timing the kernel does not describe. |
+
+## Step 2 — the probe itself, if Python is available
+
+Bind spidev to the chip select the same way as on Raspberry Pi OS. Do **not**
+remove the overlay to get a spidev node — that would take the module's power and
+reset with it.
+
+```sh
+rmmod mm6108_sdio 2>/dev/null            # note the module name on this image
+echo spidev > /sys/bus/spi/devices/spi0.0/driver_override
+echo spi0.0 > /sys/bus/spi/drivers/spidev/bind
+ls -la /dev/spidev0.0
+```
+
+`driver_override` is a kernel SPI-core feature and is present in 6.6, so this
+should work on OpenWrt too — but it is untested there, which is why step 1 comes
+first and does not depend on it.
+
+Then copy `tools/mmcspi.py` and `tools/discriminate.py` onto the card and run:
+
+```sh
+python3 discriminate.py
+python3 mmcspi.py
+```
+
+Note `reset_module()` uses `pinctrl`, which is a Raspberry Pi OS utility and is
+**not** on OpenWrt. Either pulse RESET_N by hand with whatever the image has —
+`gpioset`, or writing to `/sys/class/gpio` — or accept that the chip is not
+freshly reset and say so when recording the result.
+
+| what you see | what it means |
+|---|---|
+| `CMD0 → R1=0x01 @bit8` — no offset | **The skew is host-side.** The same chip frames correctly under this image, so something in the Raspberry Pi OS configuration shifts it. Compare against step 1's capture to find what. |
+| `CMD0 → R1=0x01 @bit10` — the same 2-bit offset | The skew is on the wire under *both* images, and the working driver simply tolerates it. That would mean `spi_rx_lshift` is treating a symptom, and the real difference is somewhere in how the driver handles the response — a much better lead than anything currently open. |
+| no response at all | Check power and reset first: GPIO18 must be driven high on this carrier, and RESET_N released. |
+
+Either of the first two outcomes is decisive. This is the rare experiment where
+every result is worth having.
+
+## Restore
+
+Clear `driver_override`, unbind spidev, reload the morse module — or just
+reboot, which restores everything since none of this is persistent.
+
+---
+
+# 2. Completed: retest on Raspberry Pi OS — the ack window and the init burst
+
+**Status: done, 2026-08-22 — all six hypotheses eliminated, none of them the
+cause.** Results in `logs/2026-08-22-bookworm-6.6.51-retest-*`. The procedure is
+kept because it is the harness the instrumented driver was built for, and any
+further parameter test on that card should follow it.
 
 ## What it is testing
 
@@ -203,7 +317,7 @@ bringing up an AP.
 
 ---
 
-# 2. Completed: testing the OpenMANET image on a SenseCAP M1
+# 3. Completed: testing the OpenMANET image on a SenseCAP M1
 
 **Status: done, 2026-08-22 — it passed.** `wlh0` came up as an AP on SG at
 22 dBm. Kept for reproduction; the result is archived in
