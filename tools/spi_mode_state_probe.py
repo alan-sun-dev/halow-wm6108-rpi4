@@ -30,6 +30,13 @@ TWO THINGS THAT WILL MISLEAD YOU IF YOU CHANGE THEM:
 GPIO18 is the SenseCAP M1's slot power enable and is carrier-specific. On a board
 without switchable module power, drop powercycle() and keep the reset tests.
 """
+import spidev, subprocess, time, sys
+sys.path.insert(0, '/home/alan/halow-test/halow-wm6108-rpi4/tools')
+from mmcspi import bits, crc7_be
+def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True)
+def cs(l): sh("pinctrl set 8 op %s" % ('dh' if l=='high' else 'dl'))
+def powercycle(w=5.0):
+    sh("pinctrl set 18 op dl"); time.sleep(2.5)
     sh("pinctrl set 18 op dh"); time.sleep(w)
 def resetpulse():
     sh("pinctrl set 17 op dl"); time.sleep(0.05)
