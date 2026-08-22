@@ -162,3 +162,41 @@ Two takeaways:
 If Morse's officially-supported kernel list runs 4.9 → 6.12, this bug is *inside* the supported range, not beyond it.
 
 Bisecting the exact commit is still on offer — the 6.6 → 6.12 window in `raspberrypi/linux` is smaller than 6.6 → 6.18 and probably tractable in a day of builds if it would be useful.
+
+---
+
+## Update 3, 2026-08-22 — 6.6.51 also fails; the split is the kernel *tree*, not the version
+
+Tested Raspberry Pi OS Lite Bookworm from **2024-11-19**, which ships kernel `6.6.51+rpt-rpi-v8` — the same 6.6 LTS branch as OpenMANET's working 6.6.138, just an earlier stable tag. Expected result: pass. Actual result: fails with byte-identical fingerprint to the 6.12.93 and 6.18.34 runs.
+
+- **Boot** (auto-loaded morse module, no `spi_rx_lshift`): same `c0 7f ff ff` 2-bit RX offset, same `failed to init SPI with CMD63 (ret:-71)`.
+- **With `spi_rx_lshift=2`**: firmware and BCF load (byte-identical CRC32s to the working case), then dies at:
+
+  ```
+  morse_spi spi0.0: spi: cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0xffffffff (ret:-71)
+  ```
+
+Verbatim to the 6.12.93 and 6.18.34 logs.
+
+New evidence in the repo:
+
+- [logs/2026-08-22-bookworm-6.6.51-boot-dmesg.log](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-bookworm-6.6.51-boot-dmesg.log)
+- [logs/2026-08-22-bookworm-6.6.51-lshift-dmesg.log](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-bookworm-6.6.51-lshift-dmesg.log)
+- [logs/2026-08-22-bookworm-6.6.51-environment.txt](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-bookworm-6.6.51-environment.txt)
+
+Updated table:
+
+| Kernel | Tree / packaging | Outcome |
+|---|---|---|
+| **6.6.138** | **OpenWrt linux-6.6** (via OpenMANET 1.8.0) | ✅ passes |
+| **6.6.51+rpt-rpi-v8** | raspberrypi/linux rpi-6.6.y (RPi OS Bookworm 2024-11-19) | ❌ fails |
+| **6.12.93+rpt-rpi-v8** | raspberrypi/linux rpi-6.12.y (RPi OS Bookworm 2025-05) | ❌ fails |
+| **6.18.34+rpt-rpi-v8** | raspberrypi/linux rpi-6.18.y (RPi OS Trixie) | ❌ fails |
+
+Three things fall out of this:
+
+1. **The split is not kernel version, it is kernel *tree*.** Both trees share the mainline 6.6 LTS stable-tag numbering. OpenWrt's linux-6.6 tree passes; raspberrypi/linux fails on every stable tag tested (`.51`, `.93` for its 6.12, `.34` for its 6.18). The delta lives in the patch stack on top of mainline, not in mainline itself.
+2. **My earlier "downgrade to any 6.6.x on Bookworm" advice above was wrong** — retracting. There is no shortcut path to a working setup on stock Raspberry Pi OS at any tag tested. If you need a Debian-userspace HaLow setup on a Pi 4, either use OpenMANET or replace the kernel with an OpenWrt-style / mainline build.
+3. **The bisect strategy should target the *tree difference*, not commits within one tree.** Diffing `drivers/spi/spi-bcm2835.c` and adjacent SPI-core files between OpenWrt's linux-6.6 tree and raspberrypi/linux `rpi-6.6.y` at similar stable tags will likely isolate the fix (or the absent regression) in a small number of files. If that comes up empty, bisecting within `rpi-6.6.y` becomes the bounded next step.
+
+Still happy to run either the diff or the bisect if it would be useful.
