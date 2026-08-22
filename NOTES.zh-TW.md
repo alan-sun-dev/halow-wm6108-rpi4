@@ -64,12 +64,28 @@ Morse 的 OpenWrt feed patch 在**三個地方**都設了 250 的硬下限。**�
 這個 phy —— `wlan1` type managed、完整的加密演算法清單、IBSS/managed/AP/AP-VLAN/
 monitor/mesh、Band 2 含每個頻道的法規狀態。**mac80211 的註冊是完整的。**
 
-真正的缺口比原本說的窄：`iw dev wlan1 scan` 回傳成功，卻**完全沒有產生任何 SPI 交易**，
-而且介面從未關聯、從未傳過封包。**空中運作未經驗證。** 最可能的原因（這是推測）是這顆
-晶片需要 Morse 自己的 userspace 才會真正啟動。
+~~真正的缺口比原本說的窄：`iw dev wlan1 scan` 回傳成功，卻完全沒有產生任何 SPI 交易。~~
+**這句也是錯的，再次更正。** 那個計數器是儀器化版本裡的 `dev_info`；乾淨的 patch 系列
+沒有它，所以 log 行不存在 —— 而我把「行不存在」讀成「匯流排閒置」。同一個錯誤換個外衣。
 
-這是同一個 session 裡第四次把「沒看到」讀成「不存在」，也是唯一一次在被抓到之前就跑進
-公開留言的。已在 issue #9 以 comment 5381978970 更正。
+改用 SPI core 自己的統計（不依賴本倉庫寫的任何東西，`/sys/bus/spi/devices/spi0.0/statistics/`）：
+
+| | 訊息 | 位元組 |
+|---|---|---|
+| 靜置 3 秒 | +17 | 4.6 KB（30 秒 watchdog） |
+| `ip link set up` | +165 | 40 KB |
+| `iw scan` ×3 | +31、+31、+36 | 各約 8 KB |
+
+`errors 0`、`timedout 0`。`morse_mac_ops_start`、`add_interface`、`morse_ops_hw_scan`
+三個回呼都有被呼叫，`morse_cmd_get_version()` 回傳 0。**掃描確實到達晶片，找不到東西是
+因為附近沒有 HaLow 網路。**
+
+真正未驗證的只有**關聯與資料傳輸**，因為沒有第二台 HaLow 裝置可以對接 —— 和驅動無關。
+
+同一個 session 裡有**六次**把「沒看到」讀成「不存在」：RUN 5 的墊底掃描、`mode=0x4` 那行、
+1.5 秒上電等待、`iw` 不在 `PATH`、「拉起 wlan1 會產生暫存器寫入」（dmesg 沒清）、以及這次。
+其中兩次跑進了公開留言。已在 issue #9 以 comment 5381978970 與 5382020693 更正。
+**這個模式本身才是值得留下的發現：當一個儀器回報「什麼都沒有」，先檢查儀器，再相信它。**
 
 完整細節：`logs/2026-08-23-WORKING-environment.txt`。
 
