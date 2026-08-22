@@ -2,7 +2,7 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
-## 2026-08-22 (latest): the retest ran — six eliminations, none of them the cause
+## 2026-08-22 (latest): the retest ran — eight eliminations, none of them the cause
 
 Everything below was written before the hardware retest. The retest has now been
 run, over SSH, and it kills the padding hypothesis too. Full detail in
@@ -17,6 +17,22 @@ run, over SSH, and it kills the padding hypothesis too. Full detail in
 | clock-dependent | 400 kHz / 1 / 20 / 50 MHz | **eliminated** — identical at every rate |
 | the driver is involved at all | spidev bound via `driver_override`, no driver loaded | **eliminated** — same `R1=0x01 @bit10` |
 | host mis-samples the start of a transfer | 0…32 bytes of `0xff` before the command in one CS assertion | **eliminated** — `@bit10` every time |
+| the pull on MISO/MOSI/SCLK | `pinctrl set 9\|10\|11 pu` at runtime, A/B against pull-down | **eliminated** — byte-identical in both directions |
+
+The pull one is worth a paragraph, because the difference is real even though it
+is not the cause. Decoding OpenMANET's own `mm610x-spi.dtbo` off a freshly
+written card shows `spi0_pins { brcm,pins = 9 10 11; brcm,function = ALT0;
+brcm,pull = 2 2 2 }` — **pull-up on all three SPI lines**. The overlay in this
+repo never sets those pulls and inherits the BCM2711 default, which is
+**pull-down**, confirmed on the running board. The reasoning was that an MMC-SPI
+slave tri-states MISO before answering, so the pull sets the level during those
+bit times. Flipping them at runtime changes nothing at all. Recorded so the same
+difference does not get rediscovered and re-argued later. Full decode in
+`logs/2026-08-22-openmanet-1.8.0-overlay-mm610x-spi.txt`.
+
+That decode also confirms the image needs **no overlay swap**: reset on GPIO17
+pull-up, IRQ on GPIO5, power-gpios 23/24, `cs-gpios` GPIO8 active-low,
+`spi-max-frequency` 50 MHz — the WM1302 HAT map throughout.
 
 Two facts worth carrying forward:
 

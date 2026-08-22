@@ -1,10 +1,10 @@
 Captured: 2026-08-22 (~20:35-20:40 UTC+8), run over SSH from the laptop
 Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
 Image: Raspberry Pi OS Lite (64-bit), Debian 12 (bookworm), dated 2024-11-19
-Result: FIVE HYPOTHESES ELIMINATED, none of them fixed the failure.
+Result: SEVEN HYPOTHESES ELIMINATED, none of them fixed the failure.
         The CMD53 write still dies at 0x00004050:4 with ret:-71, and the
         2-bit RX skew is unchanged by everything tested here.
-        Runs 0-4 go through the driver; run 5 takes the driver out entirely.
+        Runs 0-4 go through the driver; runs 5 and 6 take it out entirely.
 
 === uname ===
 Linux Sensecap 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
@@ -216,3 +216,47 @@ FOLLOW-UP — tools/mmcspi.py reset_module() fixed and re-verified
   R1 signature is unchanged at bit 10, so none of the conclusions above move --
   but it is direct evidence that the earlier runs were measuring a chip that had
   never been reset by the tool.
+
+
+================================================================
+RUN 6 — is the skew set by the pull on MISO/MOSI/SCLK?   ELIMINATED
+================================================================
+  Found by decoding OpenMANET's own overlay off a freshly written card (see
+  2026-08-22-openmanet-1.8.0-overlay-mm610x-spi.txt): it sets
+
+      spi0_pins { brcm,pins = 9 10 11; brcm,function = ALT0; brcm,pull = 2 2 2 }
+
+  i.e. pull-UP on all three SPI lines. The overlay in this repo does not touch
+  those pulls and inherits the BCM2711 default, which is pull-DOWN. Confirmed on
+  the running board:
+
+      9: a0  pd | hi // GPIO9 = SPI0_MISO
+     10: a0  pd | lo // GPIO10 = SPI0_MOSI
+     11: a0  pd | hi // GPIO11 = SPI0_SCLK
+
+  The idea: an MMC-SPI slave tri-states MISO before it answers, so the level
+  during those bit times is set by the pull rather than by the chip.
+
+  Tested with spidev bound via driver_override, flipping the pulls at runtime
+  with `pinctrl set 9|10|11 pu` -- no reboot, no overlay change:
+
+    A. pull-down (as shipped here)
+       CMD0  correct CRC   R1=0x01 @bit10   raw=ff c0 7f ff ff ff
+       CMD0  bad CRC       R1=0x09 @bit10   raw=ff c2 7f ff ff ff
+       CMD13               R1=0x05 @bit10   raw=ff c1 7f ff ff ff
+       CMD63 arg=0         R1=0x01 @bit10   raw=ff c0 7f ff ff ff
+
+    B. pull-up (OpenMANET's setting)
+       CMD0  correct CRC   R1=0x01 @bit10   raw=ff c0 7f ff ff ff
+       CMD0  bad CRC       R1=0x09 @bit10   raw=ff c2 7f ff ff ff
+       CMD13               R1=0x05 @bit10   raw=ff c1 7f ff ff ff
+       CMD63 arg=0         R1=0x01 @bit10   raw=ff c0 7f ff ff ff
+
+  Byte-identical across all seven commands in both directions. The pull is not
+  the variable.
+
+  Worth noting the reasoning never closed even before the test: the captured
+  bits ahead of R1 are `11`, i.e. high, which a pull-down would not produce. The
+  test confirms that gap was real rather than a detail of the explanation.
+
+  State restored: pulls back to pd, spidev unbound, morse reloaded.

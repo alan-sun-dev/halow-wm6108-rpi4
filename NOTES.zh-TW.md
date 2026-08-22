@@ -2,7 +2,7 @@
 
 *[English](NOTES.md)*
 
-## 2026-08-22 最新：重測跑完了 —— 六項消除，沒有一項是成因
+## 2026-08-22 最新：重測跑完了 —— 八項消除，沒有一項是成因
 
 以下所有內容都寫在硬體重測之前。重測已經透過 SSH 跑完，而且它連 padding 假說一起
 殺掉了。完整細節在 `logs/2026-08-22-bookworm-6.6.51-retest-environment.txt`。
@@ -16,6 +16,20 @@
 | 與時脈相關 | 400 kHz / 1 / 20 / 50 MHz | **消除** —— 每個速率都一樣 |
 | 驅動本身有涉入 | 用 `driver_override` 綁 spidev，完全不載入驅動 | **消除** —— 同樣的 `R1=0x01 @bit10` |
 | 主機在傳輸開頭取樣錯誤 | 同一次 CS assertion 內在命令前墊 0…32 個 `0xff` | **消除** —— 每次都在 `@bit10` |
+| MISO/MOSI/SCLK 的上下拉 | 執行期用 `pinctrl set 9\|10\|11 pu` 對照 pull-down | **消除** —— 兩個方向逐位元組相同 |
+
+pull 這一項值得多寫一段，因為**差異是真的存在**，只是不是成因。把剛燒好的卡上
+OpenMANET 自己的 `mm610x-spi.dtbo` 解出來看，裡面是
+`spi0_pins { brcm,pins = 9 10 11; brcm,function = ALT0; brcm,pull = 2 2 2 }`
+—— **三支 SPI 線全部 pull-up**。而本倉庫的 overlay 從來沒設過那些 pull，沿用
+BCM2711 的預設 **pull-down**，在運行中的板子上確認過。當初的推理是：MMC-SPI 從機
+在回應前會 tri-state MISO，那幾個 bit 的電位由上下拉決定。執行期翻過去，毫無變化。
+記下來是為了避免這個差異日後又被重新發現、重新爭論一次。完整解碼在
+`logs/2026-08-22-openmanet-1.8.0-overlay-mm610x-spi.txt`。
+
+那份解碼同時確認了這個映像**不需要換 overlay**：reset 在 GPIO17 且設 pull-up、
+IRQ 在 GPIO5、power-gpios 23/24、`cs-gpios` GPIO8 active-low、
+`spi-max-frequency` 50 MHz —— 從頭到尾都是 WM1302 HAT 腳位。
 
 兩個要帶著走的事實：
 
