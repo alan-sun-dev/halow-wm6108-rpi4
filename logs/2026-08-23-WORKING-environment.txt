@@ -1,0 +1,124 @@
+Captured: 2026-08-23 ~02:40 UTC+8, over SSH from the laptop
+Board:  E4:5F:01:52:55:04, serial 100000004851d437
+        Raspberry Pi 4 Model B Rev 1.4, SenseCAP M1 carrier, Wio-WM6108
+Image:  Raspberry Pi OS Lite (64-bit), Debian 12 bookworm, kernel 6.6.51+rpt-rpi-v8
+Driver: MorseMicro/morse_driver tag mm6108-2.0.1 (commit 98e1936) with
+        patches/morse-driver-2.0.1-rpi-spi.patch
+
+RESULT: IT WORKS. The MM6108 comes up over SPI on stock Raspberry Pi OS.
+
+  phy31 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+  wlan1 -> phy31, MAC 9c:04:b6:ff:df:fe
+  351 SPI write transactions, 0 write failures, 0 read failures
+
+Bringing wlan1 up produces live register writes to the chip, so the driver is
+talking to it rather than merely having probed.
+
+  insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin \
+      spi_inter_block_delay_bytes=250 spi_post_write_status_bytes=250
+
+`spi_rx_lshift` is not used. It is not needed any more.
+
+`iw phy` and `iw dev` list nothing for phy31. Not investigated; the stock 6.6.51
+mac80211 has no S1G band support, and OpenMANET's userspace runs backported
+mac80211 plus a patched iw. The interface exists and the driver drives the chip,
+which is the part this repo was about.
+
+
+================================================================
+WHAT IT TOOK — TWO INDEPENDENT DEFECTS
+================================================================
+
+1. THE CHIP WAS NEVER PUT INTO SPI MODE
+   morse_spi_initsequence() clocks its 74-cycle training burst with chip select
+   asserted, because spi_setup() forces SPI_CS_HIGH back on for a cs-gpios
+   device. Fixed with SPI_NO_CS. Full derivation in
+   2026-08-23-nocs-init-fix-environment.txt.
+
+2. THE INTER-TRANSACTION DELAY IS COUNTED IN CLOCKS, NOT IN TIME
+   This one is the subject of the rest of this file.
+
+
+================================================================
+THE DELAY DEFECT
+================================================================
+The driver derives its inter-transaction delay from a time:
+
+  inter_block_delay_bytes = MM6108_SPI_INTER_BLOCK_DELAY_NANO_S /
+                            (SPI_CLK_PERIOD_NANO_S(max_speed_hz) * 8)
+
+40000 ns at 50 MHz is 250 bytes; at 10 MHz it is 50 bytes. Both are 40 us, so if
+the chip needed a fixed *time* the two would be equivalent.
+
+They are not. At 10 MHz, 50 bytes fails and 250 bytes works. **The chip needs a
+fixed number of SPI clocks, not a fixed interval.** The driver's model is wrong
+in principle and only produces a working value at 50 MHz, which is why every
+setup that works runs at 50 MHz and this one, at 10 MHz, did not.
+
+Morse's own OpenWrt feed patch (003_fix_spi_inter_transaction_delay.patch) puts a
+hard floor of 250 on this in three places. Each of those three turned out to be
+separately necessary here, and each was found independently before the patch was
+re-read:
+
+  a. block-write inter-block delay
+     Failure: transaction #52 of 58, `fn=2 0x00000000:14`, chip answers 0xeb
+     (CRC ERROR) at +261 -- i.e. mid-block, having given up on the previous
+     transaction. The transaction immediately before it is a 344-byte
+     non-block write.
+     Fix: spi_inter_block_delay_bytes=250.
+     Result: 213 transactions, 0 failures, phy appears -- but not reliably.
+
+  b. non-block write padding
+     Failure with (a) alone: `fn=2 0x00001000:80`, a byte-mode write, repeatedly.
+     Only 4 bytes are clocked after the CRC by default.
+     Fix: spi_post_write_status_bytes=250.
+     Result with (a)+(b): 124 transactions, 0 write failures, 4 runs out of 4.
+
+  c. non-block READ delay -- no module parameter exists, so this needed a code
+     change
+     Failure with (a)+(b): `cmd53_read fn=2 0x00003110:92`, then
+     morse_firmware_read_ext_host_table failed -5, then
+     "failed to parse extended host table". A 92-byte read scales to
+     92 * 250 / 512 = 44 bytes, far below the floor.
+     Fix: max_t(u32, spi_min_delay_bytes, scaled) in morse_spi_cmd53_read(),
+     new parameter spi_min_delay_bytes, default 250.
+     Result: everything above.
+
+Note the order in which these surfaced. Fixing (a) moved the failure to (b),
+fixing (b) moved it to (c). Each looked like a new problem and each was the same
+one seen from a different side.
+
+
+================================================================
+A CORRECTION TO THE RECORD
+================================================================
+spi_post_write_status_bytes was tested at 4/8/16/32/64 early in the
+investigation, and separately at 512, and recorded as ELIMINATED both times.
+Neither test was wrong, and neither conclusion was usable: at that point the chip
+was not in SPI mode and the very first write failed, so no amount of padding
+could have mattered. The parameter only becomes relevant once the init defect is
+fixed and the driver reaches transaction 50.
+
+The general lesson is worth keeping. An elimination is only valid in the state it
+was measured in. Fifteen hypotheses were tested against a chip that was in the
+wrong mode throughout, and at least one of them -- this one -- was a real
+contributor that the state masked.
+
+
+================================================================
+WHAT A COMPLETE FIX LOOKS LIKE
+================================================================
+The two defects are independent and both are needed:
+
+  1. SPI_NO_CS for the init training burst  (spi_init_no_cs, default on)
+  2. A floor of 250 bytes on all three inter-transaction delays
+
+Only (2c) currently requires a source change; (2a) and (2b) can be reached with
+existing module parameters, which makes this reproducible by anyone without
+patching:
+
+  insmod morse.ko spi_inter_block_delay_bytes=250 spi_post_write_status_bytes=250
+
+Better would be for the driver to stop scaling by clock at all and use the byte
+count directly, which is what Morse's OpenWrt patch does and what the measurement
+here says is correct.

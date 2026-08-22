@@ -54,8 +54,9 @@ SPI from a Raspberry Pi 4.
 >
 > Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led here.
 
-**Status: the SPI-mode init bug is solved (see above); the CMD53 write path is still open.** Reads
-work natively now; the first CMD53 data write is still not acknowledged. This appears to be the
+**Status: working.** `wlan1` comes up on stock Raspberry Pi OS, bound to `spi0.0`, with zero
+SPI read or write failures over 351 transactions. Two driver defects had to be fixed; both are in
+`patches/` and described above and in [NOTES.md](NOTES.md). This appears to be the
 same wall as [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9),
 which is open and unanswered — and which was hit on the officially supported
 hardware (Raspberry Pi 4 + genuine Seeed WM1302 Pi HAT + a Morse-patched kernel).

@@ -49,8 +49,8 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 >
 > issue #9 上有四則追加 comment，每次實測的 dmesg + 環境快照在 [`logs/`](logs/)。以下為走到這一步之前的原始移植紀錄。
 
-**狀態：SPI 模式初始化的 bug 已解決（見上），CMD53 寫入路徑仍未解決。** 讀取路徑現在原生正常，第一筆 CMD53
-資料寫入仍等不到回應。這看起來就是
+**狀態：可運作。** `wlan1` 在原廠 Raspberry Pi OS 上起得來、綁在 `spi0.0`，351 筆交易零讀寫失敗。
+過程中修掉兩個驅動缺陷，都在 `patches/` 裡，說明見上方與 [NOTES.zh-TW.md](NOTES.zh-TW.md)。這看起來就是
 [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9)
 撞到的同一道牆 —— 那個 issue 至今未解，而且對方用的是**官方支援的硬體**
 （Raspberry Pi 4 + 原廠 Seeed WM1302 Pi HAT + 打過 Morse patch 的核心）。

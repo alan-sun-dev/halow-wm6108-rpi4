@@ -2,6 +2,77 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
+
+```
+phy31 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+wlan1 -> phy31, MAC 9c:04:b6:ff:df:fe
+351 SPI write transactions, 0 write failures, 0 read failures
+```
+
+```sh
+insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin \
+    spi_inter_block_delay_bytes=250 spi_post_write_status_bytes=250
+```
+
+No `spi_rx_lshift`. It is not needed any more.
+
+There were **two independent defects**. The first — the chip never being put into
+SPI mode — is in the section below. The second is this one.
+
+### The inter-transaction delay is counted in clocks, not in time
+
+The driver derives it from a time:
+
+```c
+inter_block_delay_bytes = MM6108_SPI_INTER_BLOCK_DELAY_NANO_S /
+                          (SPI_CLK_PERIOD_NANO_S(max_speed_hz) * 8)
+```
+
+40000 ns is 250 bytes at 50 MHz and 50 bytes at 10 MHz. Both are 40 µs — so if
+the chip needed a fixed *time*, the two would be equivalent.
+
+**They are not.** At 10 MHz, 50 bytes fails and 250 bytes works. The chip needs a
+fixed number of SPI clocks. The driver's model only produces a working value at
+50 MHz, which is why every setup that works runs at 50 MHz and this one, at
+10 MHz, did not.
+
+Morse's OpenWrt feed patch puts a hard floor of 250 in three places. **All three
+turned out to be separately necessary here, and each was found independently
+before that patch was re-read:**
+
+| | failure it fixes | fix |
+|---|---|---|
+| block-write delay | txn #52 of 58, `fn=2 0x00000000:14`, chip answers `0xeb` (CRC ERROR) at +261 — mid-block, having given up on the previous transaction, a 344-byte non-block write | `spi_inter_block_delay_bytes=250` |
+| non-block write padding | `fn=2 0x00001000:80`, byte-mode; only 4 bytes are clocked after the CRC by default | `spi_post_write_status_bytes=250` |
+| non-block **read** delay | `cmd53_read fn=2 0x00003110:92` → `failed to parse extended host table: -5`. A 92-byte read scales to 44 bytes | no parameter existed; added `spi_min_delay_bytes`, default 250 |
+
+Fixing the first moved the failure to the second, and fixing that moved it to the
+third. Each looked like a new problem and each was the same one from a different
+side.
+
+### A correction to the record
+
+`spi_post_write_status_bytes` was tested at 4…64, and separately at 512, and
+recorded as **eliminated** both times. Neither measurement was wrong and neither
+conclusion was usable: the chip was not in SPI mode then, the very first write
+failed, and no amount of padding could have mattered. It only becomes relevant
+once the init defect is fixed and the driver reaches transaction 50.
+
+**An elimination is only valid in the state it was measured in.** Fifteen
+hypotheses were tested against a chip that was in the wrong mode throughout, and
+at least one of them was a real contributor that the state masked.
+
+### Caveat
+
+`iw phy` and `iw dev` list nothing for phy31. Not investigated — stock 6.6.51
+mac80211 has no S1G band support, while OpenMANET runs backported mac80211 and a
+patched `iw`. The interface exists and the driver drives the chip.
+
+Full detail: `logs/2026-08-23-WORKING-environment.txt`.
+
+---
+
 ## 2026-08-23: SOLVED — the chip never entered SPI mode
 
 The 2-bit skew is fixed. Root cause, in one sentence: **the MM6108 needs ~74

@@ -1,0 +1,474 @@
+=== uname ===
+Linux Sensecap 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
+=== board ===
+ether e4:5f:01:52:55:04
+Serial		: 100000004851d437
+=== module parameters used ===
+  spi_inter_block_delay_bytes=250 spi_post_write_status_bytes=250 country=SG bcf=bcf_fgh100mhaamd.bin
+=== phy binding ===
+  phy0 -> platform/soc/fe300000.mmcnr/mmc_host/mmc1/mmc1:0001/mmc1:0001:1
+  phy31 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+=== net interfaces ===
+lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
+eth0             DOWN           e4:5f:01:52:55:04 <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+wlan0            UP             e4:5f:01:52:55:05 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+wlan1            DOWN           9c:04:b6:ff:df:fe <NO-CARRIER,BROADCAST,MULTICAST,UP> 
+  wlan0 -> phy0
+  wlan1 -> phy31
+=== SPI transaction tally ===
+  w53 built:        351
+  cmd53_write fail: 0
+  cmd53_read fail:  0
+=== dmesg (morse) ===
+[ 5177.136725] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 5177.136899] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[ 5177.136932] Resetting Morse Chip
+[ 5177.236958] morse_spi spi0.0: init: mode=0x4 cs_high_default=1 train=18 flip=1
+[ 5177.236968] morse_spi spi0.0: init: training with SPI_NO_CS, mode=0x44
+[ 5177.236990] morse_spi spi0.0: init: mode restored to 0x4
+[ 5177.237332] morse_io: Device node '/dev/morse_io' created successfully
+[ 5177.238371] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[ 5177.238460] morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+[ 5177.238498] morse_spi spi0.0: w53 built: fn=1 addr=0x00004050 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.672376] morse_spi spi0.0: w53 built: fn=1 addr=0x0000406c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.672477] morse_spi spi0.0: w53 built: fn=1 addr=0x00004d40 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.672637] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.673910] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.675180] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.677998] morse_spi spi0.0: w53 built: fn=2 addr=0x00003c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.679284] morse_spi spi0.0: w53 built: fn=2 addr=0x00005000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.680936] morse_spi spi0.0: w53 built: fn=2 addr=0x00006400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.682215] morse_spi spi0.0: w53 built: fn=2 addr=0x00007800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.683487] morse_spi spi0.0: w53 built: fn=2 addr=0x00008c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.685182] morse_spi spi0.0: w53 built: fn=2 addr=0x0000a000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.686461] morse_spi spi0.0: w53 built: fn=2 addr=0x0000b400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.687732] morse_spi spi0.0: w53 built: fn=2 addr=0x0000c800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.689185] morse_spi spi0.0: w53 built: fn=2 addr=0x0000dc00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.690460] morse_spi spi0.0: w53 built: fn=2 addr=0x0000f000 count=8 block=1 data_size=512 ibd=250 buf=6135 ackwin=6120 cap=8192
+[ 5177.691492] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.693218] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.694499] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.695770] morse_spi spi0.0: w53 built: fn=2 addr=0x00003c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.697164] morse_spi spi0.0: w53 built: fn=2 addr=0x00005000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.698442] morse_spi spi0.0: w53 built: fn=2 addr=0x00006400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.699710] morse_spi spi0.0: w53 built: fn=2 addr=0x00007800 count=7 block=1 data_size=512 ibd=250 buf=5370 ackwin=5355 cap=8192
+[ 5177.701201] morse_spi spi0.0: w53 built: fn=2 addr=0x00008600 count=48 block=0 data_size=48 ibd=250 buf=316 ackwin=301 cap=8192
+[ 5177.701312] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.702579] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=5 block=1 data_size=512 ibd=250 buf=3840 ackwin=3825 cap=8192
+[ 5177.703223] morse_spi spi0.0: w53 built: fn=2 addr=0x00001e00 count=364 block=0 data_size=364 ibd=250 buf=632 ackwin=617 cap=8192
+[ 5177.703443] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.705769] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.707050] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.708368] morse_spi spi0.0: w53 built: fn=2 addr=0x00003c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.709646] morse_spi spi0.0: w53 built: fn=2 addr=0x00005000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.710918] morse_spi spi0.0: w53 built: fn=2 addr=0x00006400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.712186] morse_spi spi0.0: w53 built: fn=2 addr=0x00007800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.713461] morse_spi spi0.0: w53 built: fn=2 addr=0x00008c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.714732] morse_spi spi0.0: w53 built: fn=2 addr=0x0000a000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.716002] morse_spi spi0.0: w53 built: fn=2 addr=0x0000b400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.717276] morse_spi spi0.0: w53 built: fn=2 addr=0x0000c800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.718549] morse_spi spi0.0: w53 built: fn=2 addr=0x0000dc00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.719816] morse_spi spi0.0: w53 built: fn=2 addr=0x0000f000 count=8 block=1 data_size=512 ibd=250 buf=6135 ackwin=6120 cap=8192
+[ 5177.720852] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.722126] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.723395] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.724670] morse_spi spi0.0: w53 built: fn=2 addr=0x00003c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.725944] morse_spi spi0.0: w53 built: fn=2 addr=0x00005000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.727214] morse_spi spi0.0: w53 built: fn=2 addr=0x00006400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.728488] morse_spi spi0.0: w53 built: fn=2 addr=0x00007800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.729760] morse_spi spi0.0: w53 built: fn=2 addr=0x00008c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.731030] morse_spi spi0.0: w53 built: fn=2 addr=0x0000a000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.732300] morse_spi spi0.0: w53 built: fn=2 addr=0x0000b400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.733662] morse_spi spi0.0: w53 built: fn=2 addr=0x0000c800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.734937] morse_spi spi0.0: w53 built: fn=2 addr=0x0000dc00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.736204] morse_spi spi0.0: w53 built: fn=2 addr=0x0000f000 count=8 block=1 data_size=512 ibd=250 buf=6135 ackwin=6120 cap=8192
+[ 5177.737243] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.738516] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.739786] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.741062] morse_spi spi0.0: w53 built: fn=2 addr=0x00003c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.742335] morse_spi spi0.0: w53 built: fn=2 addr=0x00005000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.743598] morse_spi spi0.0: w53 built: fn=2 addr=0x00006400 count=1 block=1 data_size=512 ibd=250 buf=780 ackwin=765 cap=8192
+[ 5177.743747] morse_spi spi0.0: w53 built: fn=2 addr=0x00006600 count=40 block=0 data_size=40 ibd=250 buf=308 ackwin=293 cap=8192
+[ 5177.743839] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=8 block=1 data_size=512 ibd=250 buf=6135 ackwin=6120 cap=8192
+[ 5177.744859] morse_spi spi0.0: w53 built: fn=2 addr=0x00001000 count=80 block=0 data_size=80 ibd=250 buf=348 ackwin=333 cap=8192
+[ 5177.744967] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.746230] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=1 block=1 data_size=512 ibd=250 buf=780 ackwin=765 cap=8192
+[ 5177.746381] morse_spi spi0.0: w53 built: fn=2 addr=0x00001600 count=344 block=0 data_size=344 ibd=250 buf=612 ackwin=597 cap=8192
+[ 5177.746555] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.747828] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.749105] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.750380] morse_spi spi0.0: w53 built: fn=2 addr=0x00003c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.751649] morse_spi spi0.0: w53 built: fn=2 addr=0x00005000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.752925] morse_spi spi0.0: w53 built: fn=2 addr=0x00006400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.754196] morse_spi spi0.0: w53 built: fn=2 addr=0x00007800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.755467] morse_spi spi0.0: w53 built: fn=2 addr=0x00008c00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.756742] morse_spi spi0.0: w53 built: fn=2 addr=0x0000a000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.758019] morse_spi spi0.0: w53 built: fn=2 addr=0x0000b400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.759291] morse_spi spi0.0: w53 built: fn=2 addr=0x0000c800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.760563] morse_spi spi0.0: w53 built: fn=2 addr=0x0000dc00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.761830] morse_spi spi0.0: w53 built: fn=2 addr=0x0000f000 count=4 block=1 data_size=512 ibd=250 buf=3075 ackwin=3060 cap=8192
+[ 5177.762350] morse_spi spi0.0: w53 built: fn=2 addr=0x0000f800 count=68 block=0 data_size=68 ibd=250 buf=336 ackwin=321 cap=8192
+[ 5177.762458] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.763728] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.765003] morse_spi spi0.0: w53 built: fn=2 addr=0x00002800 count=8 block=1 data_size=512 ibd=250 buf=6135 ackwin=6120 cap=8192
+[ 5177.766021] morse_spi spi0.0: w53 built: fn=2 addr=0x00003800 count=256 block=0 data_size=256 ibd=250 buf=524 ackwin=509 cap=8192
+[ 5177.766164] morse_spi spi0.0: w53 built: fn=2 addr=0x00008000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.767434] morse_spi spi0.0: w53 built: fn=2 addr=0x00009400 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.768710] morse_spi spi0.0: w53 built: fn=2 addr=0x0000a800 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.769985] morse_spi spi0.0: w53 built: fn=2 addr=0x0000bc00 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.771254] morse_spi spi0.0: w53 built: fn=2 addr=0x0000d000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.772522] morse_spi spi0.0: w53 built: fn=2 addr=0x0000e400 count=5 block=1 data_size=512 ibd=250 buf=3840 ackwin=3825 cap=8192
+[ 5177.773170] morse_spi spi0.0: w53 built: fn=2 addr=0x0000ee00 count=296 block=0 data_size=296 ibd=250 buf=564 ackwin=549 cap=8192
+[ 5177.773311] morse_spi spi0.0: w53 built: fn=2 addr=0x00000000 count=10 block=1 data_size=512 ibd=250 buf=7665 ackwin=7650 cap=8192
+[ 5177.774573] morse_spi spi0.0: w53 built: fn=2 addr=0x00001400 count=216 block=0 data_size=216 ibd=250 buf=484 ackwin=469 cap=8192
+[ 5177.774698] morse_spi spi0.0: w53 built: fn=2 addr=0x0000fa80 count=124 block=0 data_size=124 ibd=250 buf=392 ackwin=377 cap=8192
+[ 5177.774786] morse_spi spi0.0: w53 built: fn=1 addr=0x00008094 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.774852] morse_spi spi0.0: w53 built: fn=1 addr=0x00008098 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.774981] morse_spi spi0.0: w53 built: fn=1 addr=0x0000807c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.780048] morse_spi spi0.0: w53 built: fn=1 addr=0x0000807c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.785122] morse_spi spi0.0: w53 built: fn=1 addr=0x0000807c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.790193] morse_spi spi0.0: w53 built: fn=1 addr=0x0000406c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.790274] morse_spi spi0.0: w53 built: fn=1 addr=0x00000000 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983269] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983343] morse_spi spi0.0: w53 built: fn=1 addr=0x0000605c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983471] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983537] morse_spi spi0.0: w53 built: fn=1 addr=0x0000605c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983664] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983729] morse_spi spi0.0: w53 built: fn=1 addr=0x0000605c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983854] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.983920] morse_spi spi0.0: w53 built: fn=1 addr=0x0000605c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.984045] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.984111] morse_spi spi0.0: w53 built: fn=1 addr=0x0000605c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.984235] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.984301] morse_spi spi0.0: w53 built: fn=1 addr=0x0000605c count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5177.992524] morse_spi spi0.0: Driver loaded with kernel module parameters
+[ 5177.992542] morse_spi spi0.0:     enable_pre_assoc_ps                     : N
+[ 5177.992549] morse_spi spi0.0:     slow_clock_mode                         : 0
+[ 5177.992553] morse_spi spi0.0:     enable_1mhz_probes                      : Y
+[ 5177.992557] morse_spi spi0.0:     enable_sched_scan                       : Y
+[ 5177.992560] morse_spi spi0.0:     enable_hw_scan                          : Y
+[ 5177.992564] morse_spi spi0.0:     enable_pv1                              : N
+[ 5177.992567] morse_spi spi0.0:     enable_page_slicing                     : N
+[ 5177.992570] morse_spi spi0.0:     log_modparams_on_boot                   : Y
+[ 5177.992573] morse_spi spi0.0:     enable_mcast_rate_control               : N
+[ 5177.992577] morse_spi spi0.0:     enable_mcast_whitelist                  : Y
+[ 5177.992580] morse_spi spi0.0:     ocs_type                                : 1
+[ 5177.992584] morse_spi spi0.0:     enable_wiphy                            : N
+[ 5177.992587] morse_spi spi0.0:     enable_auto_mpsw                        : Y
+[ 5177.992591] morse_spi spi0.0:     duty_cycle_probe_retry_threshold        : 2500
+[ 5177.992594] morse_spi spi0.0:     duty_cycle_mode                         : 0
+[ 5177.992597] morse_spi spi0.0:     enable_auto_duty_cycle                  : Y
+[ 5177.992601] morse_spi spi0.0:     dhcpc_lease_update_script               : /morse/scripts/dhcpc_update.sh
+[ 5177.992605] morse_spi spi0.0:     enable_ibss_probe_filtering             : Y
+[ 5177.992608] morse_spi spi0.0:     enable_dhcpc_offload                    : N
+[ 5177.992611] morse_spi spi0.0:     enable_arp_offload                      : N
+[ 5177.992614] morse_spi spi0.0:     enable_bcn_change_seq_monitor           : N
+[ 5177.992618] morse_spi spi0.0:     enable_cac                              : N
+[ 5177.992622] morse_spi spi0.0:     max_mc_frames                           : -1
+[ 5177.992626] morse_spi spi0.0:     tx_max_power_mbm                        : 0
+[ 5177.992629] morse_spi spi0.0:     enable_twt                              : Y
+[ 5177.992633] morse_spi spi0.0:     enable_mac80211_connection_monitor      : N
+[ 5177.992636] morse_spi spi0.0:     enable_airtime_fairness                 : 0
+[ 5177.992639] morse_spi spi0.0:     max_aggregation_count                   : 0
+[ 5177.992643] morse_spi spi0.0:     max_rate_tries                          : 1
+[ 5177.992646] morse_spi spi0.0:     max_rates                               : 4
+[ 5177.992649] morse_spi spi0.0:     watchdog_interval_secs                  : 30
+[ 5177.992652] morse_spi spi0.0:     enable_watchdog                         : Y
+[ 5177.992655] morse_spi spi0.0:     country                                 : SG
+[ 5177.992658] morse_spi spi0.0:     enable_cts_to_self                      : N
+[ 5177.992662] morse_spi spi0.0:     enable_rts_8mhz                         : N
+[ 5177.992665] morse_spi spi0.0:     enable_trav_pilot                       : Y
+[ 5177.992668] morse_spi spi0.0:     enable_sgi_rc                           : Y
+[ 5177.992671] morse_spi spi0.0:     enable_mbssid_ie                        : N
+[ 5177.992674] morse_spi spi0.0:     virtual_sta_max                         : 0
+[ 5177.992677] morse_spi spi0.0:     thin_lmac                               : N
+[ 5177.992680] morse_spi spi0.0:     enable_subbands                         : 2
+[ 5177.992684] morse_spi spi0.0:     enable_survey                           : Y
+[ 5177.992687] morse_spi spi0.0:     mcs10_mode                              : 0
+[ 5177.992691] morse_spi spi0.0:     mcs_mask                                : 1023
+[ 5177.992694] morse_spi spi0.0:     no_hwcrypt                              : N
+[ 5177.992697] morse_spi spi0.0:     enable_ext_xtal_init                    : N
+[ 5177.992700] morse_spi spi0.0:     enable_otp_check                        : Y
+[ 5177.992704] morse_spi spi0.0:     bcf                                     : bcf_fgh100mhaamd.bin
+[ 5177.992707] morse_spi spi0.0:     serial                                  : default
+[ 5177.992711] morse_spi spi0.0:     debug_mask                              : 8
+[ 5177.992714] morse_spi spi0.0:     tx_status_lifetime_ms                   : 15000
+[ 5177.992717] morse_spi spi0.0:     tx_queued_lifetime_ms                   : 1000
+[ 5177.992721] morse_spi spi0.0:     skbq_refill_margin                      : 8
+[ 5177.992724] morse_spi spi0.0:     max_txq_len                             : 32
+[ 5177.992728] morse_spi spi0.0:     default_cmd_timeout_ms                  : 600
+[ 5177.992732] morse_spi spi0.0:     reattach_hw                             : N
+[ 5177.992735] morse_spi spi0.0:     hw_reload_after_stop                    : 5
+[ 5177.992739] morse_spi spi0.0:     enable_short_bcn_as_dtim_override       : -1
+[ 5177.992742] morse_spi spi0.0:     rsn_beacon_mode                         : 0
+[ 5177.992746] morse_spi spi0.0:     enable_dynamic_ps_offload               : Y
+[ 5177.992749] morse_spi spi0.0:     enable_ps                               : 2
+[ 5177.992752] morse_spi spi0.0:     fw_bin_file                             : 
+[ 5177.992756] morse_spi spi0.0:     sdio_reset_time                         : 400
+[ 5177.992759] morse_spi spi0.0:     macaddr_suffix                          : 00:00:00
+[ 5177.992764] morse_spi spi0.0:     macaddr_octet                           : 255
+[ 5177.992767] morse_spi spi0.0:     max_total_vendor_ie_bytes               : 514
+[ 5177.992771] morse_spi spi0.0:     hw_scan_replay_limit                    : 0
+[ 5177.992774] morse_spi spi0.0:     hw_scan_prim_deconstruct                : 0
+[ 5177.992779] morse_spi spi0.0:     coredump_include                        : 1
+[ 5177.992783] morse_spi spi0.0:     coredump_method                         : 1
+[ 5177.992786] morse_spi spi0.0:     enable_coredump                         : Y
+[ 5177.992789] morse_spi spi0.0:     enable_hw_leds                          : Y
+[ 5177.992793] morse_spi spi0.0:     enable_scan_result_cache                : N
+[ 5177.992797] morse_spi spi0.0:     spi_init_no_cs                          : Y
+[ 5177.992800] morse_spi spi0.0:     spi_ack_scan                            : Y
+[ 5177.992803] morse_spi spi0.0:     spi_min_delay_bytes                     : 250
+[ 5177.992806] morse_spi spi0.0:     spi_init_cs_flip                        : Y
+[ 5177.992810] morse_spi spi0.0:     spi_init_train_bytes                    : 18
+[ 5177.992813] morse_spi spi0.0:     spi_rx_lshift                           : 0
+[ 5177.992816] morse_spi spi0.0:     spi_tx_rshift                           : 0
+[ 5177.992820] morse_spi spi0.0:     spi_pre_token_bytes                     : 4
+[ 5177.992823] morse_spi spi0.0:     spi_use_edge_irq                        : N
+[ 5177.992827] morse_spi spi0.0:     spi_post_write_status_bytes             : 250
+[ 5177.992830] morse_spi spi0.0:     spi_inter_block_delay_bytes             : 250
+[ 5177.992833] morse_spi spi0.0:     spi_clock_speed                         : 0
+[ 5177.992836] morse_spi spi0.0:     enable_mm_vendor_ie                     : Y
+[ 5177.992840] morse_spi spi0.0:     fixed_guard                             : 0
+[ 5177.992843] morse_spi spi0.0:     fixed_ss                                : 1
+[ 5177.992846] morse_spi spi0.0:     fixed_bw                                : 2
+[ 5177.992850] morse_spi spi0.0:     fixed_mcs                               : 4
+[ 5177.992853] morse_spi spi0.0:     enable_fixed_rate                       : N
+[ 5178.009743] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=52 block=0 data_size=52 ibd=250 buf=320 ackwin=305 cap=8192
+[ 5178.009871] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.010084] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.010331] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.010552] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=52 block=0 data_size=52 ibd=250 buf=320 ackwin=305 cap=8192
+[ 5178.010639] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.010947] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.012623] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.012930] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=68 block=0 data_size=68 ibd=250 buf=336 ackwin=321 cap=8192
+[ 5178.013032] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.013278] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.013527] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.013767] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=68 block=0 data_size=68 ibd=250 buf=336 ackwin=321 cap=8192
+[ 5178.013870] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.014129] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.014382] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.015298] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5178.015493] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.016436] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.016815] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.017094] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=52 block=0 data_size=52 ibd=250 buf=320 ackwin=305 cap=8192
+[ 5178.017186] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.020709] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.021020] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.021277] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=56 block=0 data_size=56 ibd=250 buf=324 ackwin=309 cap=8192
+[ 5178.021367] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.021653] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.021911] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.022205] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5178.022309] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.022581] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.022825] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.023139] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5178.023254] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.023526] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.023781] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.024016] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5178.024110] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.024365] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.024609] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.024854] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5178.024944] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.025249] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.025516] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.025826] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=60 block=0 data_size=60 ibd=250 buf=328 ackwin=313 cap=8192
+[ 5178.025951] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.026215] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.026467] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.026723] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5178.026815] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.027056] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.027321] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.081598] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5178.081736] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.081957] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.082173] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.401415] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.401730] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.417326] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.417622] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.722380] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.722660] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.728163] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.728717] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.770106] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5178.770383] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5179.872566] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5180.072433] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5180.172398] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5181.972601] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.017782] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5182.018080] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.018607] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.019159] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.272463] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.328155] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.328981] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.628026] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.628828] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.679280] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5182.679995] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5184.072599] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5184.372422] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5186.172603] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5186.472469] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.018574] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5187.019102] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.019829] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.020404] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.324430] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.325168] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.330135] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.330917] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.633560] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.634314] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.646056] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.646828] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.680294] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5187.681013] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5188.272611] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5189.072509] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5190.372640] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5191.172548] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5192.472661] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5193.272556] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.016519] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5194.016813] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.017453] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.018009] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.572663] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.627230] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.627998] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.678358] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5194.679057] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5195.372596] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5196.072599] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5196.672684] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5197.472597] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5198.172603] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5198.772669] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5199.572617] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5200.272607] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5200.872710] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5201.672612] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5202.372581] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5202.972715] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5203.772618] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.016930] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5204.017317] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.017860] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.018411] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.322805] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.323540] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.328420] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.329196] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.472612] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.632111] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.632870] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.637898] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.638670] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.678439] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5204.679148] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5205.072744] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5206.072650] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5206.572629] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5207.172760] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5207.984922] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=52 block=0 data_size=52 ibd=250 buf=320 ackwin=305 cap=8192
+[ 5207.985032] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5207.985334] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5207.985552] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5208.172507] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5209.272611] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5210.072528] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5210.272508] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5211.372634] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5212.172533] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5212.372520] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5213.472805] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5214.272700] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5214.472695] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5215.572803] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5216.372713] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5216.572690] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5217.672809] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.020239] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5218.021874] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.022414] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.022970] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.332257] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.332753] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.353772] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.354224] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.472729] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.658911] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.659631] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.664539] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.665310] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.705555] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5218.706252] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5219.772868] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5220.072728] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5220.572730] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5221.872875] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5222.172761] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5222.672744] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5223.972885] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5224.272755] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5224.772759] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5226.072931] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5226.372791] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5226.872792] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5228.172962] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5228.472715] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5228.735540] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=64 block=0 data_size=64 ibd=250 buf=332 ackwin=317 cap=8192
+[ 5228.735663] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5228.735907] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5228.736664] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5230.272810] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5230.572671] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5230.772713] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5232.372829] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5232.672714] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5232.872717] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5234.473004] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5234.772875] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5234.972872] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5236.572978] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5236.872895] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5237.072914] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5237.985055] morse_spi spi0.0: w53 built: fn=2 addr=0x000085c0 count=52 block=0 data_size=52 ibd=250 buf=320 ackwin=305 cap=8192
+[ 5237.985292] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5237.985822] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5237.986379] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.016563] morse_spi spi0.0: w53 built: fn=2 addr=0x00007f50 count=168 block=0 data_size=168 ibd=250 buf=436 ackwin=421 cap=8192
+[ 5238.017004] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c110 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.017531] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.018089] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.452584] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.453378] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.673004] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.752476] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.753272] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.803722] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5238.804424] morse_spi spi0.0: w53 built: fn=1 addr=0x0000c310 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5240.072935] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5240.773017] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5242.172956] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5242.873040] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5244.272970] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5244.973057] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5246.372972] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5247.073073] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5248.472999] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5249.173096] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5250.573017] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5251.273097] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5252.673040] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5253.373125] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192
+[ 5254.772922] morse_spi spi0.0: w53 built: fn=1 addr=0x00006058 count=4 block=0 data_size=4 ibd=250 buf=272 ackwin=257 cap=8192

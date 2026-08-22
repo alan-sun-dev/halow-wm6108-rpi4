@@ -2,6 +2,70 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
+
+```
+phy31 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+wlan1 -> phy31, MAC 9c:04:b6:ff:df:fe
+351 筆 SPI 寫入交易，0 筆寫入失敗，0 筆讀取失敗
+```
+
+```sh
+insmod morse.ko country=SG bcf=bcf_fgh100mhaamd.bin \
+    spi_inter_block_delay_bytes=250 spi_post_write_status_bytes=250
+```
+
+**沒有用 `spi_rx_lshift`** —— 不再需要了。
+
+一共有**兩個獨立的缺陷**。第一個（晶片從未被切進 SPI 模式）在下一節。第二個是這個。
+
+### 交易間的延遲是以 clock 數計算的，不是以時間
+
+驅動是從時間推算的：
+
+```c
+inter_block_delay_bytes = MM6108_SPI_INTER_BLOCK_DELAY_NANO_S /
+                          (SPI_CLK_PERIOD_NANO_S(max_speed_hz) * 8)
+```
+
+40000 ns 在 50 MHz 是 250 個位元組，在 10 MHz 是 50 個。兩者都是 40 µs —— 如果晶片要
+的是固定**時間**，兩者應該等價。
+
+**它們不等價。** 10 MHz 下 50 個位元組會失敗、250 個會成功。**晶片要的是固定的 SPI
+clock 數。** 驅動的模型只有在 50 MHz 時剛好算出可用的值 —— 這就是為什麼所有能動的組態
+都跑 50 MHz，而我們這台跑 10 MHz 就不行。
+
+Morse 的 OpenWrt feed patch 在**三個地方**都設了 250 的硬下限。**這三個在這裡各自都是
+必要的，而且每一個都是在重讀那個 patch 之前獨立發現的：**
+
+| | 它修的失敗 | 修法 |
+|---|---|---|
+| block 寫入延遲 | 第 52/58 筆 `fn=2 0x00000000:14`，晶片在 +261 回 `0xeb`（CRC ERROR）—— 在 block 中途，因為它還在處理前一筆 344 位元組的非 block 寫入 | `spi_inter_block_delay_bytes=250` |
+| 非 block 寫入的墊底 | `fn=2 0x00001000:80`，byte 模式；預設 CRC 之後只墊 4 個位元組 | `spi_post_write_status_bytes=250` |
+| 非 block **讀取**延遲 | `cmd53_read fn=2 0x00003110:92` → `failed to parse extended host table: -5`。92 位元組的讀取只算出 44 | 沒有現成參數，新增 `spi_min_delay_bytes`，預設 250 |
+
+修好第一個，失敗跳到第二個；修好第二個，跳到第三個。每一個看起來都像新問題，其實是同一
+個問題的不同側面。
+
+### 一則對紀錄的更正
+
+`spi_post_write_status_bytes` 先前測過 4…64、後來又測過 512，兩次都記成**已消除**。
+兩次量測都沒錯，但兩次結論都不可用：那時晶片不在 SPI 模式、第一筆寫入就失敗，墊多少都
+不會有差別。它要等到 init 缺陷修好、驅動能跑到第 50 筆交易，才變得相關。
+
+**一個消除只在它被量測的那個狀態下成立。** 十五個假設是對著一顆全程處於錯誤模式的晶片
+測的，而其中至少有一個是被那個狀態掩蓋掉的真實成因。
+
+### 但書
+
+`iw phy` 和 `iw dev` 都列不出 phy31。沒有深究 —— 原廠 6.6.51 的 mac80211 沒有 S1G 頻段
+支援，而 OpenMANET 跑的是 backport 的 mac80211 加上打過 patch 的 `iw`。介面存在、驅動也
+確實在驅動晶片，這是本倉庫在意的部分。
+
+完整細節：`logs/2026-08-23-WORKING-environment.txt`。
+
+---
+
 ## 2026-08-23：已解決 —— 晶片從來沒有進入 SPI 模式
 
 2-bit 偏移修好了。根本原因一句話：**MM6108 必須先收到約 74 個「CS 未選取」狀態下的
