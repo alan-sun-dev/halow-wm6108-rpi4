@@ -26,6 +26,8 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 > `SPI_CS_HIGH` 的主機都一樣 —— 那包含 mainline，以及所有帶 `950-0204` 的 rpi 核心。
 > 修正應該做在驅動裡。
 >
+> 已回報上游：[morse_driver issue #15](https://github.com/MorseMicro/morse_driver/issues/15)。
+>
 > **仍未解決：** CMD53 寫入。失敗點從「`fn=1 0x00004050:4`、晶片沉默」變成
 > 「`fn=2 0x00000000:14`、晶片有回應」—— 那是韌體下載階段，比先前深得多。這是另一個
 > 問題，現在才第一次看得見。

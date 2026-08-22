@@ -30,6 +30,8 @@ SPI from a Raspberry Pi 4.
 > `SPI_CS_HIGH` for a `cs-gpios` device has the same problem — that is mainline,
 > and every rpi kernel carrying `950-0204`. The fix belongs in the driver.
 >
+> Reported upstream as [morse_driver issue #15](https://github.com/MorseMicro/morse_driver/issues/15).
+>
 > **Still open:** CMD53 writes. The failure moved from `fn=1 0x00004050:4` with
 > the chip silent, to `fn=2 0x00000000:14` with the chip answering — the firmware
 > download, much further into init. A separate problem, now visible for the first
