@@ -2,7 +2,48 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
-## 2026-08-22 (latest): the retest ran — eight eliminations, none of them the cause
+## 2026-08-22 (latest): the A/B ran — the second chip select is the difference
+
+Booted OpenMANET on the same board and captured its live device tree and pin mux
+against the failing Raspberry Pi OS capture. Four differences, one of which had
+never been looked at.
+
+| | Raspberry Pi OS 6.6.51 (skew) | OpenMANET 6.6.138 (works) |
+|---|---|---|
+| `cs-gpios` | `<&gpio 8 1>, <&gpio 7 1>` — **two** | `<&gpio 8 1>` — **one** (property is exactly 12 bytes) |
+| GPIO7 | `fe204000.spi … function gpio_out` | `(MUX UNCLAIMED) (GPIO UNCLAIMED)` |
+| `reset-gpios` | `<&gpio 17 1>` | `<&gpio 17 0>` |
+| `spi-max-frequency` | 10 MHz | 50 MHz |
+
+Everything else matches: MISO/MOSI/SCLK `alt0`, GPIO8 `gpio_out`, and the spi0
+node's `dmas`, `clocks`, `interrupts`, `reg` and `compatible` are identical. The
+clock difference is already eliminated (RUN 4 swept 400 kHz…50 MHz).
+
+**So what is left is the second chip select.** The failing side registers two and
+has the controller holding GPIO7 as an output; the working side registers one and
+never touches GPIO7. That variable was never examined — the earlier pin mux check
+confirmed no pin was driven *twice*, which it isn't, and stopped there.
+
+It is worth testing rather than just noting, because CS count is not inert in this
+driver: one of the three rpi patches to `spi-bcm2835.c` that OpenWrt imports is
+`950-0821`, "Support spi0-0cs and SPI_NO_CS mode".
+
+This is the first hypothesis in the investigation that comes from a **measured
+difference between a working and a failing configuration** rather than from
+reasoning about what might matter.
+
+**Next:** change `overlays/mm610x-spi-sensecap.dts` to declare a single chip
+select — `cs-gpios = <&gpio 8 1>` on `&spi0`, leaving GPIO7 alone — rebuild,
+reboot, and see whether `morse rx` still shows `c0 7f`. Try
+`reset-gpios = <&gpio 17 0>` in the same pass or right after.
+
+Detail, including what could not be captured on the OpenMANET side (no `python3`,
+no `kmod-spi-dev`, so the userspace probe half of the A/B did not run), is in
+`logs/2026-08-22-openmanet-1.8.0-ab-environment.txt`.
+
+---
+
+## 2026-08-22: the retest ran — eight eliminations, none of them the cause
 
 Everything below was written before the hardware retest. The retest has now been
 run, over SSH, and it kills the padding hypothesis too. Full detail in

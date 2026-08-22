@@ -1,0 +1,92 @@
+Captured: 2026-08-22 ~23:15 UTC+8, over SSH from the laptop
+Host: BCM2711-57e7 (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
+Image: openmanet-1.8.0-rpi4-mm6108-spi-squashfs-sysupgrade.img.gz
+       sha256 461aea8cc2805f64e83e68d1f45acdedad7bef5560861926a5de79a3489d8316
+       written with Raspberry Pi Imager to an 8 GB card, boot partition then
+       verified file-by-file against the source image (366 files, 0 differences),
+       and `gpio=18=op,dh` appended to config.txt.
+Result: SUCCESS -- radio up, and the A/B capture this whole session was aiming at.
+
+THIS IS THE COMPARISON. Same board, same module, same wiring. Read against
+2026-08-22-bookworm-6.6.51-retest-dt-pinmux.txt, which is the failing side.
+
+=== uname ===
+Linux BCM2711-57e7 6.6.138 #0 SMP Mon Jun 23 20:40:36 2025 aarch64 GNU/Linux
+OpenMANET 24.10, DISTRIB_REVISION r28739-d9340319c6, bcm27xx/bcm2711
+
+=== the radio came up clean ===
+  morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+  morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, crc32 0xbe7b5c8f
+  morse_spi spi0.0: Loaded BCF from morse/bcf_default.bin, crc32 0xf72450a7
+  morse_spi spi0.0: morse_mac_init ... Driver loaded with kernel module parameters
+No `morse rx: c0 7f`, no CMD63 failure, no cmd53_write ret:-71. phy2 is bound to
+platform/soc/fe204000.spi/spi_master/spi0/spi0.0 and wlh0 is up as an AP.
+
+Note the module here is named mm6108_sdio even though it drives SPI, and the
+dot11ah half is an mm8108 2.0.0 build -- both already recorded in the earlier
+OpenMANET environment snapshot.
+
+
+================================================================
+THE FOUR DIFFERENCES
+================================================================
+
+                    Raspberry Pi OS 6.6.51        OpenMANET 6.6.138
+                    (2-bit skew, write fails)     (works)
+  ----------------------------------------------------------------
+  cs-gpios          <&gpio 8 1>, <&gpio 7 1>      <&gpio 8 1>
+                    two entries                   one entry (property is
+                                                  exactly 12 bytes)
+  GPIO7             fe204000.spi ...              (MUX UNCLAIMED)
+                    function gpio_out             (GPIO UNCLAIMED)
+  reset-gpios       <&gpio 17 1>  (flag 1)        <&gpio 17 0>  (flag 0)
+  spi-max-frequency 10 MHz                        50 MHz
+
+Everything else that was compared is the same on both sides: MISO/MOSI/SCLK are
+alt0, GPIO8 is gpio_out, and the spi0 node's dmas, clocks, interrupts, reg and
+compatible properties match.
+
+The clock difference is already eliminated -- RUN 4 of the Bookworm retest swept
+400 kHz / 1 / 20 / 50 MHz through spi_clock_speed and the skew was identical at
+every rate, 50 MHz included.
+
+So what is left is the second chip select. The failing side registers two of
+them and has the SPI controller holding GPIO7 as an output; the working side
+registers one and never touches GPIO7. That variable had not been examined --
+the earlier pinmux check (RUN 3) confirmed no pin was driven twice, which it
+isn't, and stopped there.
+
+Why it is worth testing rather than just noting: the number of chip selects is
+not inert in this driver. One of the three rpi patches to spi-bcm2835.c that
+OpenWrt imports is 950-0821, "spi-bcm2835: Support spi0-0cs and SPI_NO_CS mode",
+so CS count has explicit special handling in exactly this file.
+
+This is the first hypothesis in the whole investigation that comes from a
+measured difference between a working and a failing configuration rather than
+from reasoning about what might matter.
+
+
+================================================================
+NEXT EXPERIMENT
+================================================================
+On the Raspberry Pi OS card, change overlays/mm610x-spi-sensecap.dts to declare a
+single chip select the way OpenMANET does -- `cs-gpios = <&gpio 8 1>` on &spi0,
+leaving GPIO7 alone -- rebuild the overlay, reboot, and look at whether `morse rx`
+still shows the `c0 7f` signature. Worth trying `reset-gpios = <&gpio 17 0>` in
+the same pass or immediately after, since that is the other unexplained delta.
+
+
+================================================================
+WHAT COULD NOT BE DONE HERE
+================================================================
+The second half of the A/B -- running tools/discriminate.py against
+/dev/spidev0.0 on this image -- did not run. The image has no python3 and no
+kmod-spi-dev; /sys/bus/spi/drivers/ contains only morse_spi. `driver_override`
+does exist on spi0.0, so the bind trick would work once those packages are
+installed, and OpenMANET has no WAN by default so the ipks have to be brought
+over by hand. Left undone because the device-tree difference above is a better
+lead and the Raspberry Pi OS side has the full toolchain for testing it.
+
+Files:
+  2026-08-22-openmanet-1.8.0-ab-dt-pinmux.txt    the capture itself
+  2026-08-22-openmanet-1.8.0-ab-full-dmesg.log   full boot dmesg, 683 lines

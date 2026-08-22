@@ -2,7 +2,44 @@
 
 *[English](NOTES.md)*
 
-## 2026-08-22 最新：重測跑完了 —— 八項消除，沒有一項是成因
+## 2026-08-22 最新：A/B 做完了 —— 差異在第二個 chip select
+
+在同一塊板子上開起 OpenMANET，把它的 live device tree 與 pinmux 擷取下來，對照
+失敗那側的擷取。四個差異，其中一個從來沒被檢查過。
+
+| | Raspberry Pi OS 6.6.51（有偏移） | OpenMANET 6.6.138（正常） |
+|---|---|---|
+| `cs-gpios` | `<&gpio 8 1>, <&gpio 7 1>` —— **兩個** | `<&gpio 8 1>` —— **一個**（屬性長度正好 12 bytes） |
+| GPIO7 | `fe204000.spi … function gpio_out` | `(MUX UNCLAIMED) (GPIO UNCLAIMED)` |
+| `reset-gpios` | `<&gpio 17 1>` | `<&gpio 17 0>` |
+| `spi-max-frequency` | 10 MHz | 50 MHz |
+
+其餘全部相同：MISO/MOSI/SCLK 都是 `alt0`、GPIO8 都是 `gpio_out`，spi0 節點的
+`dmas`、`clocks`、`interrupts`、`reg`、`compatible` 也一致。時脈那項已經被消除
+（RUN 4 掃過 400 kHz…50 MHz）。
+
+**所以剩下的就是第二個 chip select。** 失敗那側註冊了兩個、而且 SPI 控制器把
+GPIO7 當輸出佔住；正常那側只註冊一個、完全不碰 GPIO7。這個變數從來沒被檢查過 ——
+先前的 pinmux 檢查確認的是「沒有腳位被**雙重**驅動」，那確實沒有，然後就停在那裡。
+
+它值得測而不只是記下來，因為 CS 的數量在這個驅動裡**不是無關緊要的**：OpenWrt
+import 的三個 rpi `spi-bcm2835.c` patch 裡，有一個就叫 `950-0821`
+"Support spi0-0cs and SPI_NO_CS mode"。
+
+這是整個調查裡**第一個來自「可運作與失敗組態之間的實測差異」**的假設，而不是從
+「什麼可能有關」推理出來的。
+
+**下一步：** 把 `overlays/mm610x-spi-sensecap.dts` 改成只宣告一個 chip select ——
+在 `&spi0` 上寫 `cs-gpios = <&gpio 8 1>`、不要碰 GPIO7 —— 重編、重開機，看
+`morse rx` 還會不會出現 `c0 7f`。同一輪或緊接著試 `reset-gpios = <&gpio 17 0>`。
+
+細節（包含 OpenMANET 那側**沒能**擷取到的部分：沒有 `python3`、沒有
+`kmod-spi-dev`，所以 A/B 的 userspace 探測那一半沒跑成）在
+`logs/2026-08-22-openmanet-1.8.0-ab-environment.txt`。
+
+---
+
+## 2026-08-22：重測跑完了 —— 八項消除，沒有一項是成因
 
 以下所有內容都寫在硬體重測之前。重測已經透過 SSH 跑完，而且它連 padding 假說一起
 殺掉了。完整細節在 `logs/2026-08-22-bookworm-6.6.51-retest-environment.txt`。

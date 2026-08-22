@@ -1,0 +1,84 @@
+=== uname ===
+6.6.138
+
+=== 確認 morse 綁在哪 ===
+phy1 -> platform/soc/fe300000.mmcnr/mmc_host/mmc1/mmc1:0001/mmc1:0001:1/ieee80211/phy1
+phy2 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0/ieee80211/phy2
+
+=== spi0 device-tree node ===
+#address-cells         00 00 00 01                                    
+#size-cells            00 00 00 00                                    
+clocks                 00 00 00 08 00 00 00 14                        
+compatible             62 72 63 6d 2c 62 63 6d 32 38 33 35 2d 73 70 69
+cs-gpios               00 00 00 07 00 00 00 08 00 00 00 01            
+dma-names              74 78 00 72 78 00                              
+dmas                   00 00 00 0c 00 00 00 06 00 00 00 0c 00 00 00 07
+interrupts             00 00 00 00 00 00 00 76 00 00 00 04            
+  [child] mm6108@0
+name                   73 70 69 00                                    
+phandle                00 00 00 46                                    
+pinctrl-0              00 00 00 f5 00 00 00 f6 00 00 00 f7 00 00 00 f8
+pinctrl-names          64 65 66 61 75 6c 74 00                        
+reg                    7e 20 40 00 00 00 02 00                        
+  [child] spidev@0
+  [child] spidev@1
+status                 6f 6b 61 79 00                                 
+
+=== pinmux 7..11 ===
+pin 7 (gpio7): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+pin 8 (gpio8): fe204000.spi pinctrl-bcm2711:520 function gpio_out group gpio8
+pin 9 (gpio9): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio9
+pin 10 (gpio10): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio10
+pin 11 (gpio11): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio11
+
+=== iw dev ===
+phy#2
+	Interface wlh0
+		ifindex 7
+		wdev 0x200000001
+		addr 3c:1a:cc:70:3f:ca
+		ssid BCM2711-57e7
+		type AP
+		channel 157 (5785 MHz), width: 40 MHz, center1: 5795 MHz
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#1
+	Interface phy1-ap0
+		ifindex 4
+		wdev 0x100000001
+		addr e6:5f:01:52:57:e9
+		ssid BCM2711-57e7
+		type AP
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 31.00 dBm
+
+=== mm6108@0 子節點 ===
+  compatible           6d 6f 72 73 65 2c 6d 6d 36 31 30 78 2d 73 70 69
+  name                 6d 6d 36 31 30 38 00                           
+  phandle              00 00 00 fc                                    
+  power-gpios          00 00 00 07 00 00 00 17 00 00 00 00 00 00 00 07
+  reg                  00 00 00 00                                    
+  reset-gpios          00 00 00 07 00 00 00 11 00 00 00 00            
+  spi-irq-gpios        00 00 00 07 00 00 00 05 00 00 00 00            
+  spi-max-frequency    02 fa f0 80                                    
+  status               6f 6b 61 79 00                                 
+
+=== cs-gpios 完整長度 ===
+12
+
+=== spidev 能不能綁（A/B 第 2 步的前提）===
+board_type
+boot_code
+countries
+driver
+driver_override
+morse_spi 
+=== python3 在嗎 ===
+  沒有 python3
+=== opkg 裡的 python/spidev ===
+  都沒裝
+
+=== 模組名稱 ===
+mm6108_sdio           421888  0 
