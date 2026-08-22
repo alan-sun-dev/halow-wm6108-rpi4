@@ -203,11 +203,7 @@ Still happy to run either the diff or the bisect if it would be useful.
 
 ---
 
-> **DRAFT — not yet posted to issue #9.** Everything above this line is verbatim
-> what was posted. Everything below is the prepared fifth comment. The hardware
-> retest it was waiting on has now been run; it is ready to post.
-
-## Update 4, 2026-08-22 — retracting the kernel-tree claim, plus four more eliminations
+## Update 4, 2026-08-22 — retracting the kernel-tree claim, plus six more eliminations
 
 ### 1. Update 3 above is wrong and I'm retracting it
 
@@ -239,7 +235,7 @@ It raises the padding clocked after the CRC of a **non-block** CMD53 write from 
 
 **But it does not fix this board.** I tested it — see below.
 
-### 3. Four eliminations from an instrumented run on 6.6.51
+### 3. Six eliminations from an instrumented run on 6.6.51
 
 Same board, same driver, `mm6108.bin` crc32 `0xbe7b5c8f`, `bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`. I patched `morse_spi_find_data_ack()` to report *where* in the ack window the chip answers rather than dumping a fixed 48 bytes, and made the init training burst adjustable.
 

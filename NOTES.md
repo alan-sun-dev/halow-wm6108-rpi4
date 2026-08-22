@@ -2,6 +2,44 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-22 (latest): the retest ran — six eliminations, none of them the cause
+
+Everything below was written before the hardware retest. The retest has now been
+run, over SSH, and it kills the padding hypothesis too. Full detail in
+`logs/2026-08-22-bookworm-6.6.51-retest-environment.txt`.
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| kernel-tree difference | source diff at the same stable tag | eliminated — byte-identical |
+| ack window too narrow | `spi_post_write_status_bytes=512` | **eliminated** — `no non-0xff byte in the 519 bytes clocked after CRC` |
+| skew caused by the init training burst | 7 runs sweeping `spi_init_train_bytes` 0/2/17/18/20 and `spi_init_cs_flip=N` | **eliminated** — `c0 3f` / `c0 7f` in all seven |
+| GPIO8 double-driven | live pinmux | **eliminated** — 7/8 `gpio_out`, 9/10/11 `alt0` |
+| clock-dependent | 400 kHz / 1 / 20 / 50 MHz | **eliminated** — identical at every rate |
+| the driver is involved at all | spidev bound via `driver_override`, no driver loaded | **eliminated** — same `R1=0x01 @bit10` |
+| host mis-samples the start of a transfer | 0…32 bytes of `0xff` before the command in one CS assertion | **eliminated** — `@bit10` every time |
+
+Two facts worth carrying forward:
+
+- **`spi_setup()` forces `SPI_CS_HIGH` back on** for a cs-gpios device, so
+  `morse_spi_initsequence()`'s training burst goes out with the chip *selected*
+  on every such host. A real driver defect — reported upstream — but not the
+  cause here.
+- **The default ack search window is 11 bytes**, not the 71 quoted below; 71 was
+  the length of a hex dump.
+
+`driver_override` is the way to get a spidev node here — dropping the overlay
+from `config.txt` would take the GPIO18 slot power hog and the GPIO17 pull-up
+with it. `tools/mmcspi.py`'s `reset_module()` was also fixed: it used libgpiod
+v2 `gpioset` syntax and failed silently on Bookworm's v1.6.3, so no reset was
+happening at all.
+
+**What is left** is a genuine disagreement between chip and host about where byte
+boundaries are, on a board where OpenMANET needs no compensation. The only
+remaining experiment is the direct A/B: boot the OpenMANET card and run the same
+spidev probe on it. That needs a physical card swap.
+
+---
+
 ## 2026-08-22 (later): the kernel-tree conclusion is refuted — the split is in the driver package
 
 Ran the tree diff the section below proposes. It comes up empty: **there is no
@@ -32,6 +70,10 @@ openwrt-24.10.
 So there is nothing to bisect, in either tree.
 
 ### Where the real difference is: an OpenWrt-only Morse driver patch
+
+*(Superseded by the retest above: the patch is real and the divergence is worth
+reporting, but widening the window to 519 bytes changes nothing on this board, so
+it does not explain this failure.)*
 
 `OpenMANET/firmware@1.8.0`'s `feeds.conf.default` pins `MorseMicro/morse-feed` at
 `fc332b0`, and that feed applies
@@ -105,6 +147,10 @@ numerically but is not confirmed — it has to be measured, not assumed.
 
 ### Next experiments, in order
 
+*(All of these have now been run — see the retest section at the top. Kept
+because the reasoning behind each one is what the results have to be read
+against.)*
+
 `patches/` was extended on 2026-08-22 to make these measurable:
 `spi_init_train_bytes` (default 18), `spi_init_cs_flip` (default Y),
 `spi->mode` logging through `morse_spi_initsequence()`, and a rewritten
@@ -177,7 +223,7 @@ Same board (SenseCAP M1 mPCIe slot with Wio-WM6108, WM1302 HAT pinout), nominall
 
 The retraction: earlier "next things to try" below (§) suggested that some 6.6.x kernel on Raspberry Pi OS should work because it's the same LTS branch as OpenMANET. Wrong. Any `+rpt-rpi-v8` kernel tested carries the bug.
 
-**Public status:** four comments now on `MorseMicro/morse_driver` issue #9 (v1 initial, v2 OpenMANET pass, v3 Bookworm 6.12.93 fail, v4 Bookworm 6.6.51 fail + tree-split reframing). No maintainer response as of this update. A fifth — the retraction above — is drafted at the end of `issue9-reply.md` and is being held until the hardware retest has been run.
+**Public status:** five comments now on `MorseMicro/morse_driver` issue #9 (v1 initial, v2 OpenMANET pass, v3 Bookworm 6.12.93 fail, v4 Bookworm 6.6.51 fail + tree-split reframing, v5 retraction of that reframing + six eliminations from the instrumented retest). No maintainer response as of this update.
 
 Full per-test evidence in `logs/`:
 - `logs/2026-08-22-openmanet-1.8.0-*.log/.txt` — the passing case

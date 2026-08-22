@@ -2,6 +2,39 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-22 最新：重測跑完了 —— 六項消除，沒有一項是成因
+
+以下所有內容都寫在硬體重測之前。重測已經透過 SSH 跑完，而且它連 padding 假說一起
+殺掉了。完整細節在 `logs/2026-08-22-bookworm-6.6.51-retest-environment.txt`。
+
+| 假設 | 測試 | 結果 |
+|---|---|---|
+| 核心樹差異 | 同 stable tag 的原始碼 diff | 消除 —— 逐位元組相同 |
+| ACK 視窗太窄 | `spi_post_write_status_bytes=512` | **消除** —— `no non-0xff byte in the 519 bytes clocked after CRC` |
+| 偏移由 init training burst 造成 | 七次掃描 `spi_init_train_bytes` 0/2/17/18/20 與 `spi_init_cs_flip=N` | **消除** —— 七次都是 `c0 3f` / `c0 7f` |
+| GPIO8 被雙重驅動 | 實機 pinmux | **消除** —— 7/8 `gpio_out`、9/10/11 `alt0` |
+| 與時脈相關 | 400 kHz / 1 / 20 / 50 MHz | **消除** —— 每個速率都一樣 |
+| 驅動本身有涉入 | 用 `driver_override` 綁 spidev，完全不載入驅動 | **消除** —— 同樣的 `R1=0x01 @bit10` |
+| 主機在傳輸開頭取樣錯誤 | 同一次 CS assertion 內在命令前墊 0…32 個 `0xff` | **消除** —— 每次都在 `@bit10` |
+
+兩個要帶著走的事實：
+
+- **`spi_setup()` 會把 `SPI_CS_HIGH` 設回去**（對 cs-gpios 裝置），所以
+  `morse_spi_initsequence()` 的 training burst 在**所有這類主機上**都是在晶片被
+  選取的狀態下送出的。這是真實的驅動缺陷 —— 已回報上游 —— 但不是這裡的成因。
+- **預設的 ACK 搜尋視窗是 11 個位元組**，不是下面寫的 71；71 是 hex dump 的長度。
+
+要取得 spidev 節點應該用 `driver_override` —— 從 `config.txt` 拿掉 overlay 會連
+GPIO18 的插槽供電 hog 和 GPIO17 的上拉一起拿掉。另外 `tools/mmcspi.py` 的
+`reset_module()` 也修好了：它原本用 libgpiod v2 的 `gpioset` 語法，在 Bookworm 的
+v1.6.3 上會靜默失敗，等於 reset 從來沒發生過。
+
+**剩下的**是晶片與主機對「位元組邊界在哪」的真實歧見，而同一片板子在 OpenMANET 上
+完全不需要補償。唯一還有價值的實驗是直接 A/B：開 OpenMANET 卡、跑同一支 spidev
+探測。那需要實體換卡。
+
+---
+
 ## 2026-08-22 後續：核心樹結論被推翻 —— 分歧在驅動的打包
 
 把下面那一節建議的 tree diff 實際做了。結果是空的：**兩條核心樹之間沒有
@@ -29,6 +62,8 @@ mainline 的 `spi-bcm2835.c` 從 v6.6.51 到 v6.6.138 也一行都沒改，而
 所以兩條樹都沒有東西可以 bisect。
 
 ### 真正的差異：一個只存在於 OpenWrt 的 Morse 驅動 patch
+
+*（已被上面的重測取代：這個 patch 確實存在、這個分歧也確實值得回報，但把視窗開到 519 個位元組在這片板子上毫無改變，所以它解釋不了這次的失敗。）*
 
 `OpenMANET/firmware@1.8.0` 的 `feeds.conf.default` 把 `MorseMicro/morse-feed` 釘在
 `fc332b0`，而那個 feed 在建置前會對驅動套用
@@ -97,6 +132,8 @@ padding 假說數字上吻合得很漂亮，卻**還沒被證實** —— 它必
 
 ### 接下來的實驗，依序
 
+*（這些現在全部跑完了 —— 見最上面的重測那一節。保留下來，是因為每一項背後的推理正是解讀結果時要對照的東西。）*
+
 `patches/` 在 2026-08-22 擴充過，就是為了讓這些可量測：新增
 `spi_init_train_bytes`（預設 18）與 `spi_init_cs_flip`（預設 Y）兩個模組參數、
 在 `morse_spi_initsequence()` 全程印出 `spi->mode`，並改寫
@@ -164,7 +201,7 @@ delay）→ `enable_ext_xtal_init=1` → `bcf=bcf_default.bin`。
 
 **收回**：下面的「接下來值得嘗試的方向」曾經建議「Raspberry Pi OS 上換一顆 6.6.x 核心應該就能動」—— 這個假設**錯了**。**任何** `+rpt-rpi-v8` 核心測過都是壞的。
 
-**對外進度**：`MorseMicro/morse_driver` issue #9 目前有四則追加 comment（v1 初次、v2 OpenMANET 反例、v3 Bookworm 6.12.93 同指紋、v4 Bookworm 6.6.51 收回 + 重新定性為核心樹差異）。維護者到本次更新為止仍未回覆。第五則（也就是上面那份收回）已擬好，放在 `issue9-reply.md` 檔尾，**等硬體重測跑完再貼**。
+**對外進度**：`MorseMicro/morse_driver` issue #9 目前有五則追加 comment（v1 初次、v2 OpenMANET 反例、v3 Bookworm 6.12.93 同指紋、v4 Bookworm 6.6.51 收回 + 重新定性為核心樹差異、v5 收回該定性 + 儀器化重測的六項消除）。維護者到本次更新為止仍未回覆。
 
 完整證據在 `logs/`：
 - `logs/2026-08-22-openmanet-1.8.0-*.log/.txt` —— 通過的案例
