@@ -164,7 +164,7 @@ delay）→ `enable_ext_xtal_init=1` → `bcf=bcf_default.bin`。
 
 **收回**：下面的「接下來值得嘗試的方向」曾經建議「Raspberry Pi OS 上換一顆 6.6.x 核心應該就能動」—— 這個假設**錯了**。**任何** `+rpt-rpi-v8` 核心測過都是壞的。
 
-**對外進度**：`MorseMicro/morse_driver` issue #9 目前有四則追加 comment（v1 初次、v2 OpenMANET 反例、v3 Bookworm 6.12.93 同指紋、v4 Bookworm 6.6.51 收回 + 重新定性為核心樹差異）。維護者到本次更新為止仍未回覆。
+**對外進度**：`MorseMicro/morse_driver` issue #9 目前有四則追加 comment（v1 初次、v2 OpenMANET 反例、v3 Bookworm 6.12.93 同指紋、v4 Bookworm 6.6.51 收回 + 重新定性為核心樹差異）。維護者到本次更新為止仍未回覆。第五則（也就是上面那份收回）已擬好，放在 `issue9-reply.md` 檔尾，**等硬體重測跑完再貼**。
 
 完整證據在 `logs/`：
 - `logs/2026-08-22-openmanet-1.8.0-*.log/.txt` —— 通過的案例

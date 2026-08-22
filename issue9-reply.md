@@ -200,3 +200,68 @@ Three things fall out of this:
 3. **The bisect strategy should target the *tree difference*, not commits within one tree.** Diffing `drivers/spi/spi-bcm2835.c` and adjacent SPI-core files between OpenWrt's linux-6.6 tree and raspberrypi/linux `rpi-6.6.y` at similar stable tags will likely isolate the fix (or the absent regression) in a small number of files. If that comes up empty, bisecting within `rpi-6.6.y` becomes the bounded next step.
 
 Still happy to run either the diff or the bisect if it would be useful.
+
+---
+
+> **DRAFT — not yet posted to issue #9.** Everything above this line is verbatim
+> what was posted. Everything below is the prepared fifth comment, held back
+> until the hardware retest described in its Status section has been run.
+
+## Update 4, 2026-08-22 — retracting the kernel-tree claim; the difference is in your own OpenWrt feed
+
+**Update 3 above is wrong and I'm retracting it.** I did the tree diff I proposed there, and it comes up empty.
+
+Method: `raspberrypi/linux` at tag `stable_20241008` (= 6.6.51, the exact kernel in the failing Bookworm image) against OpenWrt's tree, reconstructed as mainline stable plus every patch in `target/linux/bcm27xx/patches-6.6/` that touches the file.
+
+| File | OpenWrt bcm27xx 6.6 vs raspberrypi/linux rpi-6.6.y @ 6.6.51 |
+|---|---|
+| `drivers/spi/spi-bcm2835.c` | byte-identical |
+| `drivers/spi/spi.c` (SPI core) | byte-identical |
+| `drivers/dma/bcm2835-dma.c` | byte-identical |
+| `drivers/pinctrl/bcm/pinctrl-bcm2835.c` | byte-identical |
+| `arch/arm/boot/dts/broadcom/bcm270x-rpi.dtsi` | byte-identical |
+
+OpenWrt imports the rpi commits verbatim. The rpi tree's only changes to `spi-bcm2835.c` are three commits — phys-addr slave DMA config, the zero-length-transfer workaround, and `spi0-0cs`/`SPI_NO_CS` support — and OpenWrt carries all three (`950-0276` / `950-0467` / `950-0821`), plus the SPI-core one (`950-0204`, "Force CS_HIGH if GPIO descriptors are used"). Mainline's `spi-bcm2835.c` is also unchanged between v6.6.51 and v6.6.138.
+
+So there is no `spi-bcm2835` delta, and nothing to bisect. **Please disregard the "kernel tree" framing in Update 3.** The four measurements themselves still stand; only my interpretation was wrong.
+
+### What the difference actually is
+
+The OpenMANET image that works is not built from the `morse_driver` git tag. `OpenMANET/firmware@1.8.0`'s `feeds.conf.default` pins:
+
+```
+src-git morse https://github.com/MorseMicro/morse-feed.git^fc332b01aa2df952e057efe73763de3ff71cb3b0
+```
+
+and that feed applies `essentials/morse_driver/patches/mm61x/003_fix_spi_inter_transaction_delay.patch` before building. Its own header describes this thread's failure:
+
+> Add more delay between SPI transactions when not in block mode. […] Currently the driver has enough delay between blocks but not when the transaction isn't a block. Banff needs more delay than Eagle Crest, that's why this issue wasn't happening on Eagle Crest.
+
+It raises the padding clocked after the CRC of a **non-block** CMD53 write from `4` bytes to `max(250, count * inter_block_delay_bytes / MMC_SPI_BLOCKSIZE)`, and applies the same floor to non-block reads.
+
+The numbers line up exactly:
+
+- `MM6108_SPI_INTER_BLOCK_DELAY_NANO_S` = 40000 ns, and `inter_block_delay_bytes = 40000 / (clk_period_ns * 8)` → **250 bytes at 50 MHz**, 50 bytes at 10 MHz. The patch's `max(250, …)` is one full inter-block delay at full clock, applied regardless of clock.
+- Every failure in this thread is a non-block write — mine is `cmd53_write fn=1 0x00004050:4` (count 4), the OP's is `fn=2 0x00000000:10`.
+- In `mm6108-2.0.1` that line has been parameterised instead: `cp += block ? mspi->inter_block_delay_bytes : spi_post_write_status_bytes`, with **`spi_post_write_status_bytes` defaulting to 4**.
+- The widest window I ever tested was **64**. So my earlier "ruled out: `spi_post_write_status_bytes` 4…64" was never a valid elimination — I never got within 4× of the floor your own builds use.
+
+**Question for the maintainers:** is the `4` default in `mm6108-2.0.1` intentional, or did the parameterisation drop the `max(250, …)` floor that `003_fix_spi_inter_transaction_delay.patch` puts in for OpenWrt builds? If it's the latter, everyone building from the release tarball on any host gets a 4-byte ack window on non-block writes, which would explain this thread without involving the kernel at all.
+
+Related: OpenMANET also runs `enable_ext_xtal_init=1`, which appends a further `XTAL_TRANSFER_DELAY_BYTES` (4096) to every CMD53 write window. Worth noting that this parameter can't be evaluated on its own while writes are broken — `mm610x_ext_xtal_init()` is itself a sequence of `morse_reg32_write()` calls.
+
+### One thing that argues against my own hypothesis
+
+In my original post I noted that the same transaction driven by hand from userspace returns the accept token `0x05` **two bytes after the CRC**. If that is what the chip really does, a 4-byte window would already have caught it, and padding is not the wall. That observation and "all `0xff` out to 71 bytes" from inside the driver cannot both describe the same chip state — card state (idle vs initialised) is the standing suspect and I never verified it. So the fit above is numerical, not confirmed.
+
+### Correction to my Update 2
+
+The OpenMANET comparison was not the single-variable experiment I called it. Besides the driver patches above, that run loaded **`bcf_default.bin`** (1298 bytes, crc32 `0xf72450a7`), not `bcf_fgh100mhaamd.bin` (1251, `0x941b2a82`); its `dot11ah` is an mm8108 2.0.0 build; and it runs at 50 MHz rather than my 10 MHz — which by itself changes the computed `inter_block_delay_bytes` from 250 to 50.
+
+### Status
+
+I have **not** retested on hardware yet — this is a code-and-packaging finding, not a confirmed fix. Next run is `spi_post_write_status_bytes=512` with everything else held at the last failing configuration, with the ack-window failure path instrumented to report whether any non-`0xff` byte appears at all and at what offset. I'll report either way.
+
+The **2-bit RX skew** from my original post is still unexplained and is a separate issue: padding is a byte-level effect and can't cause bit-level misframing, and the same board needs no `spi_rx_lshift` at all under OpenMANET.
+
+Full write-up, diff method and per-test logs: https://github.com/alan-sun-dev/halow-wm6108-rpi4 (see [NOTES.md](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/NOTES.md)).

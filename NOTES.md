@@ -177,7 +177,7 @@ Same board (SenseCAP M1 mPCIe slot with Wio-WM6108, WM1302 HAT pinout), nominall
 
 The retraction: earlier "next things to try" below (§) suggested that some 6.6.x kernel on Raspberry Pi OS should work because it's the same LTS branch as OpenMANET. Wrong. Any `+rpt-rpi-v8` kernel tested carries the bug.
 
-**Public status:** four comments now on `MorseMicro/morse_driver` issue #9 (v1 initial, v2 OpenMANET pass, v3 Bookworm 6.12.93 fail, v4 Bookworm 6.6.51 fail + tree-split reframing). No maintainer response as of this update.
+**Public status:** four comments now on `MorseMicro/morse_driver` issue #9 (v1 initial, v2 OpenMANET pass, v3 Bookworm 6.12.93 fail, v4 Bookworm 6.6.51 fail + tree-split reframing). No maintainer response as of this update. A fifth — the retraction above — is drafted at the end of `issue9-reply.md` and is being held until the hardware retest has been run.
 
 Full per-test evidence in `logs/`:
 - `logs/2026-08-22-openmanet-1.8.0-*.log/.txt` — the passing case
