@@ -20,7 +20,7 @@ only direct comparison left.
 
 The probe is Python and needs `python3` plus the `spidev` module. A stock
 OpenWrt image is unlikely to have either, and OpenMANET comes up as a LAN
-appliance on 192.168.1.1 with no WAN, so `opkg update` will not reach the
+appliance on 10.41.254.1 with no WAN, so `opkg update` will not reach the
 internet. Fetch the packages onto the laptop first.
 
 Target is **OpenWrt 24.10, `aarch64_cortex-a72`, kernel 6.6.138**. You need
@@ -37,7 +37,7 @@ needed.
 ## After swapping in the card
 
 ```sh
-ssh root@192.168.1.1        # or 10.41.254.1, whichever this image uses
+ssh root@10.41.254.1
 
 opkg list-installed | grep -iE 'python3|spi-dev'
 ls /dev/spidev* 2>/dev/null
@@ -363,16 +363,44 @@ everything exactly as it was.
 
 ## Getting in
 
-OpenMANET comes up on **192.168.1.1** and runs its own DHCP server, so do not
-plug it into a home LAN that already has one — connect the Pi's Ethernet
-directly to a laptop instead and give the laptop a static address:
+OpenMANET comes up on **10.41.254.1 / 255.255.0.0** — a **/16**, not a /24 — and
+runs a DHCP server on it (pool starts at .100, 150 leases). Do not plug it into a
+home LAN that already has DHCP; connect the Pi's Ethernet directly to a laptop
+and give the laptop a static address:
 
-    IP 192.168.1.100   mask 255.255.255.0
+    IP 10.41.254.100   mask 255.255.0.0   router: leave empty
+
+Leaving the router field empty keeps Wi-Fi as the laptop's route to the internet.
 
 Then:
 
-- Web UI: <http://192.168.1.1>
-- SSH: `ssh root@192.168.1.1` — **root has no password** on a fresh image
+- Web UI: <http://10.41.254.1>
+- SSH: `ssh root@10.41.254.1` — **root has no password** on a fresh image
+
+**This address is not the OpenWrt default**, and earlier revisions of this file
+said 192.168.1.1, which is wrong and cost an evening. The sources of truth:
+
+- `OpenMANET/firmware`, `boards/common/general_diffconfig`:
+  `CONFIG_TARGET_PREINIT_IP="10.41.254.1"`
+- `OpenMANET/openmanetd`, `internal/network/random.go`:
+  `FactoryMeshIP = "10.41.254.1"`
+- `OpenMANET/openmanetd`, `testfixtures/setup-wizard/before/network`: `lan` is a
+  static `10.41.254.1/16` on `br-lan`, and `br-lan` has `eth0` in it, so the
+  built-in Ethernet really is LAN.
+
+**The address changes once the setup wizard has run.** `openmanetd` randomises the
+mesh IP on provisioning — that is what `FactoryMeshIP` exists to avoid colliding
+with. So a card that has been through the wizard is somewhere else in
+`10.41.0.0/16`, not on `.254.1`. To find it, set the laptop to `10.41.254.100/16`
+and sweep the segment:
+
+```sh
+ping -c 3 10.41.255.255
+arp -a | grep 10.41
+```
+
+If the laptop's interface shows a `169.254.x.x` address, it received no DHCP at
+all — that is a link or cabling problem, not an addressing one.
 
 ## Recommended: run Claude Code on that laptop and SSH in
 
@@ -385,7 +413,7 @@ cd halow-wm6108-rpi4
 claude
 ```
 
-Then `ssh root@192.168.1.1` from that laptop, run the commands below and read
+Then `ssh root@10.41.254.1` from that laptop, run the commands below and read
 the output together. This gives more context than any saved memory would - the
 memory is a compressed summary, this repository is the full detail, including
 every hypothesis that was eliminated and the measurements behind it.
@@ -396,7 +424,7 @@ every hypothesis that was eliminated and the measurements behind it.
   distributed binaries and native modules target glibc. That is the hard wall.
 - OpenWrt is not a supported platform.
 - It needs Node.js, and building native dependencies against musl tends to fail.
-- The image comes up as a network appliance on LAN `192.168.1.1`; you would have
+- The image comes up as a network appliance on LAN `10.41.254.1`; you would have
   to configure a WAN before it can reach the internet at all.
 - You would have to authenticate again.
 

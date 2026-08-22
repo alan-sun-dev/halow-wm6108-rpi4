@@ -17,7 +17,7 @@
 ## 換卡**之前**要準備的
 
 探測工具是 Python，需要 `python3` 加上 `spidev` 模組。原版 OpenWrt 映像大概率兩個
-都沒有，而 OpenMANET 開機後是 192.168.1.1 的 LAN 設備、沒有 WAN，`opkg update`
+都沒有，而 OpenMANET 開機後是 10.41.254.1 的 LAN 設備、沒有 WAN，`opkg update`
 連不到網際網路。先在筆電上把套件抓下來。
 
 目標是 **OpenWrt 24.10、`aarch64_cortex-a72`、核心 6.6.138**。需要
@@ -31,7 +31,7 @@ OpenWrt 24.10 官方 feed 是備案。
 ## 換卡之後
 
 ```sh
-ssh root@192.168.1.1        # 或 10.41.254.1，看這份映像用哪個
+ssh root@10.41.254.1
 
 opkg list-installed | grep -iE 'python3|spi-dev'
 ls /dev/spidev* 2>/dev/null
@@ -339,16 +339,43 @@ gpio=18=op,dh
 
 ## 怎麼連進去
 
-OpenMANET 開機後在 **192.168.1.1**，而且**它自己會跑 DHCP 伺服器**，所以不要
-接進已經有 DHCP 的家用網路（會和你的 Unifi 打架）。用網路線**直接接一台筆電**，
-筆電網卡設固定 IP：
+OpenMANET 開機後在 **10.41.254.1 / 255.255.0.0** —— 是 **/16 不是 /24** —— 而且
+**它自己會跑 DHCP 伺服器**（pool 從 .100 起、150 個租約），所以不要接進已經有
+DHCP 的家用網路（會和你的 Unifi 打架）。用網路線**直接接一台筆電**，筆電網卡設
+固定 IP：
 
-    IP 192.168.1.100   遮罩 255.255.255.0
+    IP 10.41.254.100   遮罩 255.255.0.0   路由器：留空
+
+路由器留空，筆電才會繼續用 Wi-Fi 當對外路由。
 
 然後：
 
-- 網頁介面：<http://192.168.1.1>
-- SSH：`ssh root@192.168.1.1` —— 全新映像的 **root 沒有密碼**，直接進得去
+- 網頁介面：<http://10.41.254.1>
+- SSH：`ssh root@10.41.254.1` —— 全新映像的 **root 沒有密碼**，直接進得去
+
+**這個位址不是 OpenWrt 的預設值。** 本檔案先前版本寫 192.168.1.1，那是錯的，
+害人白花了一個晚上。依據來源：
+
+- `OpenMANET/firmware` 的 `boards/common/general_diffconfig`：
+  `CONFIG_TARGET_PREINIT_IP="10.41.254.1"`
+- `OpenMANET/openmanetd` 的 `internal/network/random.go`：
+  `FactoryMeshIP = "10.41.254.1"`
+- `OpenMANET/openmanetd` 的 `testfixtures/setup-wizard/before/network`：`lan` 是
+  掛在 `br-lan` 上的靜態 `10.41.254.1/16`，而 `br-lan` 裡有 `eth0` ——
+  所以內建網口確實就是 LAN。
+
+**跑過 setup wizard 之後位址會變。** `openmanetd` 在佈建時會把 mesh IP 隨機化，
+`FactoryMeshIP` 這個常數存在的目的就是讓隨機位址避開它。所以一張進過 wizard 的
+卡，位址會落在 `10.41.0.0/16` 裡的別處，不再是 `.254.1`。找法是把筆電設成
+`10.41.254.100/16`，然後掃整段：
+
+```sh
+ping -c 3 10.41.255.255
+arp -a | grep 10.41
+```
+
+如果筆電網卡顯示的是 `169.254.x.x`，代表**完全沒收到 DHCP** —— 那是實體連線或
+網路卡的問題，不是位址設定的問題。
 
 ## 建議：在那台筆電上跑 Claude Code，SSH 進來
 
@@ -361,7 +388,7 @@ cd halow-wm6108-rpi4
 claude
 ```
 
-然後從筆電 `ssh root@192.168.1.1` 跑下面的指令，即時一起判讀輸出。
+然後從筆電 `ssh root@10.41.254.1` 跑下面的指令，即時一起判讀輸出。
 
 這樣拿到的脈絡比記憶檔更完整 —— 記憶是壓縮過的摘要，這個倉庫是全部細節，
 包含每個已排除的假設和實測數據。
@@ -372,7 +399,7 @@ claude
   是對 glibc 建的，這是最根本的一道牆
 - OpenWrt 不在支援平台清單裡
 - 需要 Node.js，而 musl 上 `npm install` 原生相依套件很容易失敗
-- 這份映像預設是 LAN `192.168.1.1` 的網路設備角色，要先自己設好 WAN 才能連外
+- 這份映像預設是 LAN `10.41.254.1` 的網路設備角色，要先自己設好 WAN 才能連外
 - 還要重新登入帳號
 
 就算全部克服，這台 Pi 4 還得同時跑 OpenWrt、Node.js 和你要測的 HaLow 驅動。
