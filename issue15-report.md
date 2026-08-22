@@ -111,3 +111,17 @@ Add one `dev_info` printing `spi->mode` after the flip in `morse_spi_initsequenc
 Patch, per-run logs and the full derivation: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — the fix is in `patches/` behind a `spi_init_no_cs` module parameter, and `logs/2026-08-23-nocs-init-fix-environment.txt` has the reasoning.
 
 Happy to send this as a PR if that is easier.
+
+---
+
+## Follow-up comment, 2026-08-23
+
+Confirmed working, and worth recording what it took beyond this fix.
+
+With `SPI_NO_CS` for the training burst, the chip enters SPI mode reliably and the read path works with no bit-shift compensation at all. That part is settled — a single boolean in one driver binary flips the 2-bit offset on and off.
+
+It was not sufficient on its own. There is a second, unrelated defect: `morse_spi_set_inter_block_delay()` derives the inter-transaction delay from a time rather than a clock count, so it produces 250 bytes at 50 MHz but only 50 at 10 MHz — and the chip counts clocks. Details and measurements are in MorseMicro/morse_driver#9.
+
+With both fixed: `wlan1` up on stock Raspberry Pi OS, 351 SPI transactions, zero read or write failures.
+
+The two are independent and both are needed, so anyone testing this fix at a clock below 50 MHz will still see failures — just further along, and in the write path rather than at CMD63.

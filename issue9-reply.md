@@ -397,3 +397,71 @@ What changed for me, and may be useful for narrowing it:
 So the question this issue was actually opened about is still open, and I can now reproduce it without the confounding offset. Happy to run whatever would help — a capture of the failing write, different block sizes, a logic analyser trace on SCLK/MOSI/MISO/CS, or a patch to try.
 
 Full detail, per-run logs and the patch: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — the fix is in `patches/` behind `spi_init_no_cs`, and `logs/2026-08-23-nocs-init-fix-environment.txt` has the derivation.
+
+---
+
+## Update 6, 2026-08-23 — the write failure is solved: the inter-transaction delay is counted in SPI clocks, not in time
+
+`wlan1` is up on stock Raspberry Pi OS. 351 SPI write transactions, **zero write failures, zero read failures**, no `spi_rx_lshift`.
+
+```
+phy31 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+wlan1 -> phy31
+```
+
+There were two independent defects. The first — the training burst going out with CS asserted, so the chip never enters SPI mode — is in my previous comment and now has its own issue (#15). This is the second, and it is the one that causes the `cmd53_write ... ret:-71` in the title of this thread.
+
+### The defect
+
+`morse_spi_set_inter_block_delay()` derives the delay from a time:
+
+```c
+inter_block_delay_bytes = MM6108_SPI_INTER_BLOCK_DELAY_NANO_S /
+                          (SPI_CLK_PERIOD_NANO_S(spi->max_speed_hz) * 8)
+```
+
+40000 ns works out to **250 bytes at 50 MHz** and **50 bytes at 10 MHz**. Both are 40 µs. So if the chip needed a fixed *interval*, the two would be equivalent.
+
+They are not. At 10 MHz, 50 bytes fails and 250 bytes works. **The chip is counting SPI clocks, not microseconds.** The formula only lands on a working value at 50 MHz, which is why every configuration I can find that works runs at 50 MHz — and mine, at 10 MHz, did not.
+
+### Three places need the floor, and all three are separately necessary
+
+`003_fix_spi_inter_transaction_delay.patch` in your OpenWrt feed already applies `max(250, …)` in exactly three places. I hit each of them in turn, and only recognised the pattern afterwards:
+
+| | how it failed | fix |
+|---|---|---|
+| block-write inter-block delay | transaction #52 of 58, `fn=2 0x00000000:14`. The chip answers `0xeb` — `SPI_RESPONSE_CRC_ERR` — at **+261**, i.e. part-way through the block, because it was still busy with the preceding transaction: a **344-byte non-block write** | `spi_inter_block_delay_bytes=250` |
+| non-block write padding | `fn=2 0x00001000:80`, byte mode. Default is 4 bytes clocked after the CRC | `spi_post_write_status_bytes=250` |
+| non-block **read** delay | `cmd53_read fn=2 0x00003110:92` → `morse_firmware_read_ext_host_table failed -5` → `failed to parse extended host table`. A 92-byte read scales to 92 × 250 / 512 = **44** bytes | no module parameter exists; needs the source change |
+
+Fixing the first moved the failure to the second, and fixing that moved it to the third. Each looked like a new problem and each was the same one from a different side.
+
+### Reproducing it
+
+Two of the three are reachable with existing module parameters, so this needs **no patch** to confirm:
+
+```sh
+insmod morse.ko country=SG bcf=<...> \
+    spi_inter_block_delay_bytes=250 spi_post_write_status_bytes=250
+```
+
+That alone gets to 124 transactions with zero write failures, repeatably, and then fails on the 92-byte read. With the read floor added as well, the radio comes up.
+
+### The ask
+
+The floor is already in your OpenWrt feed and is not in the released driver. Two suggestions, in order of preference:
+
+1. **Stop scaling by clock.** The measurement here says the requirement is a byte count, not an interval — `MM6108_SPI_INTER_BLOCK_DELAY_NANO_S` divided by the clock period is the wrong model, and it happens to be right only at full speed. A constant would be simpler and correct at every clock.
+2. Failing that, land the `max(250, …)` floor from the feed patch in the tag, in all three places.
+
+Either would make the driver work at clocks below 50 MHz, which is currently a silent trap: nothing warns you, and the failure looks like a hardware or signal-integrity problem.
+
+### Note on the original report
+
+`cmd53_write fn=2 0x00000000:10 ... (ret:-71)` followed by `morse_firmware_init failed: -5` is the same failure, at the same function and address. If you can, it is worth checking whether that setup was running below 50 MHz.
+
+### One caveat
+
+`iw phy` and `iw dev` list nothing for `phy31` on a stock 6.6.51 kernel. I have not looked into it — stock mac80211 has no S1G band support, while the OpenWrt images run backported mac80211 and a patched `iw`. The interface exists, the driver drives the chip, and the SPI transport is clean; the remainder is a userspace/mac80211 question rather than a driver one.
+
+Patch, per-transaction logs and the full derivation: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — see `logs/2026-08-23-WORKING-environment.txt`.
