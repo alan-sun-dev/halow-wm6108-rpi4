@@ -191,3 +191,28 @@ Still not done:
       its live DT and pin mux -- needs a physical card swap. That is now the
       single highest-value remaining experiment: it is the only direct A/B of
       the wire behaviour between the working and failing images.
+
+
+================================================================
+FOLLOW-UP — tools/mmcspi.py reset_module() fixed and re-verified
+================================================================
+  reset_module() now uses `pinctrl` for both halves of the pulse (drive low,
+  release as input with pull-up), raises instead of failing silently, and reads
+  the pin back to confirm RESET_N actually released. sh() no longer discards
+  stderr; sh(..., check=True) raises with the command, exit code and message.
+
+  Verified on hardware:
+    - reset_module() completes and GPIO17 reads 'hi'
+    - sh("pinctrl-not-installed ...", check=True) raises with a useful message
+      instead of returning silently
+    - the mode/clock sweep still runs end to end
+
+  Note the sweep output changed slightly now that the reset genuinely happens:
+
+      before (reset was a no-op):  CMD0 : ff c0 7f ff ...
+      after  (real reset):         CMD0 : 1f c0 7f ff ...   zero-runs [(0,3), (10,7)]
+
+  The chip now drives something during the first byte after a fresh reset. The
+  R1 signature is unchanged at bit 10, so none of the conclusions above move --
+  but it is direct evidence that the earlier runs were measuring a chip that had
+  never been reset by the tool.

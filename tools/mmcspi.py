@@ -10,6 +10,13 @@ Requires the morse driver to be unloaded and spidev bound to the chip select:
     sudo rmmod morse
     echo spidev | sudo tee /sys/bus/spi/devices/spi0.0/driver_override
     echo spi0.0 | sudo tee /sys/bus/spi/drivers/spidev/bind
+
+`driver_override` binds spidev to the existing spi0.0 device, so the overlay
+stays loaded and the slot power hog on GPIO18 and the pull-up on GPIO17 are
+preserved. Do not drop the overlay from config.txt to get a spidev node — that
+takes the module's power and reset with it.
+
+Run these as root: reset_module() drives GPIO17.
 """
 import spidev, subprocess, time, sys
 
@@ -26,13 +33,43 @@ def crc7_be(crc, data):
         crc = CRC7_TAB[(crc ^ b) & 0xFF]
     return crc
 
-def sh(c): subprocess.run(c, shell=True, capture_output=True)
+RESET_GPIO = 17
+
+def sh(c, check=False):
+    """Run a shell command. Returns the CompletedProcess; check=True raises."""
+    p = subprocess.run(c, shell=True, capture_output=True, text=True)
+    if check and p.returncode != 0:
+        raise RuntimeError(f"{c!r} failed ({p.returncode}): "
+                           f"{(p.stderr or p.stdout).strip()}")
+    return p
 
 def reset_module():
-    """RESET_N low 20ms, then release to pull-up (what morse_hw_reset does)."""
-    sh("gpioset -c gpiochip0 --hold-period 30ms -t0 17=0")
-    sh("pinctrl set 17 ip pu")
+    """
+    RESET_N low ~20 ms, then release it by floating the pin with a pull-up —
+    the same thing morse_hw_reset() does.
+
+    This uses `pinctrl` (raspi-utils, in the Raspberry Pi OS base image) rather
+    than libgpiod, on purpose. gpioset's command line changed incompatibly
+    between libgpiod v1 and v2, and an earlier version of this function used the
+    v2 form, which fails on Bookworm's v1.6.3 — silently, because sh() captured
+    and discarded stderr. The reset never happened and every measurement taken
+    afterwards was against a chip in an unknown state.
+
+    So: one tool that can both drive the pin and hand it back as an input with a
+    pull-up, and a hard failure if it is not there.
+    """
+    sh(f"pinctrl set {RESET_GPIO} op dl", check=True)
+    time.sleep(0.02)
+    sh(f"pinctrl set {RESET_GPIO} ip pu", check=True)
     time.sleep(0.15)
+
+    level = sh(f"pinctrl get {RESET_GPIO}").stdout
+    if "hi" not in level:
+        raise RuntimeError(
+            f"GPIO{RESET_GPIO} reads back as {level.strip()!r} after release — "
+            "expected 'hi'. RESET_N is still asserted, so the chip is held in "
+            "reset. Check that the overlay configuring this pin pull-up is "
+            "loaded, and that the slot has power.")
 
 def bits(data):
     return ''.join(f'{b:08b}' for b in data)
