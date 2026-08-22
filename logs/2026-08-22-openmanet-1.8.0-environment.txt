@@ -1,0 +1,104 @@
+Captured: 2026-08-22 06:51:54 UTC
+Host: BCM2711-57e7 (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
+Image: openmanet-1.8.0-rpi4-mm6108-spi-squashfs-sysupgrade.img.gz
+Result: SUCCESS -- firmware loaded, wlh0 up as AP on SG regulatory, 22 dBm, no CMD53 write errors.
+
+=== uname ===
+Linux BCM2711-57e7 6.6.138 #0 SMP Mon Jun 23 20:40:36 2025 aarch64 GNU/Linux
+
+=== /etc/openwrt_release ===
+DISTRIB_ID='OpenMANET'
+DISTRIB_RELEASE='24.10'
+DISTRIB_REVISION='r28739-d9340319c6'
+DISTRIB_TARGET='bcm27xx/bcm2711'
+DISTRIB_ARCH='aarch64_cortex-a72'
+DISTRIB_DESCRIPTION='OpenMANET 24.10 1.8.0'
+DISTRIB_TAINTS='no-all'
+
+=== /etc/os-release ===
+NAME="OpenMANET"
+VERSION="24.10"
+ID="openmanet"
+ID_LIKE="lede openwrt"
+PRETTY_NAME="OpenMANET 24.10"
+VERSION_ID="24.10"
+BUILD_ID="r28739-d9340319c6"
+OPENWRT_BOARD="bcm27xx/bcm2711"
+OPENWRT_ARCH="aarch64_cortex-a72"
+OPENWRT_DEVICE_MANUFACTURER="Raspberry Pi"
+OPENWRT_DEVICE_PRODUCT="BCM2711"
+OPENWRT_RELEASE="OpenMANET 24.10 1.8.0"
+OPENWRT_BUILD_DATE="1750711236"
+
+=== lsmod (morse + wireless stack) ===
+cfg80211              348160 21 mm6108_sdio,dot11ah,...,mac80211,...
+mac80211              667648 17 mm6108_sdio,...
+compat                 12288 17 ...
+
+Note: module is named `mm6108_sdio` in this build even though it drives SPI
+(sysfs path below shows platform/soc/fe204000.spi -- SPI, not SDIO). The
+single module handles both transports.
+
+=== iw dev ===
+phy#3
+	Interface wlh0
+		ifindex 9
+		wdev 0x300000001
+		addr 3c:1a:cc:70:3f:ca
+		ssid BCM2711-57e7
+		type AP
+		channel 153 (5765 MHz), width: 80 MHz, center1: 5775 MHz
+		txpower 22.00 dBm
+
+Note: channel 153 / 5775 MHz center is a Morse driver 5 GHz *shadow channel*
+for mac80211 compatibility. Real S1G frequency is ~922 MHz center, 4 MHz wide,
+inside the 920-925 MHz SG regulatory band. 22.00 dBm caps to the SG limit.
+
+phy#1 (Pi 4 built-in Broadcom Wi-Fi -- unrelated to HaLow port)
+	Interface phy1-ap0, channel 36, 5 GHz, 31 dBm
+
+=== /sys/class/ieee80211 ===
+phy1 -> ../../devices/platform/soc/fe300000.mmcnr/mmc_host/mmc1/mmc1:0001/mmc1:0001:1/ieee80211/phy1
+phy3 -> ../../devices/platform/soc/fe204000.spi/spi_master/spi0/spi0.0/ieee80211/phy3
+
+Confirms phy3 is bound to spi0.0 -- the Morse module.
+
+=== wireless UCI config (WPA keys redacted) ===
+wireless.radio0=wifi-device
+wireless.radio0.type='mac80211'
+wireless.radio0.path='platform/soc/fe300000.mmcnr/mmc_host/mmc1/mmc1:0001/mmc1:0001:1'
+wireless.radio0.band='5g'
+wireless.radio0.channel='36'
+wireless.radio0.htmode='VHT80'
+wireless.default_radio0=wifi-iface
+wireless.default_radio0.device='radio0'
+wireless.default_radio0.network='lan'
+wireless.default_radio0.mode='ap'
+wireless.default_radio0.ssid='BCM2711-57e7'
+wireless.default_radio0.encryption='psk2'
+wireless.default_radio0.key='<REDACTED>'
+wireless.radio1=wifi-device
+wireless.radio1.type='morse'
+wireless.radio1.path='platform/soc/fe204000.spi/spi_master/spi0/spi0.0'
+wireless.radio1.band='s1g'
+wireless.radio1.hwmode='11ah'
+wireless.radio1.reconf='0'
+wireless.radio1.channel='40'
+wireless.radio1.enable_mcast_whitelist='0'
+wireless.radio1.enable_mcast_rate_control='1'
+wireless.radio1.country='SG'
+wireless.radio1.enable_ps='0'
+wireless.radio1.enable_dynamic_ps_offload='0'
+wireless.radio1.enable_twt='0'
+wireless.radio1.enable_ext_xtal_init='1'
+wireless.radio1.bcf='bcf_fgh100mhaamd.bin'
+wireless.default_radio1=wifi-iface
+wireless.default_radio1.mode='ap'
+wireless.default_radio1.wds='1'
+wireless.default_radio1.device='radio1'
+wireless.default_radio1.network='lan'
+wireless.default_radio1.ssid='BCM2711-57e7'
+wireless.default_radio1.encryption='sae'
+wireless.default_radio1.key='<REDACTED>'
+
+Full boot dmesg in: 2026-08-22-openmanet-1.8.0-full-dmesg.log

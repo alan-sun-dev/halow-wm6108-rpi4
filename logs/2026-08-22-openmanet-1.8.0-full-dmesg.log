@@ -1,0 +1,807 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+[    0.000000] Linux version 6.6.138 (runner@runnervmzvulz) (aarch64-openwrt-linux-musl-gcc (OpenWrt GCC 13.3.0 r28739-d9340319c6) 13.3.0, GNU ld (GNU Binutils) 2.42) #0 SMP Mon Jun 23 20:40:36 2025
+[    0.000000] random: crng init done
+[    0.000000] Machine model: Raspberry Pi 4 Model B Rev 1.4
+[    0.000000] OF: fdt: Reserved memory: invalid reg property in 'ramoops@b000000', skipping node.
+[    0.000000] Reserved memory: created CMA memory pool at 0x000000002ac00000, size 64 MiB
+[    0.000000] OF: reserved mem: initialized node linux,cma, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x000000002ac00000..0x000000002ebfffff (65536 KiB) map reusable linux,cma
+[    0.000000] OF: reserved mem: 0x000000003ef665a0..0x000000003ef6679f (0 KiB) nomap non-reusable nvram@1
+[    0.000000] OF: reserved mem: 0x000000003ef667e0..0x000000003ef66815 (0 KiB) nomap non-reusable nvram@0
+[    0.000000] NUMA: No NUMA configuration found
+[    0.000000] Faking a node at [mem 0x0000000000000000-0x000000007dffffff]
+[    0.000000] Faking a node at [mem 0x000000007e000000-0x00000000fbffffff]
+[    0.000000] NUMA: NODE_DATA [mem 0x7dffd3c0-0x7dffffff]
+[    0.000000] NUMA: NODE_DATA [mem 0xfb80c3c0-0xfb80efff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000000000000-0x000000003fffffff]
+[    0.000000]   DMA32    [mem 0x0000000040000000-0x00000000fbffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x0000000037ffffff]
+[    0.000000]   node   0: [mem 0x0000000040000000-0x000000007dffffff]
+[    0.000000]   node   1: [mem 0x000000007e000000-0x00000000fbffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000007dffffff]
+[    0.000000] Initmem setup node 1 [mem 0x000000007e000000-0x00000000fbffffff]
+[    0.000000] On node 1, zone DMA32: 16384 pages in unavailable ranges
+[    0.000000] percpu: Embedded 18 pages/cpu s36776 r8192 d28760 u73728
+[    0.000000] pcpu-alloc: s36776 r8192 d28760 u73728 alloc=18*4096
+[    0.000000] pcpu-alloc: [0] 0 [0] 1 [0] 2 [0] 3 
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: detected: Spectre-v2
+[    0.000000] CPU features: detected: Spectre-v4
+[    0.000000] CPU features: detected: Spectre-BHB
+[    0.000000] CPU features: detected: ARM errata 1165522, 1319367, or 1530923
+[    0.000000] alternatives: applying boot alternatives
+[    0.000000] Kernel command line: coherent_pool=1M 8250.nr_uarts=1 snd_bcm2835.enable_headphones=0 cgroup_disable=memory numa_policy=interleave bcm2708_fb.fbwidth=0 bcm2708_fb.fbheight=0 bcm2708_fb.fbswap=1 numa=fake=2 system_heap.max_order=0 smsc95xx.macaddr=E4:5F:01:52:57:E7 vc_mem.mem_base=0x3ec00000 vc_mem.mem_size=0x40000000  console=ttyAMA0 console=ttyUSB0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=squashfs,ext4 rootwait
+[    0.000000] cgroup: Disabling memory control group subsystem
+[    0.000000] mempolicy: NUMA default policy overridden to 'interleave:0-1'
+[    0.000000] Fallback order for Node 0: 0 1 
+[    0.000000] Fallback order for Node 1: 1 0 
+[    0.000000] Built 2 zonelists, mobility grouping on.  Total pages: 983808
+[    0.000000] Policy zone: DMA32
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] software IO TLB: area num 4.
+[    0.000000] software IO TLB: mapped [mem 0x0000000034000000-0x0000000038000000] (64MB)
+[    0.000000] Memory: 3780412K/3997696K available (8832K kernel code, 944K rwdata, 2520K rodata, 448K init, 558K bss, 151748K reserved, 65536K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=2
+[    0.000000] rcu: Hierarchical RCU implementation.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 10 jiffies.
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GIC: Using split EOI/Deactivate mode
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] arch_timer: cp15 timer(s) running at 54.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0xc743ce346, max_idle_ns: 440795203123 ns
+[    0.000000] sched_clock: 56 bits at 54MHz, resolution 18ns, wraps every 4398046511102ns
+[    0.000098] Console: colour dummy device 80x25
+[    0.000105] printk: console [tty1] enabled
+[    0.000364] Calibrating delay loop (skipped), value calculated using timer frequency.. 108.00 BogoMIPS (lpj=540000)
+[    0.000376] pid_max: default: 32768 minimum: 301
+[    0.001943] Dentry cache hash table entries: 524288 (order: 10, 4194304 bytes, vmalloc hugepage)
+[    0.002931] Inode-cache hash table entries: 262144 (order: 9, 2097152 bytes, vmalloc)
+[    0.003019] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, vmalloc)
+[    0.003064] Mountpoint-cache hash table entries: 8192 (order: 4, 65536 bytes, vmalloc)
+[    0.004179] RCU Tasks Trace: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.004298] rcu: Hierarchical SRCU implementation.
+[    0.004305] rcu: 	Max phase no-delay instances is 1000.
+[    0.004708] smp: Bringing up secondary CPUs ...
+[    0.004944] Detected PIPT I-cache on CPU1
+[    0.005003] CPU1: Booted secondary processor 0x0000000001 [0x410fd083]
+[    0.005258] Detected PIPT I-cache on CPU2
+[    0.005291] CPU2: Booted secondary processor 0x0000000002 [0x410fd083]
+[    0.005521] Detected PIPT I-cache on CPU3
+[    0.005554] CPU3: Booted secondary processor 0x0000000003 [0x410fd083]
+[    0.005589] smp: Brought up 2 nodes, 4 CPUs
+[    0.005615] SMP: Total of 4 processors activated.
+[    0.005621] CPU features: detected: 32-bit EL0 Support
+[    0.005626] CPU features: detected: CRC32 instructions
+[    0.005668] CPU features: emulated: Privileged Access Never (PAN) using TTBR0_EL1 switching
+[    0.005677] CPU: All CPU(s) started at EL2
+[    0.005682] alternatives: applying system-wide alternatives
+[    0.011010] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    0.011043] futex hash table entries: 1024 (order: 4, 65536 bytes, vmalloc)
+[    0.012164] pinctrl core: initialized pinctrl subsystem
+[    0.012870] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.013628] DMA: preallocated 1024 KiB GFP_KERNEL pool for atomic allocations
+[    0.013736] DMA: preallocated 1024 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.013906] DMA: preallocated 1024 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.014149] thermal_sys: Registered thermal governor 'step_wise'
+[    0.014172] cpuidle: using governor ladder
+[    0.014189] cpuidle: using governor menu
+[    0.014304] ASID allocator initialised with 65536 entries
+[    0.014388] Serial: AMBA PL011 UART driver
+[    0.014546] ramoops b00000000010000.ramoops: failed to locate DT /reserved-memory resource
+[    0.014557] ramoops: probe of b00000000010000.ramoops failed with error -22
+[    0.016368] /soc/interrupt-controller@40041000: Fixed dependency cycle(s) with /soc/interrupt-controller@40041000
+[    0.016712] bcm2835-mbox fe00b880.mailbox: mailbox enabled
+[    0.030006] raspberrypi-firmware soc:firmware: Attached to firmware from 2025-04-30T13:33:39, variant start
+[    0.040007] raspberrypi-firmware soc:firmware: Firmware hash is 5560078dcc8591a00f57b9068d13e5544aeef3aa
+[    0.052308] Modules: 29408 pages in range for non-PLT usage
+[    0.052314] Modules: 520928 pages in range for PLT usage
+[    0.053009] cryptd: max_cpu_qlen set to 1000
+[    0.053469] bcm2835-dma fe007000.dma-controller: DMA legacy API manager, dmachans=0x1
+[    0.054283] SCSI subsystem initialized
+[    0.054365] usbcore: registered new interface driver usbfs
+[    0.054389] usbcore: registered new interface driver hub
+[    0.054409] usbcore: registered new device driver usb
+[    0.054530] mc: Linux media interface: v0.10
+[    0.054553] videodev: Linux video capture interface: v2.00
+[    0.054575] pps_core: LinuxPPS API ver. 1 registered
+[    0.054581] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.054593] PTP clock support registered
+[    0.055782] clocksource: Switched to clocksource arch_sys_counter
+[    0.057600] NET: Registered PF_INET protocol family
+[    0.057961] IP idents hash table entries: 65536 (order: 7, 524288 bytes, vmalloc)
+[    0.059787] tcp_listen_portaddr_hash hash table entries: 2048 (order: 3, 32768 bytes, vmalloc)
+[    0.059849] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, vmalloc)
+[    0.059873] TCP established hash table entries: 32768 (order: 6, 262144 bytes, vmalloc)
+[    0.060201] TCP bind hash table entries: 32768 (order: 8, 1048576 bytes, vmalloc)
+[    0.061017] TCP: Hash tables configured (established 32768 bind 32768)
+[    0.061334] MPTCP token hash table entries: 4096 (order: 5, 98304 bytes, vmalloc)
+[    0.061485] UDP hash table entries: 2048 (order: 4, 65536 bytes, vmalloc)
+[    0.061522] UDP-Lite hash table entries: 2048 (order: 4, 65536 bytes, vmalloc)
+[    0.061665] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.061694] PCI: CLS 0 bytes, default 64
+[    0.062610] workingset: timestamp_bits=42 max_order=20 bucket_order=0
+[    0.063029] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    0.090602] pinctrl-bcm2835 fe200000.gpio: GPIO_OUT persistence: yes
+[    0.091605] brcm-pcie fd500000.pcie: host bridge /scb/pcie@7d500000 ranges:
+[    0.091622] brcm-pcie fd500000.pcie:   No bus range found for /scb/pcie@7d500000, using [bus 00-ff]
+[    0.091643] brcm-pcie fd500000.pcie:      MEM 0x0600000000..0x067fffffff -> 0x0080000000
+[    0.091661] brcm-pcie fd500000.pcie:   IB MEM 0x0000000000..0x00ffffffff -> 0x0400000000
+[    0.092315] brcm-pcie fd500000.pcie: PCI host bridge to bus 0000:00
+[    0.092327] pci_bus 0000:00: root bus resource [bus 00-ff]
+[    0.092336] pci_bus 0000:00: root bus resource [mem 0x600000000-0x67fffffff] (bus address [0x80000000-0xffffffff])
+[    0.092363] pci 0000:00:00.0: [14e4:2711] type 01 class 0x060400
+[    0.092380] pci 0000:00:00.0: PCI bridge to [bus 00]
+[    0.092389] pci 0000:00:00.0:   bridge window [mem 0x600000000-0x63fffffff]
+[    0.092424] pci 0000:00:00.0: PME# supported from D0 D3hot
+[    0.093889] pci 0000:00:00.0: bridge configuration invalid ([bus 00-00]), reconfiguring
+[    0.093950] pci_bus 0000:01: supply vpcie3v3 not found, using dummy regulator
+[    0.094020] pci_bus 0000:01: supply vpcie3v3aux not found, using dummy regulator
+[    0.094045] pci_bus 0000:01: supply vpcie12v not found, using dummy regulator
+[    0.207368] brcm-pcie fd500000.pcie: link up, 5.0 GT/s PCIe x1 (SSC)
+[    0.207435] pci 0000:01:00.0: [1106:3483] type 00 class 0x0c0330
+[    0.207491] pci 0000:01:00.0: BAR 0 [mem 0x00000000-0x00000fff 64bit]
+[    0.207624] pci 0000:01:00.0: PME# supported from D0 D3hot
+[    0.207815] pci_bus 0000:01: busn_res: [bus 01-ff] end is updated to 01
+[    0.207837] pci 0000:00:00.0: bridge window [mem 0x600000000-0x6000fffff]: assigned
+[    0.207848] pci 0000:01:00.0: BAR 0 [mem 0x600000000-0x600000fff 64bit]: assigned
+[    0.207894] pci 0000:00:00.0: PCI bridge to [bus 01]
+[    0.207901] pci 0000:00:00.0:   bridge window [mem 0x600000000-0x6000fffff]
+[    0.207997] pcieport 0000:00:00.0: enabling device (0000 -> 0002)
+[    0.208061] pcieport 0000:00:00.0: PME: Signaling with IRQ 26
+[    0.208200] pcieport 0000:00:00.0: AER: enabled with IRQ 26
+[    0.208509] bcm2708_fb soc:fb: Unable to determine number of FBs. Disabling driver.
+[    0.208518] bcm2708_fb: probe of soc:fb failed with error -2
+[    0.211764] Serial: 8250/16550 driver, 1 ports, IRQ sharing enabled
+[    0.212357] iproc-rng200 fe104000.rng: hwrng registered
+[    0.212414] vc-mem: phys_addr:0x00000000 mem_base=0x3ec00000 mem_size:0x40000000(1024 MiB)
+[    0.212644] rpi-gpiomem fe200000.gpiomem: window base 0xfe200000 size 0x00001000
+[    0.212684] rpi-gpiomem fe200000.gpiomem: initialised 1 regions as /dev/gpiomem
+[    0.216406] brd: module loaded
+[    0.218039] loop: module loaded
+[    0.219621] bcmgenet fd580000.ethernet: GENET 5.0 EPHY: 0x0000
+[    0.535338] unimac-mdio unimac-mdio.-19: Broadcom UniMAC MDIO bus
+[    0.627030] xhci_hcd 0000:01:00.0: xHCI Host Controller
+[    0.627060] xhci_hcd 0000:01:00.0: new USB bus registered, assigned bus number 1
+[    0.627761] xhci_hcd 0000:01:00.0: hcc params 0x002841eb hci version 0x100 quirks 0x0300240000000890
+[    0.628149] xhci_hcd 0000:01:00.0: xHCI Host Controller
+[    0.628161] xhci_hcd 0000:01:00.0: new USB bus registered, assigned bus number 2
+[    0.628172] xhci_hcd 0000:01:00.0: Host supports USB 3.0 SuperSpeed
+[    0.628308] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    0.628319] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.628327] usb usb1: Product: xHCI Host Controller
+[    0.628333] usb usb1: Manufacturer: Linux 6.6.138 xhci-hcd
+[    0.628339] usb usb1: SerialNumber: 0000:01:00.0
+[    0.628523] hub 1-0:1.0: USB hub found
+[    0.628550] hub 1-0:1.0: 1 port detected
+[    0.628777] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.06
+[    0.628788] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    0.628796] usb usb2: Product: xHCI Host Controller
+[    0.628802] usb usb2: Manufacturer: Linux 6.6.138 xhci-hcd
+[    0.628808] usb usb2: SerialNumber: 0000:01:00.0
+[    0.628961] hub 2-0:1.0: USB hub found
+[    0.628981] hub 2-0:1.0: 4 ports detected
+[    0.629400] dwc_otg: version 3.00a 10-AUG-2012 (platform bus)
+[    0.629444] dwc_otg: FIQ enabled
+[    0.629447] dwc_otg: NAK holdoff enabled
+[    0.629449] dwc_otg: FIQ split-transaction FSM enabled
+[    0.629453] Module dwc_common_port init
+[    0.629649] usbcore: registered new interface driver uas
+[    0.629685] usbcore: registered new interface driver usb-storage
+[    0.629746] usbcore: registered new interface driver usbserial_generic
+[    0.629762] usbserial: USB Serial support registered for generic
+[    0.629786] usbcore: registered new interface driver cp210x
+[    0.629800] usbserial: USB Serial support registered for cp210x
+[    0.629828] usbcore: registered new interface driver ftdi_sio
+[    0.629842] usbserial: USB Serial support registered for FTDI USB Serial Device
+[    0.629883] usbcore: registered new interface driver pl2303
+[    0.629897] usbserial: USB Serial support registered for pl2303
+[    0.629942] mousedev: PS/2 mouse device common for all mice
+[    0.630271] bcm2835-wdt bcm2835-wdt: Broadcom BCM2835 watchdog timer
+[    0.633020] sdhci: Secure Digital Host Controller Interface driver
+[    0.633031] sdhci: Copyright(c) Pierre Ossman
+[    0.633269] mmc-bcm2835 fe300000.mmcnr: could not get clk, deferring probe
+[    0.633430] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.638058] NET: Registered PF_INET6 protocol family
+[    0.638654] Segment Routing with IPv6
+[    0.638679] In-situ OAM (IOAM) with IPv6
+[    0.638717] NET: Registered PF_PACKET protocol family
+[    0.638734] bridge: filtering via arp/ip/ip6tables is no longer available by default. Update your scripts to load br_netfilter if you need this.
+[    0.638820] 8021q: 802.1Q VLAN Support v1.8
+[    0.650648] Key type .fscrypt registered
+[    0.650675] Key type fscrypt-provisioning registered
+[    0.653541] uart-pl011 fe201000.serial: there is not valid maps for state default
+[    0.653713] uart-pl011 fe201000.serial: cts_event_workaround enabled
+[    0.653888] fe201000.serial: ttyAMA0 at MMIO 0xfe201000 (irq = 32, base_baud = 0) is a PL011 rev3
+[    0.653913] printk: console [ttyAMA0] enabled
+[    2.023551] fe201a00.serial: ttyAMA5 at MMIO 0xfe201a00 (irq = 32, base_baud = 0) is a PL011 rev3
+[    2.033438] fe215040.serial: ttyS0 at MMIO 0xfe215040 (irq = 33, base_baud = 62500000) is a 16550
+[    2.042713] bcm2835-power bcm2835-power: Broadcom BCM2835 power domains driver
+[    2.051027] mmc-bcm2835 fe300000.mmcnr: mmc_debug:0 mmc_debug2:0
+[    2.057049] mmc-bcm2835 fe300000.mmcnr: DMA channel allocated
+[    2.090844] of_cfs_init
+[    2.093364] of_cfs_init: OK
+[    2.097299] clk: Disabling unused clocks
+[    2.135331] mmc0: SDHCI controller on fe340000.mmc [fe340000.mmc] using ADMA
+[    2.142611] Waiting for root device /dev/mmcblk0p2...
+[    2.182008] mmc1: new high speed SDIO card at address 0001
+[    2.195325] usb 1-1: new high-speed USB device number 2 using xhci_hcd
+[    2.254811] mmc0: new ultra high speed DDR50 SDXC card at address aaaa
+[    2.261774] mmcblk0: mmc0:aaaa SR64G 59.5 GiB
+[    2.267032]  mmcblk0: p1 p2
+[    2.269942] mmcblk0: mmc0:aaaa SR64G 59.5 GiB (quirks 0x00004000)
+[    2.297813] VFS: Mounted root (squashfs filesystem) readonly on device 179:2.
+[    2.305206] Freeing unused kernel memory: 448K
+[    2.309736] Run /sbin/init as init process
+[    2.313826]   with arguments:
+[    2.313829]     /sbin/init
+[    2.313831]   with environment:
+[    2.313833]     HOME=/
+[    2.313836]     TERM=linux
+[    2.378523] usb 1-1: New USB device found, idVendor=2109, idProduct=3431, bcdDevice= 4.21
+[    2.386729] usb 1-1: New USB device strings: Mfr=0, Product=1, SerialNumber=0
+[    2.393861] usb 1-1: Product: USB2.0 Hub
+[    2.398983] hub 1-1:1.0: USB hub found
+[    2.402941] hub 1-1:1.0: 4 ports detected
+[    2.441034] init: Console is alive
+[    2.444553] init: - watchdog -
+[    3.226328] kmodloader: loading kernel modules from /etc/modules-boot.d/*
+[    3.253388] gpio_button_hotplug: loading out-of-tree module taints kernel.
+[    3.271965] kmodloader: done loading kernel modules from /etc/modules-boot.d/*
+[    3.283341] init: - preinit -
+[    3.528796] uart-pl011 fe201000.serial: no DMA platform data
+[    7.735228] loop0: detected capacity change from 0 to 8380416
+[    7.795326] loop0: detected capacity change from 8380416 to 8272384
+[    7.802717] mount_root: overlay filesystem in /dev/loop0 has not been formatted yet
+[    8.396252] F2FS-fs (loop0): Found nat_bits in checkpoint
+[    8.414450] F2FS-fs (loop0): Mounted with checkpoint version = 8f5dc87
+[    8.421329] mount_root: overlay filesystem has not been fully initialized yet
+[    8.428762] mount_root: switching to f2fs overlay
+[    8.438653] overlayfs: null uuid detected in lower fs '/', falling back to xino=off,index=off,nfs_export=off.
+[    8.461343] insmod: module is already loaded - fat
+[    8.467535] insmod: module is already loaded - vfat
+[    8.490361] urandom-seed: Seed file not found (/etc/urandom.seed)
+[    8.521864] procd: - early -
+[    8.524801] procd: - watchdog -
+[    9.076094] procd: - watchdog -
+[    9.089797] procd: - ubus -
+[    9.245875] procd: - init -
+[    9.488787] mmc1: card 0001 removed
+[    9.682959] mmc-bcm2835 fe300000.mmcnr: mmc_debug:0 mmc_debug2:0
+[    9.688991] mmc-bcm2835 fe300000.mmcnr: DMA channel allocated
+[    9.798434] mmc1: new high speed SDIO card at address 0001
+[    9.816727] kmodloader: loading kernel modules from /etc/modules.d/*
+[    9.849305] tun: Universal TUN/TAP device driver, 1.6
+[    9.856937] Loading modules backported from Linux version v6.12.61-0-gdcbeffaf66d0
+[    9.864519] Backport generated by backports.git v6.1.110-1-35-g410656ef
+[    9.878044] Morse Micro Dot11ah driver registration. Version 0-rel_mm8108_2_0_0_2026_Apr_21
+[    9.886422] channelization_scheme = 3 (IEEE802.11-REVmf)
+[    9.925108] ppdev: user-space parallel port driver
+[    9.932578] i2c_dev: i2c /dev entries driver
+[    9.947286] hid: raw HID events driver (C) Jiri Kosina
+[    9.953091] vc_sm_cma: module is from the staging directory, the quality is unknown, you have been warned.
+[    9.963201] bcm2835_vc_sm_cma_probe: Videocore shared memory driver
+[    9.969481] [vc_sm_connected_init]: start
+[    9.973708] [vc_sm_connected_init]: installed successfully
+[    9.981782] bcm2835_mmal_vchiq: module is from the staging directory, the quality is unknown, you have been warned.
+[    9.993342] bcm2835_isp: module is from the staging directory, the quality is unknown, you have been warned.
+[   10.005348] bcm2835-isp bcm2835-isp: Device node output[0] registered as /dev/video13
+[   10.014209] bcm2835-isp bcm2835-isp: Device node capture[0] registered as /dev/video14
+[   10.022269] bcm2835-isp bcm2835-isp: Device node capture[1] registered as /dev/video15
+[   10.030264] bcm2835-isp bcm2835-isp: Device node stats[2] registered as /dev/video16
+[   10.038023] bcm2835-isp bcm2835-isp: Register output node 0 with media controller
+[   10.045508] bcm2835-isp bcm2835-isp: Register capture node 1 with media controller
+[   10.053072] bcm2835-isp bcm2835-isp: Register capture node 2 with media controller
+[   10.060640] bcm2835-isp bcm2835-isp: Register capture node 3 with media controller
+[   10.069911] bcm2835-isp bcm2835-isp: Device node output[0] registered as /dev/video20
+[   10.077887] bcm2835-isp bcm2835-isp: Device node capture[0] registered as /dev/video21
+[   10.085937] bcm2835-isp bcm2835-isp: Device node capture[1] registered as /dev/video22
+[   10.093923] bcm2835-isp bcm2835-isp: Device node stats[2] registered as /dev/video23
+[   10.101673] bcm2835-isp bcm2835-isp: Register output node 0 with media controller
+[   10.109159] bcm2835-isp bcm2835-isp: Register capture node 1 with media controller
+[   10.116729] bcm2835-isp bcm2835-isp: Register capture node 2 with media controller
+[   10.124296] bcm2835-isp bcm2835-isp: Register capture node 3 with media controller
+[   10.131904] bcm2835-isp bcm2835-isp: Loaded V4L2 bcm2835-isp
+[   10.141304] bcm2835_codec: module is from the staging directory, the quality is unknown, you have been warned.
+[   10.153296] bcm2835-codec bcm2835-codec: Device registered as /dev/video10
+[   10.160198] bcm2835-codec bcm2835-codec: Loaded V4L2 decode
+[   10.167077] bcm2835-codec bcm2835-codec: Device registered as /dev/video11
+[   10.173953] bcm2835-codec bcm2835-codec: Loaded V4L2 encode
+[   10.181356] bcm2835-codec bcm2835-codec: Device registered as /dev/video12
+[   10.188251] bcm2835-codec bcm2835-codec: Loaded V4L2 isp
+[   10.194734] bcm2835-codec bcm2835-codec: Device registered as /dev/video18
+[   10.201622] bcm2835-codec bcm2835-codec: Loaded V4L2 image_fx
+[   10.208744] bcm2835-codec bcm2835-codec: Device registered as /dev/video31
+[   10.215626] bcm2835-codec bcm2835-codec: Loaded V4L2 encode_image
+[   10.222372] snd_bcm2835: module is from the staging directory, the quality is unknown, you have been warned.
+[   10.233560] bcm2835_audio bcm2835_audio: card created with 8 channels
+[   10.241555] GACT probability on
+[   10.245332] Mirror/redirect action on
+[   10.252220] u32 classifier
+[   10.254938]     input device check on
+[   10.258624]     Actions configured
+[   10.277522] usbcore: registered new interface driver ark3116
+[   10.283224] usbserial: USB Serial support registered for ark3116
+[   10.293940] usbcore: registered new interface driver belkin_sa
+[   10.299821] usbserial: USB Serial support registered for Belkin / Peracom / GoHubs USB Serial Adapter
+[   10.310134] usbcore: registered new interface driver cdc_acm
+[   10.315808] cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
+[   10.324325] usbcore: registered new interface driver cdc_wdm
+[   10.330334] usbcore: registered new interface driver ch341
+[   10.335848] usbserial: USB Serial support registered for ch341-uart
+[   10.342478] usbcore: registered new interface driver chaoskey
+[   10.349164] usbcore: registered new interface driver cypress_m8
+[   10.355106] usbserial: USB Serial support registered for DeLorme Earthmate USB
+[   10.362350] usbserial: USB Serial support registered for HID->COM RS232 Adapter
+[   10.369673] usbserial: USB Serial support registered for Nokia CA-42 V2 Adapter
+[   10.377371] usbcore: registered new interface driver dmx_usb
+[   10.383028] /home/runner/work/firmware/firmware/build_dir/target-aarch64_cortex-a72_musl/linux-bcm27xx_bcm2711/dmx_usb_module-19.12.1/dmx_usb.c: DMX USB Driver V19.12.1
+[   10.399105] usbcore: registered new interface driver garmin_gps
+[   10.405054] usbserial: USB Serial support registered for Garmin GPS usb/tty
+[   10.413798] usbcore: registered new interface driver io_edgeport
+[   10.419850] usbserial: USB Serial support registered for Edgeport 2 port adapter
+[   10.427267] usbserial: USB Serial support registered for Edgeport 4 port adapter
+[   10.434672] usbserial: USB Serial support registered for Edgeport 8 port adapter
+[   10.442082] usbserial: USB Serial support registered for EPiC device
+[   10.452829] Intel(R) Wireless WiFi driver for Linux
+[   10.458486] usbcore: registered new interface driver keyspan
+[   10.464175] usbserial: USB Serial support registered for Keyspan - (without firmware)
+[   10.472027] usbserial: USB Serial support registered for Keyspan 1 port adapter
+[   10.479351] usbserial: USB Serial support registered for Keyspan 2 port adapter
+[   10.486674] usbserial: USB Serial support registered for Keyspan 4 port adapter
+[   10.494865] usbcore: registered new interface driver lan78xx
+[   10.532129] usbcore: registered new interface driver mct_u232
+[   10.537931] usbserial: USB Serial support registered for MCT U232
+[   10.551111] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[   10.558980] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[   10.567627] Resetting Morse Chip
+[   10.590852] Done
+[   11.315450] uaccess char driver major number is 242
+[   11.320413] morse_io: Device node '/dev/morse_io' created successfully
+[   11.385080] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[   11.415275] morse_spi spi0.0: Loaded BCF from morse/bcf_default.bin, size 1298, crc32 0xf72450a7
+[   11.677346] morse_spi spi0.0: morse_mac_init: WARNING enable_ps modparam must only be used for testing - use iw set power_save
+[   11.705916] morse_spi spi0.0: Driver loaded with kernel module parameters
+[   11.712731] morse_spi spi0.0:     enable_pre_assoc_ps                     : N
+[   11.719889] morse_spi spi0.0:     slow_clock_mode                         : 0
+[   11.727033] morse_spi spi0.0:     enable_1mhz_probes                      : Y
+[   11.734169] morse_spi spi0.0:     enable_sched_scan                       : Y
+[   11.741309] morse_spi spi0.0:     enable_hw_scan                          : Y
+[   11.748443] morse_spi spi0.0:     enable_pv1                              : N
+[   11.755576] morse_spi spi0.0:     enable_page_slicing                     : N
+[   11.762705] morse_spi spi0.0:     log_modparams_on_boot                   : Y
+[   11.769837] morse_spi spi0.0:     enable_mcast_rate_control               : N
+[   11.776971] morse_spi spi0.0:     enable_mcast_whitelist                  : Y
+[   11.784100] morse_spi spi0.0:     ocs_type                                : 1
+[   11.791232] morse_spi spi0.0:     enable_wiphy                            : N
+[   11.798364] morse_spi spi0.0:     enable_auto_mpsw                        : Y
+[   11.805497] morse_spi spi0.0:     duty_cycle_probe_retry_threshold        : 2500
+[   11.812887] morse_spi spi0.0:     duty_cycle_mode                         : 0
+[   11.820022] morse_spi spi0.0:     enable_auto_duty_cycle                  : Y
+[   11.827159] morse_spi spi0.0:     dhcpc_lease_update_script               : /morse/scripts/dhcpc_update.sh
+[   11.836811] morse_spi spi0.0:     enable_ibss_probe_filtering             : Y
+[   11.843939] morse_spi spi0.0:     enable_dhcpc_offload                    : N
+[   11.851072] morse_spi spi0.0:     enable_arp_offload                      : N
+[   11.858204] morse_spi spi0.0:     enable_bcn_change_seq_monitor           : N
+[   11.865336] morse_spi spi0.0:     enable_cac                              : N
+[   11.872464] morse_spi spi0.0:     max_mc_frames                           : -1
+[   11.879684] morse_spi spi0.0:     tx_max_power_mbm                        : 0
+[   11.886818] morse_spi spi0.0:     enable_twt                              : Y
+[   11.893946] morse_spi spi0.0:     enable_mac80211_connection_monitor      : N
+[   11.901078] morse_spi spi0.0:     enable_airtime_fairness                 : 0
+[   11.908210] morse_spi spi0.0:     max_aggregation_count                   : 0
+[   11.915342] morse_spi spi0.0:     max_rate_tries                          : 1
+[   11.922470] morse_spi spi0.0:     max_rates                               : 4
+[   11.929602] morse_spi spi0.0:     watchdog_interval_secs                  : 30
+[   11.936822] morse_spi spi0.0:     enable_watchdog                         : Y
+[   11.943950] morse_spi spi0.0:     country                                 : US
+[   11.951172] morse_spi spi0.0:     enable_cts_to_self                      : N
+[   11.958304] morse_spi spi0.0:     enable_rts_8mhz                         : N
+[   11.965436] morse_spi spi0.0:     enable_trav_pilot                       : Y
+[   11.972564] morse_spi spi0.0:     enable_sgi_rc                           : Y
+[   11.979696] morse_spi spi0.0:     enable_mbssid_ie                        : N
+[   11.986828] morse_spi spi0.0:     virtual_sta_max                         : 0
+[   11.993956] morse_spi spi0.0:     thin_lmac                               : N
+[   12.001090] morse_spi spi0.0:     enable_subbands                         : 2
+[   12.008223] morse_spi spi0.0:     enable_survey                           : Y
+[   12.015355] morse_spi spi0.0:     mcs10_mode                              : 0
+[   12.022484] morse_spi spi0.0:     mcs_mask                                : 1023
+[   12.029877] morse_spi spi0.0:     no_hwcrypt                              : N
+[   12.037009] morse_spi spi0.0:     enable_ext_xtal_init                    : Y
+[   12.044137] morse_spi spi0.0:     enable_otp_check                        : Y
+[   12.051270] morse_spi spi0.0:     bcf                                     : 
+[   12.058315] morse_spi spi0.0:     serial                                  : default
+[   12.065971] morse_spi spi0.0:     debug_mask                              : 8
+[   12.073099] morse_spi spi0.0:     tx_status_lifetime_ms                   : 15000
+[   12.080579] morse_spi spi0.0:     tx_queued_lifetime_ms                   : 1000
+[   12.087977] morse_spi spi0.0:     skbq_refill_margin                      : 8
+[   12.095106] morse_spi spi0.0:     max_txq_len                             : 32
+[   12.102326] morse_spi spi0.0:     default_cmd_timeout_ms                  : 600
+[   12.109634] morse_spi spi0.0:     enable_4v3_fem                          : N
+[   12.116767] morse_spi spi0.0:     reattach_hw                             : N
+[   12.123895] morse_spi spi0.0:     hw_reload_after_stop                    : 5
+[   12.131027] morse_spi spi0.0:     enable_short_bcn_as_dtim_override       : -1
+[   12.138247] morse_spi spi0.0:     rsn_beacon_mode                         : 0
+[   12.145379] morse_spi spi0.0:     enable_dynamic_ps_offload               : Y
+[   12.152508] morse_spi spi0.0:     enable_ps                               : 0
+[   12.159640] morse_spi spi0.0:     fw_bin_file                             : 
+[   12.166686] morse_spi spi0.0:     sdio_reset_time                         : 400
+[   12.173989] morse_spi spi0.0:     macaddr_suffix                          : 00:00:00
+[   12.181729] morse_spi spi0.0:     macaddr_octet                           : 255
+[   12.189038] morse_spi spi0.0:     max_total_vendor_ie_bytes               : 514
+[   12.196346] morse_spi spi0.0:     hw_scan_replay_limit                    : 0
+[   12.203474] morse_spi spi0.0:     hw_scan_prim_deconstruct                : 0
+[   12.210607] morse_spi spi0.0:     coredump_include                        : 1
+[   12.217740] morse_spi spi0.0:     coredump_method                         : 1
+[   12.224869] morse_spi spi0.0:     enable_coredump                         : Y
+[   12.232001] morse_spi spi0.0:     enable_hw_leds                          : Y
+[   12.239133] morse_spi spi0.0:     enable_scan_result_cache                : N
+[   12.246266] morse_spi spi0.0:     sdio_clk_debugfs                        : 
+[   12.253307] morse_spi spi0.0:     spi_use_edge_irq                        : N
+[   12.260439] morse_spi spi0.0:     spi_post_write_status_bytes             : 4
+[   12.267571] morse_spi spi0.0:     spi_inter_block_delay_bytes             : 0
+[   12.274700] morse_spi spi0.0:     spi_clock_speed                         : 0
+[   12.281832] morse_spi spi0.0:     enable_mm_vendor_ie                     : Y
+[   12.288964] morse_spi spi0.0:     fixed_guard                             : 0
+[   12.296096] morse_spi spi0.0:     fixed_ss                                : 1
+[   12.303225] morse_spi spi0.0:     fixed_bw                                : 2
+[   12.310359] morse_spi spi0.0:     fixed_mcs                               : 4
+[   12.317491] morse_spi spi0.0:     enable_fixed_rate                       : N
+[   12.326803] usbcore: registered new interface driver mos7720
+[   12.332534] usbserial: USB Serial support registered for Moschip 2 port adapter
+[   12.340524] usbcore: registered new interface driver mos7840
+[   12.346235] usbserial: USB Serial support registered for Moschip 7840/7820 USB Serial Driver
+[   12.370574] usbcore: registered new interface driver oti6858
+[   12.376312] usbserial: USB Serial support registered for oti6858
+[   12.384587] NET: Registered PF_QIPCRTR protocol family
+[   12.391696] usbcore: registered new device driver r8152-cfgselector
+[   12.398051] usbcore: registered new interface driver r8152
+[   12.407384] usbcore: registered new interface driver rtl8150
+[   12.417068] usbcore: registered new interface driver sierra
+[   12.422676] usbserial: USB Serial support registered for Sierra USB modem
+[   12.431657] usbcore: registered new interface driver ti_usb_3410_5052
+[   12.438199] usbserial: USB Serial support registered for TI USB 3410 1 port adapter
+[   12.445939] usbserial: USB Serial support registered for TI USB 5052 2 port adapter
+[   12.454225] usbcore: registered new interface driver usb_serial_simple
+[   12.460802] usbserial: USB Serial support registered for carelink
+[   12.466964] usbserial: USB Serial support registered for flashloader
+[   12.473329] usbserial: USB Serial support registered for funsoft
+[   12.479356] usbserial: USB Serial support registered for google
+[   12.485284] usbserial: USB Serial support registered for hp4x
+[   12.491049] usbserial: USB Serial support registered for kaufmann
+[   12.497165] usbserial: USB Serial support registered for libtransistor
+[   12.503703] usbserial: USB Serial support registered for moto_modem
+[   12.509988] usbserial: USB Serial support registered for motorola_tetra
+[   12.516616] usbserial: USB Serial support registered for nokia
+[   12.522457] usbserial: USB Serial support registered for novatel_gps
+[   12.528824] usbserial: USB Serial support registered for owon
+[   12.534582] usbserial: USB Serial support registered for siemens_mpi
+[   12.540953] usbserial: USB Serial support registered for suunto
+[   12.546885] usbserial: USB Serial support registered for vivopay
+[   12.552900] usbserial: USB Serial support registered for zio
+[   12.560434] usbcore: registered new interface driver usbhid
+[   12.566026] usbhid: USB HID core driver
+[   12.571384] usbcore: registered new device driver usbip-host
+[   12.581916] usbcore: registered new interface driver uvcvideo
+[   12.589113] vhci_hcd vhci_hcd.0: USB/IP Virtual Host Controller
+[   12.595113] vhci_hcd vhci_hcd.0: new USB bus registered, assigned bus number 3
+[   12.602354] vhci_hcd: created sysfs vhci_hcd.0
+[   12.606877] usb usb3: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[   12.615139] usb usb3: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[   12.622364] usb usb3: Product: USB/IP Virtual Host Controller
+[   12.628114] usb usb3: Manufacturer: Linux 6.6.138 vhci_hcd
+[   12.633593] usb usb3: SerialNumber: vhci_hcd.0
+[   12.638223] hub 3-0:1.0: USB hub found
+[   12.642008] hub 3-0:1.0: 8 ports detected
+[   12.646493] vhci_hcd vhci_hcd.0: USB/IP Virtual Host Controller
+[   12.652524] vhci_hcd vhci_hcd.0: new USB bus registered, assigned bus number 4
+[   12.659944] usb usb4: We don't know the algorithms for LPM for this host, disabling LPM.
+[   12.668137] usb usb4: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.06
+[   12.676418] usb usb4: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[   12.683640] usb usb4: Product: USB/IP Virtual Host Controller
+[   12.689389] usb usb4: Manufacturer: Linux 6.6.138 vhci_hcd
+[   12.694871] usb usb4: SerialNumber: vhci_hcd.0
+[   12.699660] hub 4-0:1.0: USB hub found
+[   12.703458] hub 4-0:1.0: 8 ports detected
+[   12.709387] usbcore: registered new interface driver asix
+[   12.733255] usbcore: registered new interface driver ath9k_htc
+[   12.739902] usbcore: registered new interface driver ax88179_178a
+[   12.749111] batman_adv: B.A.T.M.A.N. advanced 2025.4-openwrt-2 (compatibility version 15) loaded
+[   12.767639] brcmfmac: brcmf_fw_alloc_request: using brcm/brcmfmac43455-sdio for chip BCM4345/6
+[   12.776944] usbcore: registered new interface driver brcmfmac
+[   12.784696] usbcore: registered new interface driver cdc_ether
+[   12.792848] usbcore: registered new interface driver cdc_ncm
+[   12.799127] brcmfmac mmc1:0001:1: Direct firmware load for brcm/brcmfmac43455-sdio.raspberrypi,4-model-b.bin failed with error -2
+[   12.810835] brcmfmac mmc1:0001:1: Falling back to sysfs fallback for: brcm/brcmfmac43455-sdio.raspberrypi,4-model-b.bin
+[   12.824452] usbcore: registered new interface driver ipw
+[   12.829913] usbserial: USB Serial support registered for IPWireless converter
+[   12.868805] usbcore: registered new interface driver option
+[   12.874462] usbserial: USB Serial support registered for GSM modem (1-port)
+[   12.883085] PPP generic driver version 2.4.2
+[   12.888322] NET: Registered PF_PPPOX protocol family
+[   12.894126] usbcore: registered new interface driver qcserial
+[   12.900000] usbserial: USB Serial support registered for Qualcomm USB modem
+[   12.908287] usbcore: registered new interface driver rndis_host
+[   12.918479] usbcore: registered new interface driver rt2800usb
+[   12.925217] usbcore: registered new interface driver sierra_net
+[   12.934620] usbcore: registered new interface driver snd-usb-audio
+[   12.945951] usbcore: registered new interface driver cdc_mbim
+[   12.954816] kmodloader: done loading kernel modules from /etc/modules.d/*
+[   13.323680] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[   13.331638] brcmfmac: brcmf_c_preinit_dcmds: Firmware: BCM4345/6 wl0: Jul 29 2022 02:15:20 version 7.45.250 (70e9766 CY) FWID 01-e53e306b
+[   18.696344] The key "default_wifi_key" doesn't exist in bootloader config.
+[   18.703252] persistent_vars_storage.sh OPERATION(READ|READALL|WRITE|ERASE) KEY [VALUE]
+[   18.712934] tr: write error: Broken pipe
+[   18.723970] The key "mm_region" doesn't exist in bootloader config.
+[   18.730287] persistent_vars_storage.sh OPERATION(READ|READALL|WRITE|ERASE) KEY [VALUE]
+[   22.091555] bcmgenet fd580000.ethernet: configuring instance for external RGMII (RX delay)
+[   22.102021] bcmgenet fd580000.ethernet eth0: Link is Down
+[   22.107736] br-lan: port 1(eth0) entered blocking state
+[   22.112973] br-lan: port 1(eth0) entered disabled state
+[   22.118264] bcmgenet fd580000.ethernet eth0: entered allmulticast mode
+[   22.124921] bcmgenet fd580000.ethernet eth0: entered promiscuous mode
+[   22.456943] morse_spi spi0.0: Morse SPI device removed
+[   22.462105] Resetting Morse Chip
+[   22.485352] Done
+[   22.748032] kmodloader: loading kernel modules from /etc/modules.d/50-dot11ah*
+[   22.758495] Morse Micro Dot11ah driver registration. Version 0-rel_mm8108_2_0_0_2026_Apr_21
+[   22.766885] channelization_scheme = 3 (IEEE802.11-REVmf)
+[   22.773121] kmodloader: done loading kernel modules from /etc/modules.d/50-dot11ah*
+[   22.794368] kmodloader: loading kernel modules from /etc/modules.d/mm6108*
+[   22.808481] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[   22.816350] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[   22.820256] brcmfmac mmc1:0001:1 phy1-ap0: renamed from wlan0
+[   22.825007] Resetting Morse Chip
+[   22.853955] Done
+[   23.053440] br-lan: port 2(phy1-ap0) entered blocking state
+[   23.059044] br-lan: port 2(phy1-ap0) entered disabled state
+[   23.064639] brcmfmac mmc1:0001:1 phy1-ap0: entered allmulticast mode
+[   23.071106] brcmfmac mmc1:0001:1 phy1-ap0: entered promiscuous mode
+[   23.445736] br-lan: port 2(phy1-ap0) entered blocking state
+[   23.451328] br-lan: port 2(phy1-ap0) entered forwarding state
+[   23.575462] uaccess char driver major number is 242
+[   23.580447] morse_io: Device node '/dev/morse_io' created successfully
+[   23.587608] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[   23.618668] morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+[   23.914258] morse_spi spi0.0: morse_mac_init: WARNING enable_ps modparam must only be used for testing - use iw set power_save
+[   23.945912] morse_spi spi0.0: Driver loaded with kernel module parameters
+[   23.952722] morse_spi spi0.0:     enable_pre_assoc_ps                     : N
+[   23.959895] morse_spi spi0.0:     slow_clock_mode                         : 0
+[   23.967093] morse_spi spi0.0:     enable_1mhz_probes                      : Y
+[   23.974235] morse_spi spi0.0:     enable_sched_scan                       : Y
+[   23.981385] morse_spi spi0.0:     enable_hw_scan                          : Y
+[   23.988534] morse_spi spi0.0:     enable_pv1                              : N
+[   23.995683] morse_spi spi0.0:     enable_page_slicing                     : N
+[   24.002819] morse_spi spi0.0:     log_modparams_on_boot                   : Y
+[   24.009977] morse_spi spi0.0:     enable_mcast_rate_control               : Y
+[   24.017130] morse_spi spi0.0:     enable_mcast_whitelist                  : N
+[   24.024266] morse_spi spi0.0:     ocs_type                                : 1
+[   24.031414] morse_spi spi0.0:     enable_wiphy                            : N
+[   24.038567] morse_spi spi0.0:     enable_auto_mpsw                        : Y
+[   24.045714] morse_spi spi0.0:     duty_cycle_probe_retry_threshold        : 2500
+[   24.053109] morse_spi spi0.0:     duty_cycle_mode                         : 0
+[   24.060247] morse_spi spi0.0:     enable_auto_duty_cycle                  : Y
+[   24.067388] morse_spi spi0.0:     dhcpc_lease_update_script               : /morse/scripts/dhcpc_update.sh
+[   24.077043] morse_spi spi0.0:     enable_ibss_probe_filtering             : Y
+[   24.084171] morse_spi spi0.0:     enable_dhcpc_offload                    : N
+[   24.091305] morse_spi spi0.0:     enable_arp_offload                      : N
+[   24.098443] morse_spi spi0.0:     enable_bcn_change_seq_monitor           : N
+[   24.105576] morse_spi spi0.0:     enable_cac                              : N
+[   24.112705] morse_spi spi0.0:     max_mc_frames                           : -1
+[   24.119926] morse_spi spi0.0:     tx_max_power_mbm                        : 0
+[   24.127060] morse_spi spi0.0:     enable_twt                              : N
+[   24.134188] morse_spi spi0.0:     enable_mac80211_connection_monitor      : N
+[   24.141322] morse_spi spi0.0:     enable_airtime_fairness                 : 0
+[   24.148456] morse_spi spi0.0:     max_aggregation_count                   : 0
+[   24.155590] morse_spi spi0.0:     max_rate_tries                          : 1
+[   24.162719] morse_spi spi0.0:     max_rates                               : 4
+[   24.169858] morse_spi spi0.0:     watchdog_interval_secs                  : 30
+[   24.177081] morse_spi spi0.0:     enable_watchdog                         : Y
+[   24.184210] morse_spi spi0.0:     country                                 : US
+[   24.191450] morse_spi spi0.0:     enable_cts_to_self                      : N
+[   24.198598] morse_spi spi0.0:     enable_rts_8mhz                         : N
+[   24.205743] morse_spi spi0.0:     enable_trav_pilot                       : Y
+[   24.212875] morse_spi spi0.0:     enable_sgi_rc                           : Y
+[   24.220020] morse_spi spi0.0:     enable_mbssid_ie                        : N
+[   24.227170] morse_spi spi0.0:     virtual_sta_max                         : 0
+[   24.234306] morse_spi spi0.0:     thin_lmac                               : N
+[   24.241454] morse_spi spi0.0:     enable_subbands                         : 2
+[   24.248609] morse_spi spi0.0:     enable_survey                           : Y
+[   24.255757] morse_spi spi0.0:     mcs10_mode                              : 0
+[   24.262888] morse_spi spi0.0:     mcs_mask                                : 1023
+[   24.270292] morse_spi spi0.0:     no_hwcrypt                              : N
+[   24.277432] morse_spi spi0.0:     enable_ext_xtal_init                    : Y
+[   24.284564] morse_spi spi0.0:     enable_otp_check                        : Y
+[   24.291706] morse_spi spi0.0:     bcf                                     : bcf_fgh100mhaamd.bin
+[   24.300507] morse_spi spi0.0:     serial                                  : default
+[   24.308200] morse_spi spi0.0:     debug_mask                              : 8
+[   24.315350] morse_spi spi0.0:     tx_status_lifetime_ms                   : 15000
+[   24.322832] morse_spi spi0.0:     tx_queued_lifetime_ms                   : 1000
+[   24.330237] morse_spi spi0.0:     skbq_refill_margin                      : 8
+[   24.337383] morse_spi spi0.0:     max_txq_len                             : 32
+[   24.344604] morse_spi spi0.0:     default_cmd_timeout_ms                  : 600
+[   24.351928] morse_spi spi0.0:     enable_4v3_fem                          : N
+[   24.359082] morse_spi spi0.0:     reattach_hw                             : N
+[   24.366238] morse_spi spi0.0:     hw_reload_after_stop                    : 5
+[   24.373375] morse_spi spi0.0:     enable_short_bcn_as_dtim_override       : -1
+[   24.380607] morse_spi spi0.0:     rsn_beacon_mode                         : 0
+[   24.387756] morse_spi spi0.0:     enable_dynamic_ps_offload               : N
+[   24.394891] morse_spi spi0.0:     enable_ps                               : 0
+[   24.402037] morse_spi spi0.0:     fw_bin_file                             : 
+[   24.409100] morse_spi spi0.0:     sdio_reset_time                         : 400
+[   24.416425] morse_spi spi0.0:     macaddr_suffix                          : 52:57:e7
+[   24.424171] morse_spi spi0.0:     macaddr_octet                           : 255
+[   24.431498] morse_spi spi0.0:     max_total_vendor_ie_bytes               : 514
+[   24.438822] morse_spi spi0.0:     hw_scan_replay_limit                    : 0
+[   24.445968] morse_spi spi0.0:     hw_scan_prim_deconstruct                : 0
+[   24.453103] morse_spi spi0.0:     coredump_include                        : 1
+[   24.460248] morse_spi spi0.0:     coredump_method                         : 1
+[   24.467399] morse_spi spi0.0:     enable_coredump                         : Y
+[   24.474534] morse_spi spi0.0:     enable_hw_leds                          : Y
+[   24.481677] morse_spi spi0.0:     enable_scan_result_cache                : N
+[   24.488824] morse_spi spi0.0:     sdio_clk_debugfs                        : 
+[   24.495883] morse_spi spi0.0:     spi_use_edge_irq                        : N
+[   24.503018] morse_spi spi0.0:     spi_post_write_status_bytes             : 4
+[   24.510163] morse_spi spi0.0:     spi_inter_block_delay_bytes             : 0
+[   24.517311] morse_spi spi0.0:     spi_clock_speed                         : 0
+[   24.524446] morse_spi spi0.0:     enable_mm_vendor_ie                     : Y
+[   24.531586] morse_spi spi0.0:     fixed_guard                             : 0
+[   24.538724] morse_spi spi0.0:     fixed_ss                                : 1
+[   24.545863] morse_spi spi0.0:     fixed_bw                                : 2
+[   24.552995] morse_spi spi0.0:     fixed_mcs                               : 4
+[   24.560136] morse_spi spi0.0:     enable_fixed_rate                       : N
+[   24.568051] kmodloader: done loading kernel modules from /etc/modules.d/mm6108*
+[   30.225116] br-lan: port 3(wlh0) entered blocking state
+[   30.230382] br-lan: port 3(wlh0) entered disabled state
+[   30.235698] morse_spi spi0.0 wlh0: entered allmulticast mode
+[   30.241534] morse_spi spi0.0 wlh0: entered promiscuous mode
+[   30.454015] br-lan: port 3(wlh0) entered blocking state
+[   30.459283] br-lan: port 3(wlh0) entered forwarding state
+[   51.286260]     _                           ____       _       _   
+[   51.286260]    / \   ___ ___ ___  ___ ___  |  _ \ ___ (_)_ __ | |_ 
+[   51.286260]   / _ \ / __/ __/ _ \/ __/ __| | |_) / _ \| | '_ \| __|
+[   51.286260]  / ___ \ (_| (_|  __/\__ \__ \ |  __/ (_) | | | | | |_ 
+[   51.286260] /_/   \_\___\___\___||___/___/ |_|   \___/|_|_| |_|\__|
+[   51.286260]                                                        
+[   51.286260] SSID: BCM2711-57e7
+[   51.286260] Encryption: sae
+[   51.286260] Country: US
+[   51.286260] Channel: 42
+[   51.286260] Bandwidth: 2
+[   51.286260] 
+[   51.286260] br-lan: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1460 qdisc noqueue state UP group default qlen 1000
+[   51.286260]     link/ether e4:5f:01:52:57:e7 brd ff:ff:ff:ff:ff:ff
+[   51.286260]     inet 10.41.254.1/16 brd 10.41.255.255 scope global br-lan
+[   51.286260] 
+[  130.245548] bcmgenet fd580000.ethernet eth0: Link is Up - 1Gbps/Full - flow control off
+[  130.293588] br-lan: port 1(eth0) entered blocking state
+[  130.324867] br-lan: port 1(eth0) entered forwarding state
+[  132.405380] bcmgenet fd580000.ethernet eth0: Link is Down
+[  132.437752] br-lan: port 1(eth0) entered disabled state
+[  135.525537] bcmgenet fd580000.ethernet eth0: Link is Up - 1Gbps/Full - flow control rx/tx
+[  135.550065] br-lan: port 1(eth0) entered blocking state
+[  135.565713] br-lan: port 1(eth0) entered forwarding state
+[  490.347437] morse_spi spi0.0 wlh0: left allmulticast mode
+[  490.348163] morse_spi spi0.0 wlh0: left promiscuous mode
+[  490.348887] br-lan: port 3(wlh0) entered disabled state
+[  491.796887] morse_spi spi0.0: Morse SPI device removed
+[  491.797565] Resetting Morse Chip
+[  491.817978] Done
+[  491.989812] kmodloader: loading kernel modules from /etc/modules.d/50-dot11ah*
+[  491.991415] kmodloader: done loading kernel modules from /etc/modules.d/50-dot11ah*
+[  492.004875] kmodloader: loading kernel modules from /etc/modules.d/mm6108*
+[  492.012508] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[  492.013647] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[  492.014765] Resetting Morse Chip
+[  492.035177] Done
+[  492.756269] uaccess char driver major number is 242
+[  492.757020] morse_io: Device node '/dev/morse_io' created successfully
+[  492.758613] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[  492.759822] morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+[  493.075532] morse_spi spi0.0: morse_mac_init: WARNING enable_ps modparam must only be used for testing - use iw set power_save
+[  493.105926] morse_spi spi0.0: Driver loaded with kernel module parameters
+[  493.106804] morse_spi spi0.0:     enable_pre_assoc_ps                     : N
+[  493.107704] morse_spi spi0.0:     slow_clock_mode                         : 0
+[  493.108602] morse_spi spi0.0:     enable_1mhz_probes                      : Y
+[  493.109500] morse_spi spi0.0:     enable_sched_scan                       : Y
+[  493.110397] morse_spi spi0.0:     enable_hw_scan                          : Y
+[  493.111294] morse_spi spi0.0:     enable_pv1                              : N
+[  493.112190] morse_spi spi0.0:     enable_page_slicing                     : N
+[  493.113087] morse_spi spi0.0:     log_modparams_on_boot                   : Y
+[  493.113984] morse_spi spi0.0:     enable_mcast_rate_control               : Y
+[  493.114880] morse_spi spi0.0:     enable_mcast_whitelist                  : N
+[  493.115789] morse_spi spi0.0:     ocs_type                                : 1
+[  493.116686] morse_spi spi0.0:     enable_wiphy                            : N
+[  493.117583] morse_spi spi0.0:     enable_auto_mpsw                        : Y
+[  493.118479] morse_spi spi0.0:     duty_cycle_probe_retry_threshold        : 2500
+[  493.119409] morse_spi spi0.0:     duty_cycle_mode                         : 0
+[  493.120306] morse_spi spi0.0:     enable_auto_duty_cycle                  : Y
+[  493.121203] morse_spi spi0.0:     dhcpc_lease_update_script               : /morse/scripts/dhcpc_update.sh
+[  493.122415] morse_spi spi0.0:     enable_ibss_probe_filtering             : Y
+[  493.123312] morse_spi spi0.0:     enable_dhcpc_offload                    : N
+[  493.124208] morse_spi spi0.0:     enable_arp_offload                      : N
+[  493.125105] morse_spi spi0.0:     enable_bcn_change_seq_monitor           : N
+[  493.126013] morse_spi spi0.0:     enable_cac                              : N
+[  493.126912] morse_spi spi0.0:     max_mc_frames                           : -1
+[  493.127821] morse_spi spi0.0:     tx_max_power_mbm                        : 0
+[  493.128718] morse_spi spi0.0:     enable_twt                              : N
+[  493.129615] morse_spi spi0.0:     enable_mac80211_connection_monitor      : N
+[  493.130512] morse_spi spi0.0:     enable_airtime_fairness                 : 0
+[  493.131409] morse_spi spi0.0:     max_aggregation_count                   : 0
+[  493.132306] morse_spi spi0.0:     max_rate_tries                          : 1
+[  493.133203] morse_spi spi0.0:     max_rates                               : 4
+[  493.134100] morse_spi spi0.0:     watchdog_interval_secs                  : 30
+[  493.135009] morse_spi spi0.0:     enable_watchdog                         : Y
+[  493.135915] morse_spi spi0.0:     country                                 : SG
+[  493.136827] morse_spi spi0.0:     enable_cts_to_self                      : N
+[  493.137724] morse_spi spi0.0:     enable_rts_8mhz                         : N
+[  493.138620] morse_spi spi0.0:     enable_trav_pilot                       : Y
+[  493.139517] morse_spi spi0.0:     enable_sgi_rc                           : Y
+[  493.140414] morse_spi spi0.0:     enable_mbssid_ie                        : N
+[  493.141311] morse_spi spi0.0:     virtual_sta_max                         : 0
+[  493.142209] morse_spi spi0.0:     thin_lmac                               : N
+[  493.143107] morse_spi spi0.0:     enable_subbands                         : 2
+[  493.144005] morse_spi spi0.0:     enable_survey                           : Y
+[  493.144902] morse_spi spi0.0:     mcs10_mode                              : 0
+[  493.145820] morse_spi spi0.0:     mcs_mask                                : 1023
+[  493.146756] morse_spi spi0.0:     no_hwcrypt                              : N
+[  493.147654] morse_spi spi0.0:     enable_ext_xtal_init                    : Y
+[  493.148551] morse_spi spi0.0:     enable_otp_check                        : Y
+[  493.149448] morse_spi spi0.0:     bcf                                     : bcf_fgh100mhaamd.bin
+[  493.150552] morse_spi spi0.0:     serial                                  : default
+[  493.151515] morse_spi spi0.0:     debug_mask                              : 8
+[  493.152412] morse_spi spi0.0:     tx_status_lifetime_ms                   : 15000
+[  493.153353] morse_spi spi0.0:     tx_queued_lifetime_ms                   : 1000
+[  493.154284] morse_spi spi0.0:     skbq_refill_margin                      : 8
+[  493.155182] morse_spi spi0.0:     max_txq_len                             : 32
+[  493.156137] morse_spi spi0.0:     default_cmd_timeout_ms                  : 600
+[  493.157064] morse_spi spi0.0:     enable_4v3_fem                          : N
+[  493.157961] morse_spi spi0.0:     reattach_hw                             : N
+[  493.158858] morse_spi spi0.0:     hw_reload_after_stop                    : 5
+[  493.159755] morse_spi spi0.0:     enable_short_bcn_as_dtim_override       : -1
+[  493.160663] morse_spi spi0.0:     rsn_beacon_mode                         : 0
+[  493.161560] morse_spi spi0.0:     enable_dynamic_ps_offload               : N
+[  493.162457] morse_spi spi0.0:     enable_ps                               : 0
+[  493.163354] morse_spi spi0.0:     fw_bin_file                             : 
+[  493.164240] morse_spi spi0.0:     sdio_reset_time                         : 400
+[  493.165159] morse_spi spi0.0:     macaddr_suffix                          : 52:57:e7
+[  493.166154] morse_spi spi0.0:     macaddr_octet                           : 255
+[  493.167078] morse_spi spi0.0:     max_total_vendor_ie_bytes               : 514
+[  493.167997] morse_spi spi0.0:     hw_scan_replay_limit                    : 0
+[  493.168894] morse_spi spi0.0:     hw_scan_prim_deconstruct                : 0
+[  493.169791] morse_spi spi0.0:     coredump_include                        : 1
+[  493.170689] morse_spi spi0.0:     coredump_method                         : 1
+[  493.171586] morse_spi spi0.0:     enable_coredump                         : Y
+[  493.172483] morse_spi spi0.0:     enable_hw_leds                          : Y
+[  493.173380] morse_spi spi0.0:     enable_scan_result_cache                : N
+[  493.174277] morse_spi spi0.0:     sdio_clk_debugfs                        : 
+[  493.175164] morse_spi spi0.0:     spi_use_edge_irq                        : N
+[  493.176083] morse_spi spi0.0:     spi_post_write_status_bytes             : 4
+[  493.176985] morse_spi spi0.0:     spi_inter_block_delay_bytes             : 0
+[  493.177883] morse_spi spi0.0:     spi_clock_speed                         : 0
+[  493.178780] morse_spi spi0.0:     enable_mm_vendor_ie                     : Y
+[  493.179677] morse_spi spi0.0:     fixed_guard                             : 0
+[  493.180574] morse_spi spi0.0:     fixed_ss                                : 1
+[  493.181471] morse_spi spi0.0:     fixed_bw                                : 2
+[  493.182368] morse_spi spi0.0:     fixed_mcs                               : 4
+[  493.183264] morse_spi spi0.0:     enable_fixed_rate                       : N
+[  493.185077] kmodloader: done loading kernel modules from /etc/modules.d/mm6108*
+[  498.522966] br-lan: port 3(wlh0) entered blocking state
+[  498.648030] br-lan: port 3(wlh0) entered disabled state
+[  498.773092] morse_spi spi0.0 wlh0: entered allmulticast mode
+[  498.908690] morse_spi spi0.0 wlh0: entered promiscuous mode
+[  499.042170] br-lan: port 3(wlh0) entered blocking state
+[  499.167213] br-lan: port 3(wlh0) entered forwarding state
+[  499.296726] br-lan: port 3(wlh0) entered disabled state
+[  499.694059] br-lan: port 3(wlh0) entered blocking state
+[  499.819108] br-lan: port 3(wlh0) entered forwarding state
+[ 1247.285377] bcmgenet fd580000.ethernet eth0: Link is Down
+[ 1247.414625] br-lan: port 1(eth0) entered disabled state
+[ 2464.245557] bcmgenet fd580000.ethernet eth0: Link is Up - 1Gbps/Full - flow control rx/tx
+[ 2464.294702] br-lan: port 1(eth0) entered blocking state
+[ 2464.325992] br-lan: port 1(eth0) entered forwarding state
