@@ -2,9 +2,122 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-22 (later): the kernel-tree conclusion is refuted — the split is in the driver package
+
+Ran the tree diff the section below proposes. It comes up empty: **there is no
+`spi-bcm2835` difference between the two kernel trees.**
+
+Method: `raspberrypi/linux` at tag `stable_20241008` (= 6.6.51, the exact kernel
+in the failing Bookworm image) against OpenWrt's tree, reconstructed as mainline
+stable plus every patch in `target/linux/bcm27xx/patches-6.6/` that touches the
+file in question.
+
+| File | OpenWrt bcm27xx 6.6 vs raspberrypi/linux rpi-6.6.y @ 6.6.51 |
+|---|---|
+| `drivers/spi/spi-bcm2835.c` | byte-identical |
+| `drivers/spi/spi.c` (SPI core) | byte-identical |
+| `drivers/dma/bcm2835-dma.c` | byte-identical |
+| `drivers/pinctrl/bcm/pinctrl-bcm2835.c` | byte-identical |
+| `arch/arm/boot/dts/broadcom/bcm270x-rpi.dtsi` | byte-identical |
+
+OpenWrt imports the rpi commits verbatim. The rpi tree's only changes to
+`spi-bcm2835.c` are three commits — phys-addr slave DMA config, the
+zero-length-transfer workaround, and `spi0-0cs`/`SPI_NO_CS` support — and OpenWrt
+carries all three (950-0276 / 950-0467 / 950-0821), plus the SPI-core one
+(950-0204, "Force CS_HIGH if GPIO descriptors are used"). Mainline's
+`spi-bcm2835.c` is also unchanged between v6.6.51 and v6.6.138, and
+`OpenMANET/firmware` at tag 1.8.0 carries the same three patches as upstream
+openwrt-24.10.
+
+So there is nothing to bisect, in either tree.
+
+### Where the real difference is: an OpenWrt-only Morse driver patch
+
+`OpenMANET/firmware@1.8.0`'s `feeds.conf.default` pins `MorseMicro/morse-feed` at
+`fc332b0`, and that feed applies
+`essentials/morse_driver/patches/mm61x/003_fix_spi_inter_transaction_delay.patch`
+to the driver before building it. The patch header describes this exact failure:
+
+> Add more delay between SPI transactions when not in block mode. [...]
+> Currently the driver has enough delay between blocks but not when the
+> transaction isn't a block.
+
+It raises the padding clocked after the CRC of a **non-block** CMD53 write from
+`4` bytes to `max(250, count * inter_block_delay_bytes / MMC_SPI_BLOCKSIZE)`, and
+applies the same floor to non-block reads.
+
+The numbers line up exactly:
+
+- `MM6108_SPI_INTER_BLOCK_DELAY_NANO_S` = 40000 ns, and
+  `inter_block_delay_bytes = 40000 / (clk_period_ns * 8)` → **250 bytes at
+  50 MHz**, 50 bytes at 10 MHz. Morse's `max(250, …)` is exactly one full
+  inter-block delay at full clock, applied regardless of clock.
+- Stock `mm6108-2.0.1` exposes that same line as a module parameter instead,
+  `spi_post_write_status_bytes`, **default 4**.
+- Every failure here is a non-block write: `cmd53_write fn=1 0x00004050:4`,
+  count = 4.
+- The widest window ever tested here was **64** bytes.
+
+So the ack window was never opened wide enough. "Ruled out:
+`spi_post_write_status_bytes` 4…64" below is not a valid elimination.
+
+### Second driver-side difference: `enable_ext_xtal_init`
+
+OpenMANET runs with `enable_ext_xtal_init='1'` in its UCI (see
+`logs/2026-08-22-openmanet-1.8.0-environment.txt`). In `morse_spi_cmd53_write()`,
+when that parameter is set *and* `cfg->xtal_init_bus_trans_delay_ms` is non-zero,
+the driver appends a further `XTAL_TRANSFER_DELAY_BYTES` = **4096** bytes to the
+transaction; `mm610x_enable_ext_xtal_delay()` sets that field only when the
+parameter is on. The working machine therefore clocks an ack window two orders of
+magnitude wider than anything tested here.
+
+Note the ordering trap: `mm610x_ext_xtal_init()` performs its sequence with
+`morse_reg32_write()` calls, i.e. it *needs* a working write path. Turning the
+parameter on while writes are broken — tried, "no change" — cannot work on its
+own. The padding has to be fixed first.
+
+### The four-way comparison was not single-variable
+
+Other differences between the passing OpenMANET run and the failing Raspberry Pi
+OS runs, all from the archived logs:
+
+- **Different BCF.** OpenMANET loaded `bcf_default.bin` (1298 bytes, crc32
+  `0xf72450a7`); the builds here load `bcf_fgh100mhaamd.bin` (1251 bytes,
+  `0x941b2a82`). The claim below that the BCF was identical is wrong — only
+  `mm6108.bin` (`0xbe7b5c8f`) actually matches.
+- **Different dot11ah build.** OpenMANET registers `Dot11ah driver registration.
+  Version 0-rel_mm8108_2_0_0_2026_Apr_21` alongside the mm6108 2.0.1 main driver;
+  both are mm6108 2.0.1 here.
+- **Different overlay.** `spi-max-frequency` 50 MHz there against 10 MHz here —
+  which by itself changes the computed `inter_block_delay_bytes` from 250 to 50 —
+  plus `reset-gpios = <&gpio 17 0>` against `<&gpio 17 1>` here, and pinctrl
+  attached to the controller rather than to the child device node.
+
+### Next experiment
+
+No reflash needed. On Raspberry Pi OS, with the patched 2.0.1 already built:
+
+```
+spi_post_write_status_bytes=512    # Morse's floor is 250; 64 was never enough
+spi_inter_block_delay_bytes=250
+spi_rx_lshift=2
+enable_ext_xtal_init=1
+bcf=bcf_default.bin
+```
+
+and set `spi-max-frequency = <50000000>` in the overlay, so the driver computes
+the same 250-byte inter-block delay OpenMANET runs with.
+
+**Still unexplained: the 2-bit RX skew.** Padding is a byte-level effect and
+cannot produce bit-level misframing, and OpenMANET needs no `spi_rx_lshift` at
+all on the same hardware. That remains a separate open question — and if the
+padding fix clears the write path, it becomes the only one left.
+
+---
+
 ## 2026-08-22 follow-up: four end-to-end tests
 
-Same board (SenseCAP M1 mPCIe slot with Wio-WM6108, WM1302 HAT pinout), same driver release (`mm6108-2.0.1` with the patches in `./patches`), same firmware and BCF binaries (`mm6108.bin` crc32 `0xbe7b5c8f`, `bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`). Only the kernel and its patch stack change:
+Same board (SenseCAP M1 mPCIe slot with Wio-WM6108, WM1302 HAT pinout), nominally the same driver release (`mm6108-2.0.1` with the patches in `./patches`), same firmware (`mm6108.bin` crc32 `0xbe7b5c8f`). ~~Same BCF (`bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`).~~ **Corrected 2026-08-22: the OpenMANET run loaded `bcf_default.bin` (crc32 `0xf72450a7`), and its driver is an OpenWrt-feed build carrying extra SPI patches — see the section above.** What changes across the four rows is the OS image, not the kernel alone:
 
 | Kernel | Tree / packaging | Result |
 |---|---|---|
@@ -13,12 +126,12 @@ Same board (SenseCAP M1 mPCIe slot with Wio-WM6108, WM1302 HAT pinout), same dri
 | 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y (RPi OS Bookworm 2025-05) | ❌ byte-identical fingerprint to above |
 | 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y (RPi OS Trixie) | ❌ byte-identical fingerprint |
 
-**Key conclusion:** the fault is a `spi-bcm2835` (or SPI-core) **tree difference**, not a version regression. Both trees share mainline stable-tag numbering, but `raspberrypi/linux`'s patch stack breaks MM6108 driven via GPIO CS, and OpenWrt's does not. Bisecting versions inside `raspberrypi/linux` is the wrong strategy — the productive comparison is `drivers/spi/spi-bcm2835.c` and adjacent SPI-core files between the two trees at similar stable tags.
+**Key conclusion — SUPERSEDED, see the section above.** ~~the fault is a `spi-bcm2835` (or SPI-core) **tree difference**, not a version regression. Both trees share mainline stable-tag numbering, but `raspberrypi/linux`'s patch stack breaks MM6108 driven via GPIO CS, and OpenWrt's does not.~~ The comparison this paragraph asks for was done and the files are byte-identical; the split is in the driver package, not the kernel. The table above still stands as measurement — only its interpretation was wrong.
 
-**Practical bottom line:** OpenMANET 1.8.0 remains the only tested working path. Any recommendation of a stock Raspberry Pi OS variant is unsafe until this is fixed upstream. For a Debian userspace, options are:
+**Practical bottom line:** OpenMANET 1.8.0 remains the only tested working path. But the reasoning that followed from this — swap the kernel — no longer holds: options (b) and (c) below were expected to work *because* they avoid `raspberrypi/linux`, and that premise is now refuted. Replacing the kernel is unlikely to help on its own; fixing the driver's non-block write padding is the thing to try first.
 - (a) OpenMANET as a dedicated gateway,
-- (b) Ubuntu Server or a mainline-kernel Debian image on the Pi (both untested but expected to work since they do not use `raspberrypi/linux`),
-- (c) build a mainline kernel and install on Bookworm.
+- ~~(b) Ubuntu Server or a mainline-kernel Debian image on the Pi (both untested but expected to work since they do not use `raspberrypi/linux`),~~
+- ~~(c) build a mainline kernel and install on Bookworm.~~
 
 The retraction: earlier "next things to try" below (§) suggested that some 6.6.x kernel on Raspberry Pi OS should work because it's the same LTS branch as OpenMANET. Wrong. Any `+rpt-rpi-v8` kernel tested carries the bug.
 
@@ -88,9 +201,13 @@ grid matters too.
   transmit path is late.
 - Longer wait between the write command's R1 and the data token
   (`spi_pre_token_bytes` 4/8/16/32) - no change.
-- Wider ack search window (`spi_post_write_status_bytes` 4/8/16/32/64) - the
-  window is all 0xff out to 71 bytes; the chip sends nothing at all.
-- `enable_ext_xtal_init=1` - no change.
+- ~~Wider ack search window (`spi_post_write_status_bytes` 4/8/16/32/64) - the
+  window is all 0xff out to 71 bytes; the chip sends nothing at all.~~
+  **Withdrawn 2026-08-22:** Morse's own OpenWrt patch puts the floor for this
+  window at 250 bytes. 64 was never enough to be a valid test.
+- ~~`enable_ext_xtal_init=1` - no change.~~ **Withdrawn 2026-08-22:** the xtal
+  init sequence is itself made of register writes, so it cannot run while the
+  write path is broken. Retest after the padding fix.
 - Cold power cycle of the slot (GPIO18 low 3 s, not just a RESET_N pulse) -
   skew and write failure both survive it, so neither is a stuck-state artifact.
 - Driver tag 1.16.4. It does not build against 6.18 without work, but the

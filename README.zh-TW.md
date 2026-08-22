@@ -5,7 +5,7 @@
 Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Micro
 **MM6108A1**）在 Raspberry Pi 4 上以 SPI 驅動的移植紀錄、patch 與量測工具。
 
-> **2026-08-22 進度更新。** 問題已定位到**核心樹**層級，不是版本層級。同硬體四次實測：
+> **2026-08-22 進度更新。** 同硬體四次實測，只換作業系統映像：
 >
 > | 核心 | 樹 | 結果 |
 > |---|---|---|
@@ -14,9 +14,13 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 > | 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y（RPi OS Bookworm 2025-05） | ❌ 逐字元同指紋 |
 > | 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y（RPi OS Trixie） | ❌ 逐字元同指紋 |
 >
-> 差別在 patch stack，不在主線。想在 Debian 上跑 HaLow：要嘛用 OpenMANET，要嘛裝非 raspberrypi/linux 的核心（主線或 OpenWrt 樹）。**我先前建議「降版本到 Bookworm 6.6.x」是錯的、收回。**
+> **2026-08-22 後續更新 —— 上表的「核心樹差異」解讀已收回。** 我把兩條樹在同一個 stable tag 上實際 diff 了：`drivers/spi/spi-bcm2835.c`、`drivers/spi/spi.c`、`drivers/dma/bcm2835-dma.c`、`drivers/pinctrl/bcm/pinctrl-bcm2835.c`、`arch/arm/boot/dts/broadcom/bcm270x-rpi.dtsi` 在 OpenWrt 24.10 的 bcm27xx 6.6 樹與 `raspberrypi/linux` rpi-6.6.y @ 6.6.51 之間**逐位元組完全相同** —— OpenWrt 是原封不動 import rpi 的 SPI commit。**沒有 `spi-bcm2835` 差異，也沒有東西可以 bisect。**
 >
-> issue #9 上有四則追加 comment，每次實測的 dmesg + 環境快照在 [`logs/`](logs/)。以下為達成此結論之前的原始移植紀錄。
+> 差異在**驅動的打包**，不在核心。Morse 自家的 OpenWrt feed（`MorseMicro/morse-feed`，被 OpenMANET 1.8.0 釘住）會套用 `003_fix_spi_inter_transaction_delay.patch`，把**非 block** CMD53 write 在 CRC 之後要墊的位元組數從 4 提高到下限 **250**。這裡所有的失敗都是非 block write（`fn=1 0x00004050:4`，count 4），而這裡測過最寬的視窗只有 64。OpenMANET 另外還開了 `enable_ext_xtal_init=1`，那會再往該視窗追加 4096 個位元組。**這個 patch 只存在於 Morse 的 OpenWrt feed，不在 `morse_driver` 的 git tag 裡。**
+>
+> 2-bit RX 偏移仍未解釋 —— 位元組層級的墊底不可能造成位元層級的框架錯位。完整推導、數字與下一步實驗見 [NOTES.zh-TW.md](NOTES.zh-TW.md)。
+>
+> issue #9 上有四則追加 comment，每次實測的 dmesg + 環境快照在 [`logs/`](logs/)。以下為走到這一步之前的原始移植紀錄。
 
 **狀態：模組是活的、也能自報身分，但在 Raspberry Pi OS 上無法使用。** 讀取路徑正常，第一筆 CMD53
 資料寫入永遠等不到回應。這看起來就是
@@ -89,9 +93,12 @@ CMD53 寫入會拿到正確的 `R1 = 0x00`，然後**完全等不到 data respon
 把 ACK 視窗開到 71 個位元組，全部是 `0xff`。
 
 已排除：SPI 時脈 400 kHz 到 50 MHz、SPI mode 0–3、送出方向的雙向位移、
-`spi_post_write_status_bytes` 4 到 64、加長 R1 到 token 的間隔、
-`enable_ext_xtal_init`、插槽真正斷電重來，以及兩個世代的驅動。
-完整紀錄見 [NOTES.zh-TW.md](NOTES.zh-TW.md)。
+加長 R1 到 token 的間隔、插槽真正斷電重來，以及兩個世代的驅動。
+
+`spi_post_write_status_bytes` 4 到 64 與 `enable_ext_xtal_init` **已不再算是有效
+的排除**：Morse 自家的 OpenWrt patch 把該視窗的下限訂在 250 個位元組，而 xtal
+初始化序列本身就需要一條能用的寫入路徑。完整紀錄與收回說明見
+[NOTES.zh-TW.md](NOTES.zh-TW.md)。
 
 ## 不管這個 bug 如何，這幾件事都值得知道
 
@@ -131,13 +138,21 @@ cs-gpios      = <&gpio  8 1>      spi-max-frequency = 50 MHz
 
 注意 `morse_reset` 設成**上拉** —— 這獨立驗證了前面講的 RESET_N 浮接問題。
 
-1.8.0（2026-08-16）是 OpenWrt 24.10、核心 **6.6.138**，內附的 morse 驅動是
-**`0-rel_mm6108_2_0_1_2026_Jun_11`** —— 與本倉庫編譯的是同一個 release ——
-`mm6108.bin` 與 `bcf_fgh100mhaamd.bin` 也和這裡用的完全相同。
+1.8.0（2026-08-16）是 OpenWrt 24.10、核心 **6.6.138**，內附的 morse 驅動名義上是
+**`0-rel_mm6108_2_0_1_2026_Jun_11`** —— 與本倉庫編譯的同一個 release ——
+`mm6108.bin` 也和這裡用的完全相同（crc32 `0xbe7b5c8f`）。
 
-這讓它成為一個乾淨的**單變數實驗**：驅動相同、韌體相同、腳位相同，唯一改變的
-是核心，連帶改變 `spi-bcm2835` 的世代 —— 那邊是 6.6.138，這裡是 6.18.34。
-如果 2-bit 偏移在那上面依然存在，就代表偏移不是 SPI 控制器驅動造成的。
+但它**不是**我一開始以為的那種單變數實驗。存檔的 log 顯示，它和這裡的差別不只
+核心：
+
+- 它載入的是 **`bcf_default.bin`**（1298 位元組，crc32 `0xf72450a7`），不是
+  `bcf_fgh100mhaamd.bin`（1251 位元組，`0x941b2a82`）—— 先前「BCF 相同」的說法
+  是錯的；
+- 它的驅動是由 `MorseMicro/morse-feed` 建置的，該 feed 會套用不存在於
+  `morse_driver` git tag 的 SPI patch（見 [NOTES.zh-TW.md](NOTES.zh-TW.md)）；
+- 它的 `dot11ah` 是 **mm8108 2.0.0** 的建置，和 mm6108 2.0.1 主驅動並存；
+- 它跑在 `spi-max-frequency` 50 MHz 且開了 `enable_ext_xtal_init=1`，這兩項都會
+  改變驅動每筆交易要墊多少位元組。
 
 若載板是用 GPIO 控制插槽電源（SenseCAP M1 用 GPIO18），那一行仍然要自己補，
 上游沒有任何 overlay 會處理它：

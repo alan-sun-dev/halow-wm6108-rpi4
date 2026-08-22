@@ -6,7 +6,7 @@ Bring-up notes, patches and measurement tools for a Seeed **Wio-WM6108** Wi-Fi
 HaLow mini-PCIe module (Quectel FGH100M-H, Morse Micro **MM6108A1**) driven over
 SPI from a Raspberry Pi 4.
 
-> **Update 2026-08-22.** The failure is now confirmed at the kernel-*tree* level, not the version level. Four end-to-end tests on the same board:
+> **Update 2026-08-22.** Four end-to-end tests on the same board, changing only the OS image:
 >
 > | Kernel | Tree | Outcome |
 > |---|---|---|
@@ -15,9 +15,13 @@ SPI from a Raspberry Pi 4.
 > | 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y (RPi OS Bookworm 2025-05) | ❌ byte-identical fingerprint |
 > | 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y (RPi OS Trixie) | ❌ byte-identical fingerprint |
 >
-> The delta lives in the patch stack, not in mainline. For a Debian-userspace HaLow port on a Pi 4, either use OpenMANET or build a non-raspberrypi/linux kernel (mainline or OpenWrt-tree). My earlier suggestion to try older Bookworm 6.6.x images was wrong and is retracted.
+> **Update 2026-08-22 (later) — the "kernel tree" reading of that table is withdrawn.** I diffed the two trees at the same stable tag. `drivers/spi/spi-bcm2835.c`, `drivers/spi/spi.c`, `drivers/dma/bcm2835-dma.c`, `drivers/pinctrl/bcm/pinctrl-bcm2835.c` and `arch/arm/boot/dts/broadcom/bcm270x-rpi.dtsi` are **byte-identical** between OpenWrt 24.10's bcm27xx 6.6 tree and `raspberrypi/linux` rpi-6.6.y at 6.6.51: OpenWrt imports the rpi SPI commits verbatim. There is no `spi-bcm2835` delta and nothing to bisect.
 >
-> Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led to this conclusion.
+> The difference is in the **driver package**, not the kernel. Morse's own OpenWrt feed — `MorseMicro/morse-feed`, pinned by OpenMANET 1.8.0 — applies `003_fix_spi_inter_transaction_delay.patch`, which raises the padding clocked after the CRC of a *non-block* CMD53 write from 4 bytes to a floor of **250**. Every failure here is a non-block write (`fn=1 0x00004050:4`, count 4), and the widest window ever tested here was 64. OpenMANET also runs `enable_ext_xtal_init=1`, which appends a further 4096 bytes to that window. That patch is in Morse's OpenWrt feed only — not in the `morse_driver` git tag.
+>
+> The 2-bit RX skew is still unexplained; padding cannot cause bit-level misframing. Full derivation, numbers and the next experiment are in [NOTES.md](NOTES.md).
+>
+> Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led here.
 
 **Status: the radio is alive and identifies itself, but is not usable on Raspberry Pi OS.** Reads
 work; the first CMD53 data write never gets acknowledged. This appears to be the
@@ -90,9 +94,13 @@ realignment recovers real register data rather than noise.
 
 CMD53 writes get a correct `R1 = 0x00` and then no data-response token at all —
 the ack window is `0xff` out to 71 bytes. Ruled out: SPI clock 400 kHz…50 MHz,
-SPI modes 0–3, shifting transmits in either direction, `spi_post_write_status_bytes`
-4…64, a longer R1→token gap, `enable_ext_xtal_init`, a real power cycle of the
-slot, and both driver generations. See [NOTES.md](NOTES.md) for the full log.
+SPI modes 0–3, shifting transmits in either direction, a longer R1→token gap,
+a real power cycle of the slot, and both driver generations.
+
+`spi_post_write_status_bytes` 4…64 and `enable_ext_xtal_init` are **no longer
+valid eliminations**: Morse's own OpenWrt patch puts the floor for that window at
+250 bytes, and the xtal init sequence itself needs a working write path. See
+[NOTES.md](NOTES.md) for the full log and the retraction.
 
 ## Things worth knowing regardless of this bug
 
@@ -136,13 +144,20 @@ Note `morse_reset` is configured **pull-up** — independent confirmation of the
 RESET_N floating problem described above.
 
 1.8.0 (2026-08-16) is OpenWrt 24.10, kernel **6.6.138**, and carries morse
-driver **`0-rel_mm6108_2_0_1_2026_Jun_11`** — the same release built here — plus
-`mm6108.bin` and `bcf_fgh100mhaamd.bin` identical to the ones used here.
+driver **`0-rel_mm6108_2_0_1_2026_Jun_11`** — nominally the same release built
+here — plus an `mm6108.bin` identical to the one used here (crc32 `0xbe7b5c8f`).
 
-That makes it a clean single-variable experiment. Same driver, same firmware,
-same pin map; the only thing that changes is the kernel, and with it the
-`spi-bcm2835` generation: 6.6.138 there against 6.18.34 here. If the 2-bit skew
-survives that, the skew is not coming from the SPI controller driver.
+It is *not* the single-variable experiment I first took it for. The archived
+logs show it differs in more than the kernel:
+
+- it loads **`bcf_default.bin`** (1298 bytes, crc32 `0xf72450a7`), not
+  `bcf_fgh100mhaamd.bin` (1251 bytes, `0x941b2a82`) — an earlier claim that the
+  BCF was identical was wrong;
+- its driver is built by `MorseMicro/morse-feed`, which applies SPI patches that
+  are not in the `morse_driver` git tag (see [NOTES.md](NOTES.md));
+- its `dot11ah` is an **mm8108 2.0.0** build alongside the mm6108 2.0.1 driver;
+- it runs `spi-max-frequency` at 50 MHz and `enable_ext_xtal_init=1`, both of
+  which change how much padding the driver clocks per transaction.
 
 On a carrier that gates slot power from a GPIO (the SenseCAP M1 uses GPIO18)
 that line still has to be added — it is in no upstream overlay:

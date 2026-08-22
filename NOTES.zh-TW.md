@@ -2,9 +2,115 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-22 後續：核心樹結論被推翻 —— 分歧在驅動的打包
+
+把下面那一節建議的 tree diff 實際做了。結果是空的：**兩條核心樹之間沒有
+`spi-bcm2835` 差異。**
+
+方法：`raspberrypi/linux` 的 `stable_20241008` tag（= 6.6.51，正是失敗的那份
+Bookworm 映像所用的核心），對上重建出來的 OpenWrt 樹 —— 也就是 mainline stable
+加上 `target/linux/bcm27xx/patches-6.6/` 裡所有會動到該檔案的 patch。
+
+| 檔案 | OpenWrt bcm27xx 6.6 vs raspberrypi/linux rpi-6.6.y @ 6.6.51 |
+|---|---|
+| `drivers/spi/spi-bcm2835.c` | 逐位元組相同 |
+| `drivers/spi/spi.c`（SPI core） | 逐位元組相同 |
+| `drivers/dma/bcm2835-dma.c` | 逐位元組相同 |
+| `drivers/pinctrl/bcm/pinctrl-bcm2835.c` | 逐位元組相同 |
+| `arch/arm/boot/dts/broadcom/bcm270x-rpi.dtsi` | 逐位元組相同 |
+
+OpenWrt 是原封不動 import rpi 的 commit。rpi 樹對 `spi-bcm2835.c` 的改動總共只有
+三個 commit —— phys-addr slave DMA 設定、zero-length transfer 的 workaround、以及
+`spi0-0cs`/`SPI_NO_CS` 支援 —— OpenWrt 三個全帶（950-0276 / 950-0467 / 950-0821），
+SPI core 那個也在（950-0204，"Force CS_HIGH if GPIO descriptors are used"）。
+mainline 的 `spi-bcm2835.c` 從 v6.6.51 到 v6.6.138 也一行都沒改，而
+`OpenMANET/firmware` 在 1.8.0 tag 上帶的正是與上游 openwrt-24.10 相同的那三個 patch。
+
+所以兩條樹都沒有東西可以 bisect。
+
+### 真正的差異：一個只存在於 OpenWrt 的 Morse 驅動 patch
+
+`OpenMANET/firmware@1.8.0` 的 `feeds.conf.default` 把 `MorseMicro/morse-feed` 釘在
+`fc332b0`，而那個 feed 在建置前會對驅動套用
+`essentials/morse_driver/patches/mm61x/003_fix_spi_inter_transaction_delay.patch`。
+patch 的說明幾乎就是在描述這個症狀：
+
+> Add more delay between SPI transactions when not in block mode. [...]
+> Currently the driver has enough delay between blocks but not when the
+> transaction isn't a block.
+
+它把**非 block** 的 CMD53 write 在 CRC 之後要墊的位元組數，從 `4` 改成
+`max(250, count * inter_block_delay_bytes / MMC_SPI_BLOCKSIZE)`，非 block 的讀取
+也套用同一個下限。
+
+數字完全對得上：
+
+- `MM6108_SPI_INTER_BLOCK_DELAY_NANO_S` = 40000 ns，而
+  `inter_block_delay_bytes = 40000 / (時脈週期 ns * 8)` → **50 MHz 時剛好 250 個
+  位元組**，10 MHz 時是 50 個。Morse 的 `max(250, …)` 就是「滿速下的一整個
+  inter-block delay」，而且不隨時脈縮放。
+- 原版 `mm6108-2.0.1` 把同一行改成模組參數 `spi_post_write_status_bytes`，
+  **預設值 4**。
+- 這裡每一次失敗都是非 block write：`cmd53_write fn=1 0x00004050:4`，count = 4。
+- 而這裡測過最寬的視窗是 **64** 個位元組。
+
+也就是說，ACK 視窗從來沒有開得夠寬。下面那句「已排除：`spi_post_write_status_bytes`
+4/8/16/32/64」不是一個有效的排除。
+
+### 第二個驅動側差異：`enable_ext_xtal_init`
+
+OpenMANET 的 UCI 裡設了 `enable_ext_xtal_init='1'`（見
+`logs/2026-08-22-openmanet-1.8.0-environment.txt`）。在 `morse_spi_cmd53_write()`
+裡，只要這個參數有開**且** `cfg->xtal_init_bus_trans_delay_ms` 不為零，驅動就會再
+往該筆交易追加 `XTAL_TRANSFER_DELAY_BYTES` = **4096** 個位元組；而
+`mm610x_enable_ext_xtal_delay()` 只在該參數開啟時才會設那個欄位。所以那台能動的
+機器，ACK 視窗比這裡測過的任何一組都寬兩個數量級。
+
+注意這裡有個先後順序的陷阱：`mm610x_ext_xtal_init()` 本身是用
+`morse_reg32_write()` 做的，也就是它**需要一條能用的寫入路徑**。在寫入已壞的情況下
+單獨打開這個參數（試過，「無變化」）本來就不可能有用 —— 得先把 padding 修好。
+
+### 那組四方比較並不是單變數
+
+從存檔的 log 裡看，通過的 OpenMANET 那次與失敗的 Raspberry Pi OS 各次，還有這些
+差異：
+
+- **BCF 不同。** OpenMANET 載入的是 `bcf_default.bin`（1298 位元組，crc32
+  `0xf72450a7`）；這裡的建置載入的是 `bcf_fgh100mhaamd.bin`（1251 位元組，
+  `0x941b2a82`）。下面說「BCF 相同」是錯的 —— 真正相同的只有 `mm6108.bin`
+  （`0xbe7b5c8f`）。
+- **dot11ah 版本不同。** OpenMANET 註冊的是 `Dot11ah driver registration.
+  Version 0-rel_mm8108_2_0_0_2026_Apr_21`，與 mm6108 2.0.1 主驅動並存；這裡兩者
+  都是 mm6108 2.0.1。
+- **overlay 不同。** 那邊 `spi-max-frequency` 是 50 MHz，這裡是 10 MHz —— 光這一項
+  就讓算出來的 `inter_block_delay_bytes` 從 250 變成 50 —— 另外還有
+  `reset-gpios = <&gpio 17 0>` 對上這裡的 `<&gpio 17 1>`，以及 pinctrl 是掛在
+  controller 上而不是掛在子裝置節點上。
+
+### 下一個實驗
+
+不需要重刷卡。在 Raspberry Pi OS 上，用已經編好的 patched 2.0.1：
+
+```
+spi_post_write_status_bytes=512    # Morse 的下限是 250；64 從來就不夠
+spi_inter_block_delay_bytes=250
+spi_rx_lshift=2
+enable_ext_xtal_init=1
+bcf=bcf_default.bin
+```
+
+並把 overlay 的 `spi-max-frequency` 改成 `<50000000>`，讓驅動自己算出與 OpenMANET
+相同的 250 位元組 inter-block delay。
+
+**仍未解釋：2-bit RX 偏移。** 墊底是位元組層級的效果，造不出位元層級的框架錯位；
+而且同一組硬體上，OpenMANET 完全不需要 `spi_rx_lshift`。這仍然是一個獨立的開放
+問題 —— 而且如果 padding 修好之後寫入就通了，它會變成唯一剩下的問題。
+
+---
+
 ## 2026-08-22 追蹤：四次實測後的定案
 
-同一顆板子（SenseCAP M1 mPCIe 插槽 + Wio-WM6108，WM1302 HAT 佈線）、同一個驅動 release（`mm6108-2.0.1` + `./patches`）、同一份韌體與 BCF（`mm6108.bin` crc32 `0xbe7b5c8f`、`bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`）。**只變動核心與其 patch stack**：
+同一顆板子（SenseCAP M1 mPCIe 插槽 + Wio-WM6108，WM1302 HAT 佈線）、名義上同一個驅動 release（`mm6108-2.0.1` + `./patches`）、同一份韌體（`mm6108.bin` crc32 `0xbe7b5c8f`）。~~同一份 BCF（`bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`）。~~ **2026-08-22 更正：OpenMANET 那次載入的是 `bcf_default.bin`（crc32 `0xf72450a7`），而且它的驅動是帶著額外 SPI patch 的 OpenWrt feed 建置 —— 見上一節。** 四列之間變動的是整份作業系統映像，不是只有核心：
 
 | 核心 | 樹 / 打包來源 | 結果 |
 |---|---|---|
@@ -13,12 +119,12 @@
 | 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y（RPi OS Bookworm 2025-05）| ❌ 逐字元同指紋 |
 | 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y（RPi OS Trixie）| ❌ 逐字元同指紋 |
 
-**關鍵結論**：問題是 `spi-bcm2835`（或 SPI core）**在不同核心樹之間的差異**，不是版本回歸。兩條樹共用主線 stable-tag 編號，但 raspberrypi/linux 的 patch stack 弄壞了 MM6108 走 GPIO CS 的行為，OpenWrt 的沒有。**在 raspberrypi/linux 樹裡 bisect 版本是錯的策略** —— 該做的比對是兩條樹在同一 stable tag 上的 `drivers/spi/spi-bcm2835.c` 與相關 SPI-core 檔案。
+**關鍵結論 —— 已被推翻，見上一節。** ~~問題是 `spi-bcm2835`（或 SPI core）**在不同核心樹之間的差異**，不是版本回歸。兩條樹共用主線 stable-tag 編號，但 raspberrypi/linux 的 patch stack 弄壞了 MM6108 走 GPIO CS 的行為，OpenWrt 的沒有。~~ 這一段要求的比對已經做了，檔案逐位元組相同；分歧在驅動的打包，不在核心。上面那張表作為**量測**依然成立 —— 錯的只是它的解讀。
 
-**實用結論**：OpenMANET 1.8.0 是目前唯一實測能用的組合。任何 stock Raspberry Pi OS 都不能推薦，直到這個 bug 在上游被修好。想要 Debian 環境 + HaLow，選項是：
+**實用結論**：OpenMANET 1.8.0 仍是目前唯一實測能用的組合。但由此推出的「換核心就好」已不再成立：下面 (b)(c) 之所以被期待可行，前提正是「因為不走 raspberrypi/linux」，而那個前提現在已被推翻。單純換核心大概率沒有用；該先試的是修驅動在非 block 寫入時的 padding。
 - (a) 拿 OpenMANET 當專用閘道器
-- (b) Ubuntu Server 或用主線核心的 Debian image（都未實測，但因為不走 raspberrypi/linux，理論上應該通）
-- (c) 自己編主線核心裝到 Bookworm 上
+- ~~(b) Ubuntu Server 或用主線核心的 Debian image（都未實測，但因為不走 raspberrypi/linux，理論上應該通）~~
+- ~~(c) 自己編主線核心裝到 Bookworm 上~~
 
 **收回**：下面的「接下來值得嘗試的方向」曾經建議「Raspberry Pi OS 上換一顆 6.6.x 核心應該就能動」—— 這個假設**錯了**。**任何** `+rpt-rpi-v8` 核心測過都是壞的。
 
@@ -87,9 +193,12 @@ token —— dump 了 71 個位元組的視窗，全部是 0xff。然而同一�
   這反證了晶片的**接收**位元組框架本來就和我們一致，只有送出路徑會延遲。
 - 加長寫入指令 R1 與資料 token 之間的等待（`spi_pre_token_bytes` 4/8/16/32）
   —— 無變化。
-- 加寬 ACK 搜尋視窗（`spi_post_write_status_bytes` 4/8/16/32/64）—— 視窗到
-  71 個位元組為止全是 0xff，晶片什麼都沒送。
-- `enable_ext_xtal_init=1` —— 無變化。
+- ~~加寬 ACK 搜尋視窗（`spi_post_write_status_bytes` 4/8/16/32/64）—— 視窗到
+  71 個位元組為止全是 0xff，晶片什麼都沒送。~~ **2026-08-22 收回：** Morse 自家
+  的 OpenWrt patch 把這個視窗的下限訂在 250 個位元組，64 根本不足以構成有效測試。
+- ~~`enable_ext_xtal_init=1` —— 無變化。~~ **2026-08-22 收回：** xtal 初始化序列
+  本身就是由暫存器寫入組成的，寫入路徑壞掉時它根本跑不起來。修好 padding 之後
+  要重測。
 - 插槽冷斷電（GPIO18 拉低 3 秒，不只是脈衝 RESET_N）—— 偏移和寫入失敗都照舊，
   所以兩者都不是卡在某個殘留狀態。
 - 驅動 tag 1.16.4。它在 6.18 上確實編不過，但原因不是乍看的那樣 —— 見下方
