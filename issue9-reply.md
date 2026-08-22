@@ -87,3 +87,30 @@ spi.c: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werr
 ---
 
 Full measurements, the patches, both device tree overlays and the userspace probes used above are at <https://github.com/alan-sun-dev/halow-wm6108-rpi4>, in case any of it is useful for narrowing this down.
+
+---
+
+## Update, 2026-08-22 — the same hardware works on kernel 6.6.138
+
+The identical hardware — same Wio-WM6108, same SenseCAP M1 carrier, same wiring — runs cleanly under **OpenMANET 1.8.0** (OpenWrt 24.10, kernel **6.6.138**, driver release `0-rel_mm6108_2_0_1_2026_Jun_11`).
+
+Firmware and BCF are the same binaries the failing setup loads (crc32 `0xbe7b5c8f` for `mm6108.bin`, `0x941b2a82` for `bcf_fgh100mhaamd.bin`), and the driver release is the same tag I was building from source on the Pi OS side. The only variable that moves is the kernel and its `spi-bcm2835`.
+
+Full boot dmesg and environment snapshot are in the repo:
+
+- [logs/2026-08-22-openmanet-1.8.0-full-dmesg.log](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-openmanet-1.8.0-full-dmesg.log)
+- [logs/2026-08-22-openmanet-1.8.0-environment.txt](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-openmanet-1.8.0-environment.txt)
+
+| Kernel | RX byte alignment | CMD53 write | `wlh0` up |
+|---|---|---|---|
+| 6.18.34+rpt-rpi-v8 (Raspberry Pi OS Trixie) | needs `spi_rx_lshift=2` even to read chip ID cleanly | `find_data_ack failed`, `ret:-71` | no |
+| **6.6.138 (OpenMANET 24.10, bcm27xx/bcm2711)** | works untouched, no realignment needed | passes, `morse_mac_init` completes | **yes**, AP on SG regulatory band, 22 dBm |
+
+Two things fall out of this:
+
+1. The 2-bit RX offset is a `spi-bcm2835` regression on the newer kernel, **not** a property of the module or the board. On 6.6.138 no realignment is needed at all.
+2. That makes the failure at the top of this thread (Pi 4 + WM1302 Pi HAT + Morse-patched **6.12.25**) most likely the same regression already present in an even older kernel packaging — not a hardware limitation of BCM2835 with the MM6108.
+
+So the presumption in my earlier question ("is the BCM2835 controller known not to work with the MM6108?") is refuted by the new data point: it works, on the right kernel.
+
+Happy to bisect the exact `spi-bcm2835` commit range if that would be useful — rebuilding Raspberry Pi OS's `rpi-6.6.y` on the affected card would tell us whether the regression is in mainline `spi-bcm2835` or in the raspberrypi/linux tree specifically.
