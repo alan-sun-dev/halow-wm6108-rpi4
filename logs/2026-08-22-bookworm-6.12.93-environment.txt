@@ -1,0 +1,88 @@
+Captured: 2026-08-22 (~09:00 UTC)
+Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
+Image: Raspberry Pi OS (64-bit), Debian 12 (bookworm), stock, from Raspberry Pi Imager
+Result: FAILURE -- identical fingerprint to the earlier Trixie 6.18.34+rpt-rpi-v8 result.
+
+Two dmesg captures in this directory:
+
+  2026-08-22-bookworm-6.12.93-boot-dmesg.log
+    Fresh boot with the mm610x-spi-sensecap overlay active. The morse module
+    is auto-loaded by udev (via the `morse,mm610x-spi` compatible in the
+    device tree). It runs with default parameters (no `spi_rx_lshift`) and
+    fails at CMD63 with the classic 2-bit RX offset on the wire.
+
+  2026-08-22-bookworm-6.12.93-lshift-dmesg.log
+    After `sudo rmmod morse; sudo dmesg -C;
+             sudo insmod morse.ko spi_rx_lshift=2 bcf=bcf_fgh100mhaamd.bin country=SG`
+    The realignment lets the read path complete (chip ID, firmware, BCF all
+    load with byte-identical CRC32s to the 6.6.138 success case), and then
+    CMD53 write dies with error -71 at the same register the failing 6.18.34
+    setup died at, verbatim:
+        cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0xffffffff (ret:-71)
+
+=== uname ===
+Linux Sensecap 6.12.93+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.93-1+rpt1 (2026-06-12) aarch64 GNU/Linux
+
+=== /etc/os-release ===
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+VERSION_CODENAME=bookworm
+
+=== kernel packages ===
+linux-headers-6.12.93+rpt-common-rpi   1:6.12.93-1+rpt1
+linux-headers-6.12.93+rpt-rpi-2712     1:6.12.93-1+rpt1
+linux-headers-6.12.93+rpt-rpi-v8       1:6.12.93-1+rpt1
+linux-image-6.12.93+rpt-rpi-2712       1:6.12.93-1+rpt1
+linux-image-6.12.93+rpt-rpi-v8         1:6.12.93-1+rpt1
+
+=== morse_driver ===
+Repo:   https://github.com/MorseMicro/morse_driver
+Tag:    mm6108-2.0.1
+Commit: 98e1936 (Morse Micro package release mm6108-2.0.1)
+Patch:  patches/morse-driver-2.0.1-rpi-spi.patch  (adds spi_rx_lshift= and other RPi SPI hooks)
+Build:  make KERNEL_SRC=/lib/modules/6.12.93+rpt-rpi-v8/build \
+             CONFIG_WLAN_VENDOR_MORSE=m CONFIG_MORSE_SPI=y \
+             CONFIG_MORSE_USER_ACCESS=y CONFIG_MORSE_VENDOR_COMMAND=y -j4
+
+=== morse-firmware ===
+Repo:   https://github.com/MorseMicro/morse-firmware
+Commit: 29fc28b (Firmware Binaries for Release 2.0)
+Files installed to /lib/firmware/morse/:
+    mm6108.bin              size 468304   (matches OpenMANET's copy exactly, byte-for-byte)
+    bcf_fgh100mhaamd.bin    size   1251   (matches OpenMANET's copy exactly, byte-for-byte)
+
+=== /boot/firmware/config.txt (relevant lines) ===
+dtparam=spi=on
+dtparam=audio=on
+dtoverlay=vc4-kms-v3d
+dtoverlay=dwc2,dr_mode=host
+dtoverlay=mm610x-spi-sensecap
+
+=== SPI in sysfs (after boot) ===
+/sys/bus/spi/devices/spi0.0   (morse,mm610x-spi target)
+/sys/bus/spi/devices/spi0.1
+
+=== overlay ===
+/boot/firmware/overlays/mm610x-spi-sensecap.dtbo  (1520 bytes)
+Source: overlays/mm610x-spi-sensecap.dts in this repo
+    SPI0 target, mm610x@0 with morse,mm610x-spi compatible
+    spi-max-frequency = 10 MHz
+    reset-gpios = 17 (active low), spi-irq-gpios = 5
+    GPIO18 hogged output-high (SenseCAP M1 slot power enable)
+    GPIO17 pull-up (RESET_N release; BCM2711 default is pull-down)
+    spidev0 disabled to avoid contention on CS0
+
+=== Auto-loaded modules (post boot, first probe attempt without lshift) ===
+morse                 487424  0
+dot11ah               114688  1 morse
+crc7                   12288  1 morse
+mac80211             1069056  1 morse
+cfg80211             1015808  4 dot11ah,brcmfmac,mac80211,morse
+
+    morse loaded but probe failed -> device stayed unbound.
+
+=== /sys/class/ieee80211 (after first probe attempt) ===
+phy0 -> platform/soc/fe300000.mmcnr/... (Pi 4 built-in Broadcom Wi-Fi, unrelated to Morse)
+    (No morse phy -- expected, given CMD63 failed.)
