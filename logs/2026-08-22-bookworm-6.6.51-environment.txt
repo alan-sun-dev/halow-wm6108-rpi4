@@ -1,0 +1,80 @@
+Captured: 2026-08-22 (~10:47 UTC)
+Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
+Image: Raspberry Pi OS Lite (64-bit), Debian 12 (bookworm), dated 2024-11-19
+        from https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-11-19/
+Result: FAILURE -- identical fingerprint to Bookworm 6.12.93 and Trixie 6.18.34.
+        This refutes the hypothesis that "any 6.6.x kernel works". The
+        raspberrypi/linux `rpt-rpi-v8` tree at 6.6.51 already carries the bug.
+        OpenMANET's OpenWrt-tree 6.6.138 remains the only working combination.
+
+Two dmesg captures:
+
+  2026-08-22-bookworm-6.6.51-boot-dmesg.log
+    Fresh boot, morse module auto-loaded by udev via device tree compatible.
+    Runs with default parameters (no spi_rx_lshift), fails at CMD63 with the
+    `c0 7f ff ff` 2-bit RX offset -- byte-identical to the 6.12.93 and 6.18.34
+    boot-time failures.
+
+  2026-08-22-bookworm-6.6.51-lshift-dmesg.log
+    After `sudo rmmod morse; sudo dmesg -C;
+             sudo insmod morse.ko spi_rx_lshift=2 bcf=bcf_fgh100mhaamd.bin country=SG`
+    Firmware and BCF load (CRC32s match OpenMANET's copies byte-for-byte), then
+    CMD53 write dies at register 0x00004050:4 with ret:-71 -- verbatim to the
+    error line seen on 6.12.93 and 6.18.34.
+
+=== uname ===
+Linux Sensecap 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
+
+=== /etc/os-release ===
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+VERSION_CODENAME=bookworm
+
+=== kernel packages ===
+linux-headers-6.6.51+rpt-common-rpi   1:6.6.51-1+rpt3
+linux-headers-6.6.51+rpt-rpi-2712     1:6.6.51-1+rpt3
+linux-headers-6.6.51+rpt-rpi-v8       1:6.6.51-1+rpt3
+linux-image-6.6.51+rpt-rpi-2712       1:6.6.51-1+rpt3
+linux-image-6.6.51+rpt-rpi-v8         1:6.6.51-1+rpt3
+
+=== morse_driver ===
+Repo:   https://github.com/MorseMicro/morse_driver
+Tag:    mm6108-2.0.1
+Commit: 98e1936 (Morse Micro package release mm6108-2.0.1)
+Patch:  patches/morse-driver-2.0.1-rpi-spi.patch  (spi_rx_lshift= module parameter)
+Build:  make KERNEL_SRC=/lib/modules/6.6.51+rpt-rpi-v8/build \
+             CONFIG_WLAN_VENDOR_MORSE=m CONFIG_MORSE_SPI=y \
+             CONFIG_MORSE_USER_ACCESS=y CONFIG_MORSE_VENDOR_COMMAND=y -j4
+
+=== morse-firmware ===
+Repo:   https://github.com/MorseMicro/morse-firmware
+Commit: 29fc28b (Firmware Binaries for Release 2.0)
+Files installed to /lib/firmware/morse/:
+    mm6108.bin              size 468304   (byte-for-byte match with OpenMANET)
+    bcf_fgh100mhaamd.bin    size   1251   (byte-for-byte match with OpenMANET)
+
+=== /boot/firmware/config.txt (relevant lines) ===
+dtparam=spi=on
+dtparam=audio=on
+dtoverlay=vc4-kms-v3d
+dtoverlay=dwc2,dr_mode=host
+dtoverlay=mm610x-spi-sensecap
+
+=== SPI in sysfs ===
+/sys/bus/spi/devices/spi0.0   (morse,mm610x-spi target)
+/sys/bus/spi/devices/spi0.1
+
+=== The important asymmetry ===
+Three raspberrypi/linux `rpt-rpi-v8` kernels tested end-to-end on this same
+board (6.6.51, 6.12.93, 6.18.34) -- all three fail with identical fingerprints.
+One OpenWrt kernel (OpenMANET 1.8.0's 6.6.138, built from OpenWrt's linux-6.6
+tree) -- passes.
+
+The difference is NOT the kernel version. Both trees share stable-tag numbers.
+The difference is the *patch stack applied on top of mainline 6.6*. OpenWrt's
+tree either includes a spi-bcm2835 fix, or does not include a regression, that
+raspberrypi/linux does. Bisecting inside raspberrypi/linux (rpi-6.6.y, rpi-6.12.y,
+rpi-6.18.y) would identify the exact commit; a shorter path may be diffing
+`drivers/spi/spi-bcm2835.c` and adjacent SPI-core files between OpenWrt's
+linux-6.6 tree and raspberrypi/linux rpi-6.6.y at similar stable tags.
