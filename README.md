@@ -186,9 +186,10 @@ entries.
 
 ## Testing on hardware
 
-[TESTING.md](TESTING.md) is a self-contained procedure for swapping in an
-OpenMANET card and reading the result — written to be followed from a phone,
-since the machine holding these notes is powered down while the test runs.
+[TESTING.md](TESTING.md) holds two self-contained procedures: the pending retest
+on Raspberry Pi OS (ack window, then the init training burst — no card swap, no
+reflash), and the completed OpenMANET card swap that produced the only passing
+result so far. Both list what each possible output means.
 
 ## Layout
 
