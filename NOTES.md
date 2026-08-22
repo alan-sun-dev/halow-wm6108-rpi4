@@ -2,6 +2,37 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-22 follow-up: four end-to-end tests
+
+Same board (SenseCAP M1 mPCIe slot with Wio-WM6108, WM1302 HAT pinout), same driver release (`mm6108-2.0.1` with the patches in `./patches`), same firmware and BCF binaries (`mm6108.bin` crc32 `0xbe7b5c8f`, `bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`). Only the kernel and its patch stack change:
+
+| Kernel | Tree / packaging | Result |
+|---|---|---|
+| **6.6.138** | OpenWrt linux-6.6 (OpenMANET 1.8.0) | ✅ `wlh0` up as AP on SG @ 22 dBm |
+| 6.6.51+rpt-rpi-v8 | raspberrypi/linux rpi-6.6.y (RPi OS Bookworm 2024-11-19) | ❌ CMD63 fail → `spi_rx_lshift=2` → CMD53 write fail at `0x00004050:4`, `ret:-71` |
+| 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y (RPi OS Bookworm 2025-05) | ❌ byte-identical fingerprint to above |
+| 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y (RPi OS Trixie) | ❌ byte-identical fingerprint |
+
+**Key conclusion:** the fault is a `spi-bcm2835` (or SPI-core) **tree difference**, not a version regression. Both trees share mainline stable-tag numbering, but `raspberrypi/linux`'s patch stack breaks MM6108 driven via GPIO CS, and OpenWrt's does not. Bisecting versions inside `raspberrypi/linux` is the wrong strategy — the productive comparison is `drivers/spi/spi-bcm2835.c` and adjacent SPI-core files between the two trees at similar stable tags.
+
+**Practical bottom line:** OpenMANET 1.8.0 remains the only tested working path. Any recommendation of a stock Raspberry Pi OS variant is unsafe until this is fixed upstream. For a Debian userspace, options are:
+- (a) OpenMANET as a dedicated gateway,
+- (b) Ubuntu Server or a mainline-kernel Debian image on the Pi (both untested but expected to work since they do not use `raspberrypi/linux`),
+- (c) build a mainline kernel and install on Bookworm.
+
+The retraction: earlier "next things to try" below (§) suggested that some 6.6.x kernel on Raspberry Pi OS should work because it's the same LTS branch as OpenMANET. Wrong. Any `+rpt-rpi-v8` kernel tested carries the bug.
+
+**Public status:** four comments now on `MorseMicro/morse_driver` issue #9 (v1 initial, v2 OpenMANET pass, v3 Bookworm 6.12.93 fail, v4 Bookworm 6.6.51 fail + tree-split reframing). No maintainer response as of this update.
+
+Full per-test evidence in `logs/`:
+- `logs/2026-08-22-openmanet-1.8.0-*.log/.txt` — the passing case
+- `logs/2026-08-22-bookworm-6.6.51-*.log/.txt`
+- `logs/2026-08-22-bookworm-6.12.93-*.log/.txt`
+
+Below is the earlier bring-up writeup that led to this conclusion. The "next things to try" section at the end is now historical — items (1) OpenMANET and (2) Seeed's prebuilt image were both examined; the OpenMANET test drove the conclusion above, and Seeed's release (`Wvirgil123/openwrt` v2.7-dev, kernel 5.15, EKH01 pinout) is another OpenWrt-tree data point but would need the same overlay swap the Heltec HT-HC01P image needs.
+
+---
+
 ## Hardware: confirmed good
 - Chip identified by the driver over SPI: **chip ID 0x0306 = MM6108A1**
   (`MORSE_DEVICE_ID(0x6, rev 3, silicon)` in hw.h). Not a guess - the driver's

@@ -5,7 +5,20 @@
 Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Micro
 **MM6108A1**）在 Raspberry Pi 4 上以 SPI 驅動的移植紀錄、patch 與量測工具。
 
-**狀態：模組是活的、也能自報身分，但無法使用。** 讀取路徑正常，第一筆 CMD53
+> **2026-08-22 進度更新。** 問題已定位到**核心樹**層級，不是版本層級。同硬體四次實測：
+>
+> | 核心 | 樹 | 結果 |
+> |---|---|---|
+> | **6.6.138** | **OpenWrt linux-6.6**（OpenMANET 1.8.0） | ✅ `wlh0` 起在 SG 頻段 22 dBm |
+> | 6.6.51+rpt-rpi-v8 | raspberrypi/linux rpi-6.6.y（RPi OS Bookworm 2024-11-19） | ❌ 同樣的 2-bit RX 偏移、CMD53 write 掛在 `0x00004050:4`、`ret:-71` |
+> | 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y（RPi OS Bookworm 2025-05） | ❌ 逐字元同指紋 |
+> | 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y（RPi OS Trixie） | ❌ 逐字元同指紋 |
+>
+> 差別在 patch stack，不在主線。想在 Debian 上跑 HaLow：要嘛用 OpenMANET，要嘛裝非 raspberrypi/linux 的核心（主線或 OpenWrt 樹）。**我先前建議「降版本到 Bookworm 6.6.x」是錯的、收回。**
+>
+> issue #9 上有四則追加 comment，每次實測的 dmesg + 環境快照在 [`logs/`](logs/)。以下為達成此結論之前的原始移植紀錄。
+
+**狀態：模組是活的、也能自報身分，但在 Raspberry Pi OS 上無法使用。** 讀取路徑正常，第一筆 CMD53
 資料寫入永遠等不到回應。這看起來就是
 [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9)
 撞到的同一道牆 —— 那個 issue 至今未解，而且對方用的是**官方支援的硬體**

@@ -2,6 +2,37 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-22 追蹤：四次實測後的定案
+
+同一顆板子（SenseCAP M1 mPCIe 插槽 + Wio-WM6108，WM1302 HAT 佈線）、同一個驅動 release（`mm6108-2.0.1` + `./patches`）、同一份韌體與 BCF（`mm6108.bin` crc32 `0xbe7b5c8f`、`bcf_fgh100mhaamd.bin` crc32 `0x941b2a82`）。**只變動核心與其 patch stack**：
+
+| 核心 | 樹 / 打包來源 | 結果 |
+|---|---|---|
+| **6.6.138** | OpenWrt linux-6.6（OpenMANET 1.8.0）| ✅ `wlh0` 起在 SG 頻段 22 dBm |
+| 6.6.51+rpt-rpi-v8 | raspberrypi/linux rpi-6.6.y（RPi OS Bookworm 2024-11-19）| ❌ CMD63 fail → `spi_rx_lshift=2` → CMD53 write 掛在 `0x00004050:4`、`ret:-71` |
+| 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y（RPi OS Bookworm 2025-05）| ❌ 逐字元同指紋 |
+| 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y（RPi OS Trixie）| ❌ 逐字元同指紋 |
+
+**關鍵結論**：問題是 `spi-bcm2835`（或 SPI core）**在不同核心樹之間的差異**，不是版本回歸。兩條樹共用主線 stable-tag 編號，但 raspberrypi/linux 的 patch stack 弄壞了 MM6108 走 GPIO CS 的行為，OpenWrt 的沒有。**在 raspberrypi/linux 樹裡 bisect 版本是錯的策略** —— 該做的比對是兩條樹在同一 stable tag 上的 `drivers/spi/spi-bcm2835.c` 與相關 SPI-core 檔案。
+
+**實用結論**：OpenMANET 1.8.0 是目前唯一實測能用的組合。任何 stock Raspberry Pi OS 都不能推薦，直到這個 bug 在上游被修好。想要 Debian 環境 + HaLow，選項是：
+- (a) 拿 OpenMANET 當專用閘道器
+- (b) Ubuntu Server 或用主線核心的 Debian image（都未實測，但因為不走 raspberrypi/linux，理論上應該通）
+- (c) 自己編主線核心裝到 Bookworm 上
+
+**收回**：下面的「接下來值得嘗試的方向」曾經建議「Raspberry Pi OS 上換一顆 6.6.x 核心應該就能動」—— 這個假設**錯了**。**任何** `+rpt-rpi-v8` 核心測過都是壞的。
+
+**對外進度**：`MorseMicro/morse_driver` issue #9 目前有四則追加 comment（v1 初次、v2 OpenMANET 反例、v3 Bookworm 6.12.93 同指紋、v4 Bookworm 6.6.51 收回 + 重新定性為核心樹差異）。維護者到本次更新為止仍未回覆。
+
+完整證據在 `logs/`：
+- `logs/2026-08-22-openmanet-1.8.0-*.log/.txt` —— 通過的案例
+- `logs/2026-08-22-bookworm-6.6.51-*.log/.txt`
+- `logs/2026-08-22-bookworm-6.12.93-*.log/.txt`
+
+以下為達成此結論之前的原始移植紀錄。文末的「接下來值得嘗試的方向」現在已成歷史 —— (1) OpenMANET 已測、驅動了整個結論；(2) Seeed 的預建映像（`Wvirgil123/openwrt` v2.7-dev、核心 5.15、EKH01 腳位）是另一個 OpenWrt 樹的資料點候選，但和 Heltec HT-HC01P 映像一樣，都需要先把 overlay 改成 WM1302 HAT 腳位才能在 SenseCAP M1 上跑。
+
+---
+
 ## 硬體：已確認正常
 - 驅動透過 SPI 讀到的晶片識別：**chip ID 0x0306 = MM6108A1**
   （hw.h 裡的 `MORSE_DEVICE_ID(0x6, rev 3, silicon)`）。這不是推測 —— 是驅動

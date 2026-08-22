@@ -6,7 +6,20 @@ Bring-up notes, patches and measurement tools for a Seeed **Wio-WM6108** Wi-Fi
 HaLow mini-PCIe module (Quectel FGH100M-H, Morse Micro **MM6108A1**) driven over
 SPI from a Raspberry Pi 4.
 
-**Status: the radio is alive and identifies itself, but is not usable.** Reads
+> **Update 2026-08-22.** The failure is now confirmed at the kernel-*tree* level, not the version level. Four end-to-end tests on the same board:
+>
+> | Kernel | Tree | Outcome |
+> |---|---|---|
+> | **6.6.138** | **OpenWrt linux-6.6** (via OpenMANET 1.8.0) | ✅ `wlh0` up as AP on SG @ 22 dBm |
+> | 6.6.51+rpt-rpi-v8 | raspberrypi/linux rpi-6.6.y (RPi OS Bookworm 2024-11-19) | ❌ same 2-bit RX offset, CMD53 write at `0x00004050:4` fails `ret:-71` |
+> | 6.12.93+rpt-rpi-v8 | raspberrypi/linux rpi-6.12.y (RPi OS Bookworm 2025-05) | ❌ byte-identical fingerprint |
+> | 6.18.34+rpt-rpi-v8 | raspberrypi/linux rpi-6.18.y (RPi OS Trixie) | ❌ byte-identical fingerprint |
+>
+> The delta lives in the patch stack, not in mainline. For a Debian-userspace HaLow port on a Pi 4, either use OpenMANET or build a non-raspberrypi/linux kernel (mainline or OpenWrt-tree). My earlier suggestion to try older Bookworm 6.6.x images was wrong and is retracted.
+>
+> Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led to this conclusion.
+
+**Status: the radio is alive and identifies itself, but is not usable on Raspberry Pi OS.** Reads
 work; the first CMD53 data write never gets acknowledged. This appears to be the
 same wall as [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9),
 which is open and unanswered — and which was hit on the officially supported
