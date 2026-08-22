@@ -5,6 +5,31 @@
 Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Micro
 **MM6108A1**）在 Raspberry Pi 4 上以 SPI 驅動的移植紀錄、patch 與量測工具。
 
+> ## 2026-08-23 更新 —— 已解決：晶片從來沒有被切進 SPI 模式
+>
+> **根本原因。** MM6108 必須先收到約 74 個 **CS 未選取**狀態下的 clock 才會進入 SPI
+> 模式。`morse_spi_initsequence()` 想用翻轉 `SPI_CS_HIGH` 來達成，但在 `cs-gpios`
+> 控制器上 `spi_setup()` 會把那個位元立刻設回去，於是訓練 clock 是在晶片**被選取**的
+> 狀態下送出的。它從未進入 SPI 模式，之後每一筆回應都偏離位元組格線兩個 bit。
+>
+> **修正。** 改用 `SPI_NO_CS` 送那串訓練：控制器完全不碰 CS 線，GPIO 全程保持高電位。
+> 已在 `patches/` 裡，由 `spi_init_no_cs`（預設開啟）控制。
+>
+> 套用之後：偏移消失、CMD63 通過、韌體與 BCF 載入，而且 **`spi_rx_lshift` 完全不再
+> 需要** —— 讀取路徑原生就正確。
+>
+> 以同一個驅動二進位、同一塊板子、單一參數的 A/B 驗證，並在使用者空間手動控制 CS
+> 複驗。細節見
+> [`logs/2026-08-23-nocs-init-fix-environment.txt`](logs/2026-08-23-nocs-init-fix-environment.txt)。
+>
+> **這不是這片載板特有的問題。** 任何 `spi_setup()` 會對 `cs-gpios` 裝置強制
+> `SPI_CS_HIGH` 的主機都一樣 —— 那包含 mainline，以及所有帶 `950-0204` 的 rpi 核心。
+> 修正應該做在驅動裡。
+>
+> **仍未解決：** CMD53 寫入。失敗點從「`fn=1 0x00004050:4`、晶片沉默」變成
+> 「`fn=2 0x00000000:14`、晶片有回應」—— 那是韌體下載階段，比先前深得多。這是另一個
+> 問題，現在才第一次看得見。
+
 > **2026-08-22 進度更新。** 同硬體四次實測，只換作業系統映像：
 >
 > | 核心 | 樹 | 結果 |
@@ -22,8 +47,8 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 >
 > issue #9 上有四則追加 comment，每次實測的 dmesg + 環境快照在 [`logs/`](logs/)。以下為走到這一步之前的原始移植紀錄。
 
-**狀態：模組是活的、也能自報身分，但在 Raspberry Pi OS 上無法使用。** 讀取路徑正常，第一筆 CMD53
-資料寫入永遠等不到回應。這看起來就是
+**狀態：SPI 模式初始化的 bug 已解決（見上），CMD53 寫入路徑仍未解決。** 讀取路徑現在原生正常，第一筆 CMD53
+資料寫入仍等不到回應。這看起來就是
 [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9)
 撞到的同一道牆 —— 那個 issue 至今未解，而且對方用的是**官方支援的硬體**
 （Raspberry Pi 4 + 原廠 Seeed WM1302 Pi HAT + 打過 Morse patch 的核心）。

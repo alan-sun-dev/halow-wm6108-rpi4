@@ -1,0 +1,151 @@
+Captured: 2026-08-23 ~00:50 UTC+8, over SSH from the laptop
+Board:  E4:5F:01:52:55:04, serial 100000004851d437
+        Raspberry Pi 4 Model B Rev 1.4, SenseCAP M1 carrier, Wio-WM6108
+        (second unit; the first, 57:E7, is the one that also works under OpenMANET)
+Image:  Raspberry Pi OS Lite (64-bit), Debian 12 bookworm, kernel 6.6.51+rpt-rpi-v8
+Driver: MorseMicro/morse_driver tag mm6108-2.0.1 (commit 98e1936) with
+        patches/morse-driver-2.0.1-rpi-spi.patch
+
+RESULT: THE 2-BIT SKEW IS SOLVED. Root cause found, fix implemented and verified
+        by a single-parameter A/B inside one driver binary. The CMD53 write path
+        is a separate problem and is still open.
+
+
+================================================================
+ROOT CAUSE
+================================================================
+The MM6108 needs roughly 74 clock cycles with chip select *deasserted* to enter
+SPI mode. Morse state this directly in their i.MX93 porting thread:
+
+  "in order to put it into SPI mode, the host needs to toggle the SPI clock line
+   ~74 times while the CS pin is held high - ie, inverted compared to normal
+   operation."
+
+and in the same thread, of a host that failed exactly the way this one did:
+
+  "The original configuration had the chip select driven low during
+   initialization, preventing the device from responding to subsequent commands."
+
+morse_spi_initsequence() tries to do this by flipping SPI_CS_HIGH around the
+training burst. On a cs-gpios controller that does not work: spi_setup() forces
+SPI_CS_HIGH back on. Measured directly with the mode logging added to the patch:
+
+  init: mode=0x4 cs_high_default=1 train=18 flip=1
+  init: CS deasserted for training, mode=0x4     <-- expected 0x0
+  init: CS polarity restored, mode=0x4
+
+0x4 is SPI_CS_HIGH, and it is still set immediately after
+`spi->mode &= ~SPI_CS_HIGH; spi_setup(spi);`. So the 74 clocks go out with the
+chip *selected*, the chip never enters SPI mode, and every response afterwards
+sits two bit times off the byte grid -- `c0 7f` where `01 ff` is expected.
+
+That is the whole thing. Not the kernel tree, not the device tree, not the clock,
+not the pin pulls, not power sequencing -- all of which were eliminated first,
+across fifteen tests, because the mode logging that revealed it was only added
+late and its significance was not recognised until Morse's own wording turned up.
+
+
+================================================================
+THE FIX
+================================================================
+SPI_NO_CS achieves what the SPI_CS_HIGH flip cannot: the controller leaves the
+chip select line alone for the transfer, so the GPIO stays at its inactive level
+-- high -- for the whole burst.
+
+  spi->mode |= SPI_NO_CS;
+  if (spi_setup(spi) == 0 && (spi->mode & SPI_NO_CS)) {
+          memset(mspi->data, 0xFF, MM610X_BUF_SIZE);
+          morse_spi_xfer(mspi, train);      /* CS stays deasserted */
+          spi->mode = saved_mode;
+          spi_setup(spi);
+  }
+
+Guarded by a new module parameter `spi_init_no_cs`, default on, with the old
+flip retained as a fallback if the controller rejects SPI_NO_CS.
+
+Order matters, and this was the detail that hid the answer for an hour: the burst
+has to happen after reset and before any other transaction. Once the chip has
+been addressed with CS asserted it does not recover, and a later burst does not
+fix it. An earlier userspace attempt did the training *after* a first CMD0 and
+saw no improvement, which looked like a negative result and was not.
+
+
+================================================================
+VERIFICATION
+================================================================
+1. Userspace, spidev bound via driver_override, CS driven by hand with pinctrl
+   and SPI_NO_CS set so the controller could not interfere. Each trial preceded
+   by a full reset so no state carried over:
+
+     CS held HIGH throughout, CMD0     -> ff ff ff ff   (not selected, silent --
+                                                         confirms CS really is
+                                                         under manual control)
+     CS LOW, CMD0, no training         -> ff c0 7f ff   R1=0x01 @bit10  SKEWED
+     80 clocks @ CS HIGH, then CMD0    -> ff 01 ff ff   R1=0x01 @bit8   ALIGNED
+
+   Six consecutive independent runs of reset + training + CMD0: 6/6 aligned.
+
+   Full command set after a correct init, all at @bit8:
+     CMD0 correct CRC  -> 0x01   idle
+     CMD0 bad CRC      -> 0x09   idle + CRC error
+     CMD13             -> 0x05   idle + illegal command
+     CMD63             -> 0x01
+
+2. In the driver, single parameter changed, same binary, same board:
+
+     spi_init_no_cs=Y (default)
+       init: training with SPI_NO_CS, mode=0x44
+       no `morse rx` skew lines at all, CMD63 passes
+       Loaded firmware from morse/mm6108.bin, crc32 0xbe7b5c8f
+       Loaded BCF from morse/bcf_fgh100mhaamd.bin, crc32 0x941b2a82
+       log: 2026-08-23-bookworm-6.6.51-nocs-fix-dmesg.log
+
+     spi_init_no_cs=N (previous behaviour)
+       init: CS deasserted for training, mode=0x4    <-- flip silently fails
+       morse rx: c0 3f / c0 7f, CMD63 ret:-71
+       log: 2026-08-23-bookworm-6.6.51-nocs-off-dmesg.log
+
+3. `spi_rx_lshift` is no longer needed. Every earlier run required
+   spi_rx_lshift=2 even to read the chip ID; these runs pass none, and the read
+   path works natively -- 468 KB of firmware and the BCF both transfer correctly.
+
+
+================================================================
+WHAT IS STILL BROKEN
+================================================================
+CMD53 writes still fail, but the failure has changed character and is clearly a
+different problem:
+
+  before the fix   519 bytes clocked after CRC, every one 0xff. The chip was
+                   silent. b=0xffffffff.
+  after the fix    the chip answers. b=0x001f0002. The failure moved from
+                   `fn=1 0x00004050:4` to `fn=2 0x00000000:14`, which is the
+                   firmware download, so init gets substantially further.
+
+With the stock ack search, the first non-0xff byte in the 3440-byte window of
+that multi-block write is 0xeb at +261, which is not an accept token.
+
+Morse's own OpenWrt feed patch changes find_data_ack to scan for an accept token
+rather than stop at the first non-0xff byte. That is now implemented behind
+`spi_ack_scan`, default on. On this board **it changes nothing**: the scan runs
+the full 3440 bytes and finds no 0x05. Recorded because it is vendor-sanctioned
+and someone will otherwise try it again.
+
+Also fixed here: with scanning on, "no non-0xff byte in N bytes" was the wrong
+message -- reaching the end of the window in scan mode means no accept token was
+found, which says nothing about whether the chip answered. The two now read
+differently.
+
+Sweeping spi_post_write_status_bytes 0/1/2/3/6 moves how far init gets: 0 and 1
+stop at `fn=1 0x00004050:4`, while 2 and above reach the `fn=2` firmware
+download. Values above 2 make no further difference.
+
+
+================================================================
+FOR ISSUE #9
+================================================================
+This is the answer to the failure in the title of that thread, and it is not
+specific to this carrier: any host where spi_setup() forces SPI_CS_HIGH on for a
+cs-gpios device gets a training burst delivered with the chip selected, and the
+chip then never enters SPI mode. That is every mainline kernel and every rpi
+kernel carrying 950-0204. The fix belongs in the driver.

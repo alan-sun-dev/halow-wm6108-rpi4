@@ -6,6 +6,35 @@ Bring-up notes, patches and measurement tools for a Seeed **Wio-WM6108** Wi-Fi
 HaLow mini-PCIe module (Quectel FGH100M-H, Morse Micro **MM6108A1**) driven over
 SPI from a Raspberry Pi 4.
 
+> ## Update 2026-08-23 — SOLVED: the chip was never put into SPI mode
+>
+> **Root cause.** The MM6108 needs ~74 clocks with chip select **deasserted** to
+> enter SPI mode. `morse_spi_initsequence()` tries to arrange that by flipping
+> `SPI_CS_HIGH` around the training burst — but on a `cs-gpios` controller
+> `spi_setup()` forces that bit straight back on, so the burst goes out with the
+> chip *selected*. It never enters SPI mode, and every response afterwards sits
+> two bit times off the byte grid.
+>
+> **Fix.** Use `SPI_NO_CS` for the burst instead: the controller leaves the CS
+> line alone and the GPIO stays high throughout. In `patches/`, behind
+> `spi_init_no_cs` (default on).
+>
+> With it: no skew, CMD63 passes, firmware and BCF load, and **`spi_rx_lshift` is
+> no longer needed at all** — the read path works natively.
+>
+> Verified by a single-parameter A/B in one driver binary on one board, and in
+> userspace with the chip select driven by hand. Detail in
+> [`logs/2026-08-23-nocs-init-fix-environment.txt`](logs/2026-08-23-nocs-init-fix-environment.txt).
+>
+> **This is not specific to this carrier.** Any host where `spi_setup()` forces
+> `SPI_CS_HIGH` for a `cs-gpios` device has the same problem — that is mainline,
+> and every rpi kernel carrying `950-0204`. The fix belongs in the driver.
+>
+> **Still open:** CMD53 writes. The failure moved from `fn=1 0x00004050:4` with
+> the chip silent, to `fn=2 0x00000000:14` with the chip answering — the firmware
+> download, much further into init. A separate problem, now visible for the first
+> time.
+
 > **Update 2026-08-22.** Four end-to-end tests on the same board, changing only the OS image:
 >
 > | Kernel | Tree | Outcome |
@@ -23,8 +52,8 @@ SPI from a Raspberry Pi 4.
 >
 > Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led here.
 
-**Status: the radio is alive and identifies itself, but is not usable on Raspberry Pi OS.** Reads
-work; the first CMD53 data write never gets acknowledged. This appears to be the
+**Status: the SPI-mode init bug is solved (see above); the CMD53 write path is still open.** Reads
+work natively now; the first CMD53 data write is still not acknowledged. This appears to be the
 same wall as [MorseMicro/morse_driver issue #9](https://github.com/MorseMicro/morse_driver/issues/9),
 which is open and unanswered — and which was hit on the officially supported
 hardware (Raspberry Pi 4 + genuine Seeed WM1302 Pi HAT + a Morse-patched kernel).

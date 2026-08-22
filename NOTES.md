@@ -2,6 +2,101 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-23: SOLVED — the chip never entered SPI mode
+
+The 2-bit skew is fixed. Root cause, in one sentence: **the MM6108 needs ~74
+clocks with chip select deasserted to enter SPI mode, and on a `cs-gpios`
+controller `morse_spi_initsequence()` never delivers them.**
+
+Morse state the requirement directly, in their i.MX93 porting thread:
+
+> in order to put it into SPI mode, the host needs to toggle the SPI clock line
+> ~74 times while the CS pin is held high — ie, inverted compared to normal
+> operation.
+
+and, of a host that failed the same way this one did:
+
+> The original configuration had the chip select driven low during
+> initialization, preventing the device from responding to subsequent commands.
+
+`morse_spi_initsequence()` tries to arrange that by flipping `SPI_CS_HIGH` around
+the burst. It does not work, and the mode logging added to `patches/` shows why:
+
+```
+init: mode=0x4 cs_high_default=1 train=18 flip=1
+init: CS deasserted for training, mode=0x4     <-- expected 0x0
+init: CS polarity restored, mode=0x4
+```
+
+`0x4` is `SPI_CS_HIGH`, still set immediately after `spi->mode &= ~SPI_CS_HIGH;
+spi_setup(spi);` — **`spi_setup()` forces it back on for a cs-gpios device.** The
+74 clocks go out with the chip *selected*, it never enters SPI mode, and every
+response afterwards sits two bit times off the byte grid.
+
+### The fix
+
+`SPI_NO_CS` achieves what the flip cannot — the controller leaves the CS line
+alone, so the GPIO stays high for the whole burst. Guarded by `spi_init_no_cs`
+(default on), with the old flip as a fallback.
+
+**Order matters and this is what hid the answer:** the burst has to happen after
+reset and before any other transaction. Once the chip has been addressed with CS
+asserted it does not recover. An earlier userspace attempt did the training
+*after* a first CMD0, saw no change, and looked like a negative result.
+
+### Verified
+
+Userspace, CS driven by hand with `SPI_NO_CS` set so the controller could not
+interfere, full reset before each trial:
+
+| sequence | response |
+|---|---|
+| CS held HIGH throughout, CMD0 | `ff ff ff ff` — silent, confirming CS really is under manual control |
+| CS LOW, CMD0, no training | `ff c0 7f ff` — R1 @bit10, **skewed** |
+| 80 clocks @ CS HIGH, then CMD0 | `ff 01 ff ff` — R1 @bit8, **aligned** |
+
+6/6 reproducible. After a correct init, `CMD0`→`0x01`, bad CRC→`0x09`,
+`CMD13`→`0x05`, `CMD63`→`0x01`, all on the byte boundary.
+
+Then in the driver, one parameter, same binary, same board:
+
+| `spi_init_no_cs` | result |
+|---|---|
+| `Y` (default) | `training with SPI_NO_CS, mode=0x44`; no skew, CMD63 passes, firmware and BCF load |
+| `N` (old behaviour) | `CS deasserted for training, mode=0x4`; `c0 3f` / `c0 7f` returns |
+
+**`spi_rx_lshift` is no longer needed.** Every earlier run required it even to
+read the chip ID; these pass none and the read path works natively — 468 KB of
+firmware transfers correctly.
+
+### Still open: the CMD53 write path
+
+A different problem, and now visible for the first time:
+
+| | before | after |
+|---|---|---|
+| chip's answer | 519 bytes after CRC, all `0xff` — silent | answers; `b=0x001f0002` |
+| failure point | `fn=1 0x00004050:4` | `fn=2 0x00000000:14` — the firmware download, much further in |
+
+Morse's OpenWrt-only `find_data_ack` change (scan for an accept token instead of
+stopping at the first non-`0xff` byte) is implemented behind `spi_ack_scan`,
+default on. **On this board it changes nothing** — the scan runs the full 3440
+bytes and finds no `0x05`. Recorded because it is vendor-sanctioned and would
+otherwise be tried again.
+
+### Why it took fifteen eliminations
+
+Every earlier hypothesis was about the bus — kernel tree, device tree, clock,
+pulls, power sequencing, the driver's own padding. The answer was that the chip
+was in the wrong *mode* the whole time, and nothing about the bus could reveal
+that. The mode logging that exposes it was added late, and its significance only
+became clear once Morse's own wording turned up in a forum thread about a
+completely different SoC.
+
+Full detail: `logs/2026-08-23-nocs-init-fix-environment.txt`.
+
+---
+
 ## 2026-08-23: fourteen eliminations, and where this line ends
 
 The device tree on the failing board now matches the working one **property for
@@ -33,6 +128,8 @@ MMC-SPI commands are self-framing on the `01` start bit and need no byte
 alignment — which is exactly why it can validate our CRC7. Adding preamble does
 not move that, because the spurious clocks come first. **The observation is what
 the hypothesis predicts, not evidence against it.**
+
+*(Note: this was not the answer either — the actual cause is in the top section of this file.)*
 
 So "extra clocks at CS assert" is live again, and it is a host-side behaviour,
 which fits the one stubborn fact: this is OS-dependent on identical hardware. The

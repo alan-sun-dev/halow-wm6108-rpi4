@@ -2,6 +2,94 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-23：已解決 —— 晶片從來沒有進入 SPI 模式
+
+2-bit 偏移修好了。根本原因一句話：**MM6108 必須先收到約 74 個「CS 未選取」狀態下的
+clock 才會進入 SPI 模式，而在 `cs-gpios` 控制器上，`morse_spi_initsequence()` 從來
+沒有真的送出那些 clock。**
+
+Morse 在他們的 i.MX93 移植討論串裡直接寫明了這個要求：
+
+> in order to put it into SPI mode, the host needs to toggle the SPI clock line
+> ~74 times while the CS pin is held high — ie, inverted compared to normal
+> operation.
+
+以及，對一台失敗方式與我們相同的主機：
+
+> The original configuration had the chip select driven low during
+> initialization, preventing the device from responding to subsequent commands.
+
+`morse_spi_initsequence()` 想用翻轉 `SPI_CS_HIGH` 來達成這件事。它沒有用，而
+`patches/` 裡加的 mode 記錄顯示了原因：
+
+```
+init: mode=0x4 cs_high_default=1 train=18 flip=1
+init: CS deasserted for training, mode=0x4     ← 預期是 0x0
+init: CS polarity restored, mode=0x4
+```
+
+`0x4` 就是 `SPI_CS_HIGH`，在 `spi->mode &= ~SPI_CS_HIGH; spi_setup(spi);` 之後**它還
+在**——**`spi_setup()` 對 `cs-gpios` 裝置會把它強制設回去。** 那 74 個 clock 因此是在
+晶片**被選取**的狀態下送出的，它從未進入 SPI 模式，之後每一筆回應都偏離位元組格線
+兩個 bit。
+
+### 修正
+
+`SPI_NO_CS` 做得到翻轉做不到的事 —— 控制器完全不碰 CS 線，GPIO 在整段訓練期間保持
+高電位。用 `spi_init_no_cs`（預設開啟）控制，原本的翻轉保留為後備。
+
+**順序是關鍵，而這正是答案藏了一小時的原因：** 訓練必須在 reset 之後、任何其他交易
+之前。一旦晶片被以 CS 選取的方式接觸過，就救不回來了。我先前一次使用者空間的嘗試把
+訓練放在第一次 CMD0 **之後**，沒有改善，看起來像否定結果 —— 其實不是。
+
+### 驗證
+
+使用者空間，手動控制 CS 並設 `SPI_NO_CS` 讓控制器無法干擾，每次試驗前都完整 reset：
+
+| 序列 | 回應 |
+|---|---|
+| CS 全程 HIGH 送 CMD0 | `ff ff ff ff` —— 沉默，證明 CS 確實在手動控制下 |
+| CS LOW 送 CMD0，無訓練 | `ff c0 7f ff` —— R1 @bit10，**偏移** |
+| CS HIGH 打 80 clock 後送 CMD0 | `ff 01 ff ff` —— R1 @bit8，**對齊** |
+
+6/6 可重現。正確初始化之後，`CMD0`→`0x01`、錯誤 CRC→`0x09`、`CMD13`→`0x05`、
+`CMD63`→`0x01`，全部落在位元組邊界上。
+
+接著在驅動裡，同一個二進位、同一塊板子、只差一個參數：
+
+| `spi_init_no_cs` | 結果 |
+|---|---|
+| `Y`（預設） | `training with SPI_NO_CS, mode=0x44`；無偏移、CMD63 通過、韌體與 BCF 載入 |
+| `N`（原行為） | `CS deasserted for training, mode=0x4`；`c0 3f` / `c0 7f` 回來了 |
+
+**`spi_rx_lshift` 不再需要。** 先前每一次執行連讀 chip ID 都得靠它；現在完全不加，
+讀取路徑原生正確 —— 468 KB 的韌體傳輸無誤。
+
+### 仍未解決：CMD53 寫入路徑
+
+這是另一個問題，而且現在才第一次看得清楚：
+
+| | 修正前 | 修正後 |
+|---|---|---|
+| 晶片的回應 | CRC 後 519 個位元組全 `0xff` —— 沉默 | **有回應**；`b=0x001f0002` |
+| 失敗點 | `fn=1 0x00004050:4` | `fn=2 0x00000000:14` —— 韌體下載階段，走得深得多 |
+
+Morse 只放在 OpenWrt 的 `find_data_ack` 修改（掃描到 accept token 才停，而不是遇到
+第一個非 `0xff` 就放棄）已實作在 `spi_ack_scan` 之下，預設開啟。**在這塊板子上它毫無
+作用** —— 掃完 3440 個位元組都找不到 `0x05`。記下來是因為它有原廠背書，否則會有人再
+試一次。
+
+### 為什麼繞了十五個消除
+
+先前每一個假設都是關於**匯流排**的 —— 核心樹、device tree、時脈、上下拉、供電時序、
+驅動自己的 padding。而答案是晶片從頭到尾都處在**錯誤的模式**，任何關於匯流排的檢查都
+照不到那裡。揭露它的 mode 記錄加得很晚，而它的意義要等到 Morse 自己的說法出現在一個
+完全不同 SoC 的討論串裡，才變得清楚。
+
+完整細節：`logs/2026-08-23-nocs-init-fix-environment.txt`。
+
+---
+
 ## 2026-08-23：十四項消除，以及這條路線的終點
 
 失敗那塊板子的 device tree 現在**逐項、而且同時**與正常那台一致 —— 單一
@@ -28,6 +116,8 @@ RUN 5 在同一次 CS assertion 內於命令前墊 0…32 個 `0xff`，每次都
 `01` start bit 自我定界、不需要位元組對齊 —— **這正是它能驗證我們 CRC7 的原因**。
 墊再多 `0xff` 也不會改變，因為那兩個多餘的 clock 在最前面。**我們的觀察正是這個假設
 會預測的結果，而不是反證。**
+
+*（註：這條後來也不是答案 —— 真正的原因見本檔最上面那一節。）*
 
 所以「CS assert 時多出 clock」這條線是活的，而且它是主機側行為 —— 符合那個最頑固的
 事實：同一組硬體上，這件事與作業系統相關。量測本身成立，錯的只是結論。

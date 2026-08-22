@@ -1,0 +1,66 @@
+[ 1809.554291] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 1809.554470] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[ 1809.554502] Resetting Morse Chip
+[ 1809.574510] Done
+[ 1809.654526] morse_spi spi0.0: init: mode=0x4 cs_high_default=1 train=18 flip=1
+[ 1809.654534] morse_spi spi0.0: init: training with SPI_NO_CS, mode=0x44
+[ 1809.654568] morse_spi spi0.0: init: mode restored to 0x4
+[ 1809.654707] uaccess char driver major number is 236
+[ 1809.654867] morse_io: Device node '/dev/morse_io' created successfully
+[ 1809.655784] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[ 1809.655893] morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+[ 1810.335694] morse_spi_find_data_ack failed: no accept token in the 3440 bytes clocked after CRC
+[ 1810.335713] morse ackwin: 00000000: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+[ 1810.335717] morse ackwin: 00000010: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+[ 1810.335721] morse_spi_cmd53_write failed
+[ 1810.335723] morse w53: 00000000: ff ff ff ff ff ff ff ff 00 00 ff ff ff ff ff ff
+[ 1810.335726] morse w53: 00000010: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+[ 1810.335729] morse w53: 00000020: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+[ 1810.335731] morse w53: 00000030: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+[ 1810.335737] morse_spi spi0.0: spi: cmd53_write fn=2 0x00000000:14 r=0x10050002 b=0x001f0002 (ret:-71)
+[ 1810.335745] morse_spi spi0.0: morse_spi_dm_write failed -71
+[ 1810.335787] morse_spi_find_data_ack failed: no accept token in the 11 bytes clocked after CRC
+[ 1810.335791] morse ackwin: 00000000: 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.335794] morse_spi_cmd53_write failed
+[ 1810.335796] morse w53: 00000000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.335799] morse w53: 00000010: 00 00 00 00 00 00 00 00 00 00
+[ 1810.335801] morse_spi spi0.0: spi: cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0x001f0002 (ret:-71)
+[ 1810.335807] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 1810.755467] morse_spi_find_data_ack failed: no accept token in the 11 bytes clocked after CRC
+[ 1810.755478] morse ackwin: 00000000: 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.755482] morse_spi_cmd53_write failed
+[ 1810.755485] morse w53: 00000000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.755487] morse w53: 00000010: 00 00 00 00 00 00 00 00 00 00
+[ 1810.755493] morse_spi spi0.0: spi: cmd53_write fn=1 0x0000406c:4 r=0x10050002 b=0xffffffff (ret:-71)
+[ 1810.755500] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 1810.755530] morse_spi_find_data_ack failed: no accept token in the 11 bytes clocked after CRC
+[ 1810.755533] morse ackwin: 00000000: 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.755536] morse_spi_cmd53_write failed
+[ 1810.755538] morse w53: 00000000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.755541] morse w53: 00000010: 00 00 00 00 00 00 00 00 00 00
+[ 1810.755544] morse_spi spi0.0: spi: cmd53_write fn=1 0x00004d40:4 r=0x10050002 b=0xffffffff (ret:-71)
+[ 1810.755549] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 1810.755579] morse_spi_find_data_ack failed: no accept token in the 11 bytes clocked after CRC
+[ 1810.755583] morse ackwin: 00000000: 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.755585] morse_spi_cmd53_write failed
+[ 1810.755587] morse w53: 00000000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[ 1810.755590] morse w53: 00000010: 00 00 00 00 00 00 00 00 00 00
+[ 1810.755593] morse_spi spi0.0: spi: cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0xffffffff (ret:-71)
+[ 1810.755598] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 1811.171509] morse_spi_find_data_ack failed: no accept token in the 11 bytes clocked after CRC
+[ 1811.171526] morse ackwin: 00000000: 00 00 00 00 00 00 00 00 00 00 00
+[ 1811.171530] morse_spi_cmd53_write failed
+[ 1811.171533] morse w53: 00000000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[ 1811.171535] morse w53: 00000010: 00 00 00 00 00 00 00 00 00 00
+[ 1811.171541] morse_spi spi0.0: spi: cmd53_write fn=1 0x0000406c:4 r=0x10050002 b=0xffffffff (ret:-71)
+[ 1811.171549] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 1811.171580] morse_spi_find_data_ack failed: no accept token in the 11 bytes clocked after CRC
+[ 1811.171583] morse ackwin: 00000000: 00 00 00 00 00 00 00 00 00 00 00
+[ 1811.171586] morse_spi_cmd53_write failed
+[ 1811.171588] morse w53: 00000000: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+[ 1811.171591] morse w53: 00000010: 00 00 00 00 00 00 00 00 00 00
+[ 1811.171594] morse_spi spi0.0: spi: cmd53_write fn=1 0x00004d40:4 r=0x10050002 b=0xffffffff (ret:-71)
+[ 1811.171599] morse_spi spi0.0: morse_spi_reg32_write failed (errno=-71)
+[ 1811.171603] morse_spi spi0.0: morse_firmware_prepare failed: -5
+[ 1811.171904] morse_spi_probe: probe failed (ret:-5)
+[ 1811.171910] morse_spi: probe of spi0.0 failed with error -5

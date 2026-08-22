@@ -1,0 +1,16 @@
+[ 1821.379471] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 1821.379652] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[ 1821.379683] Resetting Morse Chip
+[ 1821.399691] Done
+[ 1821.479708] morse_spi spi0.0: init: mode=0x4 cs_high_default=1 train=18 flip=1
+[ 1821.479718] morse_spi spi0.0: init: CS deasserted for training, mode=0x4
+[ 1821.479750] morse_spi spi0.0: init: CS polarity restored, mode=0x4
+[ 1821.479777] morse rx: 00000000: c0 3f ff ff ff ff ff ff ff ff ff ff
+[ 1821.479800] morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+[ 1821.479822] morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+[ 1821.479844] morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+[ 1821.479866] morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+[ 1821.479888] morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+[ 1821.479891] morse_spi spi0.0: morse_spi_probe: failed to init SPI with CMD63 (ret:-71)
+[ 1821.479950] morse_spi_probe: probe failed (ret:-71)
+[ 1821.479954] morse_spi: probe of spi0.0 failed with error -71

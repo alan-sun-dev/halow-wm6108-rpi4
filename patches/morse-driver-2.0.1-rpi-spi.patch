@@ -1,8 +1,8 @@
 diff --git a/spi.c b/spi.c
-index e5facbd..4b2b7c4 100644
+index e5facbd..8ee66f6 100644
 --- a/spi.c
 +++ b/spi.c
-@@ -230,6 +230,31 @@ static int morse_spi_setup(struct spi_device *spi, u32 max_speed_hz)
+@@ -230,6 +230,41 @@ static int morse_spi_setup(struct spi_device *spi, u32 max_speed_hz)
  	return ret;
  }
  
@@ -31,10 +31,20 @@ index e5facbd..4b2b7c4 100644
 +MODULE_PARM_DESC(spi_init_cs_flip,
 +		 "Flip SPI_CS_HIGH around the init training burst so it goes out with CS deasserted");
 +
++static bool spi_ack_scan = true;
++module_param(spi_ack_scan, bool, 0644);
++MODULE_PARM_DESC(spi_ack_scan,
++		 "Scan the ack window for an accept token instead of stopping at the first non-0xff byte");
++
++static bool spi_init_no_cs = true;
++module_param(spi_init_no_cs, bool, 0644);
++MODULE_PARM_DESC(spi_init_no_cs,
++		 "Use SPI_NO_CS for the init training burst so it really goes out with CS deasserted");
++
  /* Hack to shift bits for problematic SPI controllers */
  static void morse_shift_buffer(u8 *data, unsigned int len, u8 right_shift_bits)
  {
-@@ -248,6 +273,30 @@ static void morse_shift_buffer(u8 *data, unsigned int len, u8 right_shift_bits)
+@@ -248,6 +283,30 @@ static void morse_shift_buffer(u8 *data, unsigned int len, u8 right_shift_bits)
  	}
  }
  
@@ -65,7 +75,7 @@ index e5facbd..4b2b7c4 100644
  static int morse_spi_xfer(struct morse_spi *mspi, unsigned int len)
  {
  	int ret = 0;
-@@ -261,11 +310,18 @@ static int morse_spi_xfer(struct morse_spi *mspi, unsigned int len)
+@@ -261,11 +320,18 @@ static int morse_spi_xfer(struct morse_spi *mspi, unsigned int len)
  	}
  
  	mspi->t.len = len;
@@ -84,7 +94,7 @@ index e5facbd..4b2b7c4 100644
  	return ret;
  }
  
-@@ -288,20 +344,76 @@ static void morse_spi_initsequence(struct morse_spi *mspi)
+@@ -288,20 +354,123 @@ static void morse_spi_initsequence(struct morse_spi *mspi)
  {
  	struct spi_device *spi = mspi->spi;
  
@@ -120,6 +130,53 @@ index e5facbd..4b2b7c4 100644
 +	 */
 +	dev_info(&spi->dev, "init: mode=0x%x cs_high_default=%d train=%u flip=%d\n",
 +		 spi->mode, cs_high_default, train, spi_init_cs_flip);
++
++	/*
++	 * The chip needs ~74 clocks with CS *deasserted* to enter SPI mode --
++	 * Morse state this explicitly in their i.MX93 porting thread, and note
++	 * that a chip select left asserted during init stops the device
++	 * responding to subsequent commands.
++	 *
++	 * Flipping SPI_CS_HIGH does not achieve that on a cs-gpios controller.
++	 * spi_setup() forces SPI_CS_HIGH back on, measured here: spi->mode reads
++	 * 0x4 before the flip, after the flip, and after the restore. The burst
++	 * therefore goes out with the chip *selected*, the chip never enters SPI
++	 * mode, and every response afterwards sits two bit times off the byte
++	 * grid -- `c0 7f` where `01 ff` is expected.
++	 *
++	 * SPI_NO_CS does achieve it: the controller leaves the chip select line
++	 * alone for the transfer, so the GPIO stays at its inactive level for
++	 * the whole burst. Verified from userspace against the same board: with
++	 * the burst delivered this way the response lands on the byte boundary,
++	 * 6 runs out of 6, and CMD0/CMD13/CMD63 all return correct R1 values.
++	 *
++	 * Order matters. This has to happen after reset and before any other
++	 * transaction; once the chip has been addressed with CS asserted it does
++	 * not recover, and a later burst does not fix it.
++	 */
++	if (spi_init_no_cs && train) {
++		const u32 saved_mode = spi->mode;
++
++		spi->mode |= SPI_NO_CS;
++		if (spi_setup(spi) == 0 && (spi->mode & SPI_NO_CS)) {
++			dev_info(&spi->dev, "init: training with SPI_NO_CS, mode=0x%x\n",
++				 spi->mode);
++			memset(mspi->data, 0xFF, MM610X_BUF_SIZE);
++			morse_spi_xfer(mspi, train);
++
++			spi->mode = saved_mode;
++			if (spi_setup(spi) != 0)
++				dev_err(&spi->dev, "can't restore mode after training\n");
++			else
++				dev_info(&spi->dev, "init: mode restored to 0x%x\n", spi->mode);
++			return;
++		}
++		dev_warn(&spi->dev,
++			 "init: SPI_NO_CS not honoured (mode=0x%x), falling back\n",
++			 spi->mode);
++		spi->mode = saved_mode;
++		spi_setup(spi);
++	}
 +
 +	if (!spi_init_cs_flip) {
 +		if (train) {
@@ -165,7 +222,7 @@ index e5facbd..4b2b7c4 100644
  		}
  	}
  }
-@@ -348,7 +460,10 @@ static int morse_spi_find_response(struct morse_spi *mspi, u8 *data, u8 *end, u8
+@@ -348,7 +517,10 @@ static int morse_spi_find_response(struct morse_spi *mspi, u8 *data, u8 *end, u8
  	}
  
  	if (*cp != 0x00) {
@@ -177,21 +234,42 @@ index e5facbd..4b2b7c4 100644
  		if (resp)
  			*resp = NULL;
  		return -EPROTO;
-@@ -480,22 +595,39 @@ exit:
+@@ -480,22 +652,58 @@ exit:
  static u8 *morse_spi_find_data_ack(struct morse_spi *mspi, u8 *data, u8 *end)
  {
  	u8 *cp = data;
 +	u8 *dump = data;
 +	const ptrdiff_t window = end - data;
  
- 	while (cp < end && *cp == 0xff)
- 		cp++;
+-	while (cp < end && *cp == 0xff)
+-		cp++;
++	/*
++	 * Stock stops at the first byte that is not 0xff and rejects it if it is
++	 * not an accept token. Morse's own OpenWrt feed patch
++	 * (003_fix_spi_inter_transaction_delay / ekh01-spi-fix) scans past
++	 * anything that is not an accept token instead, and this board needs
++	 * that: after the SPI_NO_CS init fix the chip answers, but the first
++	 * non-0xff byte in a multi-block firmware write is 0xeb, not 0x05.
++	 */
++	if (spi_ack_scan) {
++		while (cp < end && SPI_MMC_RESPONSE_CODE(*cp) != SPI_RESPONSE_ACCEPTED)
++			cp++;
++	} else {
++		while (cp < end && *cp == 0xff)
++			cp++;
++	}
  
 -	if (cp == end)
 +	if (cp == end) {
-+		MORSE_PR_ERR(FEATURE_ID_SPI,
-+			     "%s failed: no non-0xff byte in the %td bytes clocked after CRC\n",
-+			     __func__, window);
++		/*
++		 * These two are not the same failure and must not read the same.
++		 * In scan mode reaching the end means no accept token was found,
++		 * which says nothing about whether the chip answered at all.
++		 */
++		MORSE_PR_ERR(FEATURE_ID_SPI, "%s failed: %s in the %td bytes clocked after CRC\n",
++			     __func__,
++			     spi_ack_scan ? "no accept token" : "no non-0xff byte",
++			     window);
  		goto exit;
 +	}
  
@@ -220,7 +298,7 @@ index e5facbd..4b2b7c4 100644
  	return NULL;
  }
  
-@@ -668,7 +800,7 @@ static int morse_spi_cmd53_write(struct morse_spi *mspi, u8 fn, u32 address, u8
+@@ -668,7 +876,7 @@ static int morse_spi_cmd53_write(struct morse_spi *mspi, u8 fn, u32 address, u8
  	cp += 4;
  
  	/* Allow 4 bytes to get 0xFF (i.e MISO ready) */
@@ -229,7 +307,7 @@ index e5facbd..4b2b7c4 100644
  
  	data_size = block ? MMC_SPI_BLOCKSIZE : count;
  	for (i = 0; i < (block ? count : 1); i++, data += MMC_SPI_BLOCKSIZE) {
-@@ -748,6 +880,8 @@ static int morse_spi_cmd53_write(struct morse_spi *mspi, u8 fn, u32 address, u8
+@@ -748,6 +956,8 @@ static int morse_spi_cmd53_write(struct morse_spi *mspi, u8 fn, u32 address, u8
  
  exit:
  	MORSE_PR_ERR(FEATURE_ID_SPI, "%s failed\n", __func__);
@@ -238,7 +316,7 @@ index e5facbd..4b2b7c4 100644
  	return -EPROTO;
  }
  
-@@ -1516,7 +1650,14 @@ static int morse_spi_probe(struct spi_device *spi)
+@@ -1516,7 +1726,14 @@ static int morse_spi_probe(struct spi_device *spi)
  #ifdef SPI_CONTROLLER_ENABLE_CS_GPIOD
  	spi->controller->flags |= SPI_CONTROLLER_ENABLE_CS_GPIOD;
  #else
