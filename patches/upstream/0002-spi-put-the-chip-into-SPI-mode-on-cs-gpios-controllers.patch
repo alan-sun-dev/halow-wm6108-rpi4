@@ -1,0 +1,81 @@
+From: Alan Sun <shou.shih@gmail.com>
+Subject: [PATCH 2/3] spi: put the chip into SPI mode on cs-gpios controllers
+
+The MM6108 needs roughly 74 clock cycles with chip select deasserted before it
+will enter SPI mode. morse_spi_initsequence() arranges that by flipping
+SPI_CS_HIGH around the training burst.
+
+That does not work when the controller uses GPIO chip selects. spi_setup()
+forces SPI_CS_HIGH back on for such a device, so that gpiolib applies the
+active-low inversion exactly once, and the flip becomes a no-op. Logging
+spi->mode through the function on a Raspberry Pi 4 (spi-bcm2835, cs-gpios,
+kernel 6.6.51) shows it directly:
+
+  init: mode=0x4 cs_high_default=1
+  init: CS deasserted for training, mode=0x4     <-- expected 0x0
+  init: CS polarity restored, mode=0x4
+
+The training clocks therefore go out with the chip selected, it never enters SPI
+mode, and every response afterwards sits two bit times off the byte grid -- c0 7f
+where 01 ff is expected -- so probe fails at CMD63 with -EPROTO. The symptom
+looks like a signal-integrity or hardware fault and is neither.
+
+Use SPI_NO_CS for the burst instead: the controller leaves the chip select line
+alone, so it stays at its inactive level for the whole transfer. Keep the old
+flip as a fallback for controllers that do not support SPI_NO_CS.
+
+Verified on an MM6108 over spi-bcm2835 by toggling only this behaviour in one
+driver binary: with SPI_NO_CS the offset is gone, CMD63 passes and firmware and
+BCF load with no bit-shift compensation of any kind; without it the offset
+returns.
+
+This affects any host where the SPI core forces SPI_CS_HIGH for a cs-gpios
+device. Measured on 6.6.51+rpt-rpi-v8; by inspection the same applies to
+mainline and to raspberrypi/linux kernels carrying the equivalent patch, but
+only the one kernel was tested.
+
+Note the ordering requirement, which is easy to miss: the burst has to happen
+after reset and before any other transaction. Once the chip has been addressed
+with CS asserted it does not recover, and a later burst does not fix it.
+
+---
+diff --git a/spi.c b/spi.c
+index e5facbd..ba6d6d4 100644
+--- a/spi.c
++++ b/spi.c
+@@ -288,6 +288,35 @@ static void morse_spi_initsequence(struct morse_spi *mspi)
+ {
+ 	struct spi_device *spi = mspi->spi;
+ 
++	const u32 saved_mode = spi->mode;
++
++	/*
++	 * SPI_NO_CS asks the controller to leave the chip select line alone for
++	 * the transfer, which is exactly what this burst needs.
++	 *
++	 * Flipping SPI_CS_HIGH does not achieve it when the controller uses GPIO
++	 * chip selects. spi_setup() forces SPI_CS_HIGH back on for such a device
++	 * so that gpiolib applies the active-low inversion exactly once, so the
++	 * flip is a no-op: the training clocks go out with the chip *selected*,
++	 * the chip never enters SPI mode, and every response afterwards sits two
++	 * bit times off the byte grid.
++	 */
++	spi->mode |= SPI_NO_CS;
++	if (spi_setup(spi) == 0 && (spi->mode & SPI_NO_CS)) {
++		/* We will send only 0xFF for training */
++		memset(mspi->data, 0xFF, MM610X_BUF_SIZE);
++		morse_spi_xfer(mspi, 18);
++
++		spi->mode = saved_mode;
++		if (spi_setup(spi) != 0)
++			dev_err(&spi->dev, "can't restore SPI mode after init\n");
++		return;
++	}
++
++	/* Controller does not support SPI_NO_CS; fall back to flipping. */
++	spi->mode = saved_mode;
++	spi_setup(spi);
++
+ 	spi->mode |= SPI_CS_HIGH;
+ 	if (spi_setup(spi) != 0) {
+ 		/* Just warn; most cards work without it. */

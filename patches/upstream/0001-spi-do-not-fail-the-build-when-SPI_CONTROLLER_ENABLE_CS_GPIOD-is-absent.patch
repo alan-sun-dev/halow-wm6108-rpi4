@@ -1,0 +1,45 @@
+From: Alan Sun <shou.shih@gmail.com>
+Subject: [PATCH 1/3] spi: do not fail the build when SPI_CONTROLLER_ENABLE_CS_GPIOD is absent
+
+SPI_CONTROLLER_ENABLE_CS_GPIOD is a vendor-kernel flag that does not exist
+upstream. The #else branch raises a #warning, and ccflags-y carries -Werror, so
+it is fatal rather than advisory and the driver does not build at all:
+
+  spi.c:1562:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not
+  defined" [-Werror=cpp]
+  cc1: all warnings being treated as errors
+
+This is not limited to mainline. raspberrypi/linux 6.6.51+rpt-rpi-v8 does not
+define the macro either, so the released driver cannot be built against a
+current Raspberry Pi OS without editing the source first.
+
+Nothing needs to be done in that branch. A kernel without the flag already
+forces SPI_CS_HIGH for a cs-gpios device and lets gpiolib apply the active-low
+inversion exactly once, which is the behaviour the flag existed to obtain.
+Replace the #warning with a comment saying so.
+
+---
+diff --git a/spi.c b/spi.c
+index e5facbd..31559da 100644
+--- a/spi.c
++++ b/spi.c
+@@ -1516,7 +1516,18 @@ static int morse_spi_probe(struct spi_device *spi)
+ #ifdef SPI_CONTROLLER_ENABLE_CS_GPIOD
+ 	spi->controller->flags |= SPI_CONTROLLER_ENABLE_CS_GPIOD;
+ #else
+-#warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined"
++	/*
++	 * SPI_CONTROLLER_ENABLE_CS_GPIOD is a vendor-kernel flag and does not
++	 * exist upstream. Kernels without it already force SPI_CS_HIGH for a
++	 * cs-gpios device and let gpiolib apply the active-low inversion once,
++	 * which is the behaviour the flag was there to obtain, so there is
++	 * nothing to do here.
++	 *
++	 * This was a #warning, and ccflags-y carries -Werror, so it was fatal
++	 * rather than advisory: the driver did not build at all on such a
++	 * kernel -- including raspberrypi/linux 6.6.51, which does not define
++	 * the macro either.
++	 */
+ #endif
+ #endif
+ 	morse_spi_xfer_init(mspi);
