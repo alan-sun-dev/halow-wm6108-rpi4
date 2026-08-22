@@ -249,6 +249,12 @@ Same board, same driver, `mm6108.bin` crc32 `0xbe7b5c8f`, `bcf_fgh100mhaamd.bin`
 | the 2-bit skew is caused by the init training burst | 7 runs sweeping the burst length (0/2/17/18/20 bytes) and suppressing the CS flip entirely | **eliminated** — response is `c0 3f` then `c0 7f` in all seven, byte-identical. With no training clocks and no `spi_setup()` calls at all, the very first response after reset is already misframed. |
 | GPIO8 is driven twice (ALT0 native CE0 *and* GPIO CS) | `/sys/kernel/debug/pinctrl/*/pinmux-pins` | **eliminated** — pins 7/8 `gpio_out`, pins 9/10/11 `alt0`, nothing claimed twice. |
 | the skew is clock-dependent | `spi_clock_speed=` 400 kHz / 1 / 20 / **50 MHz** | **eliminated** — identical at every rate, including the 50 MHz the working OpenMANET image runs at. |
+| the driver is involved at all | bound `spidev` to the existing `spi0.0` with `driver_override` and drove the bus from userspace with no driver loaded | **eliminated** — `CMD0 → R1=0x01 @bit10`, `bad CRC → 0x09`, `CMD13 → 0x05`, all at the same 2-bit offset. |
+| the controller mis-samples the first bits of a transfer | swept 0, 1, 2, 3, 4, 8, 16, 32 bytes of `0xff` clocked before the command *inside the same CS assertion* | **eliminated** — `@bit10` in every single case. |
+
+That last one seems worth spelling out: the offset does not depend on where the command sits in the transfer. So it is not a start-of-transfer sampling artefact on the host side — the chip's response is genuinely two bit-times late relative to the command's byte grid, wherever that command appears.
+
+One more observation I can't explain, recorded in case it means something to you: over spidev, **modes 0, 2 and 3 return byte-identical data** (`ff c0 7f …`, seven-zero run at bit 10) while mode 1 is unstable. Modes 0 and 3 behaving alike is expected, but modes 1 and 2 both sample on falling edges and ought to behave alike too, and they don't.
 
 Also worth recording: the default ack search window is **11 bytes**, not the 71 I quoted in my first post — 71 was the length of a hex dump, not the window.
 
@@ -270,8 +276,12 @@ On this board it is not the cause of the skew — eliminated in section 3, the s
 
 ### 5. Where this leaves it
 
-The write path is dead in a way that padding cannot explain: 519 bytes clocked after the CRC and the chip drives `0xff` throughout. The 2-bit RX skew is still unexplained, and is now known to be independent of the kernel tree, the driver's init sequence, the pin mux, and the clock rate — on the same board where the OpenMANET image needs no compensation at all.
+The write path is dead in a way that padding cannot explain: 519 bytes clocked after the CRC and the chip drives `0xff` throughout. The 2-bit RX skew is still unexplained, and is now known to be independent of the kernel tree, the driver, the driver's init sequence, the pin mux, the clock rate, and the command's position within a transfer — on the same board where the OpenMANET image needs no compensation at all.
 
-Two things I have not done yet: booting the OpenMANET card to dump its live device tree and pin mux for a direct comparison, and measuring the skew through `/dev/spidev0.0` on this kernel with the driver out of the picture entirely. Both are queued.
+What is left is a straightforward disagreement between the chip and the host about where byte boundaries are. I don't have a mechanism for it, and I've run out of variables I can move from this side.
+
+The one experiment I have not done is the direct A/B: boot the OpenMANET card and run the same userspace probe on it, plus dump its live device tree and pin mux. That needs a physical card swap and is next.
+
+If any of this suggests something checkable on the chip side — an output-delay or drive-strength field in the BCF, a required init step this host is skipping — I'm happy to run it. The board is set up for quick turnaround.
 
 Full method, per-run logs and the instrumented patch: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — the retest logs are `logs/2026-08-22-bookworm-6.6.51-retest-*`.

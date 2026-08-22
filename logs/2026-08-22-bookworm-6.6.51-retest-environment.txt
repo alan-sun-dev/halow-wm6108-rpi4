@@ -1,9 +1,10 @@
 Captured: 2026-08-22 (~20:35-20:40 UTC+8), run over SSH from the laptop
 Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
 Image: Raspberry Pi OS Lite (64-bit), Debian 12 (bookworm), dated 2024-11-19
-Result: FOUR HYPOTHESES ELIMINATED, none of them fixed the failure.
+Result: FIVE HYPOTHESES ELIMINATED, none of them fixed the failure.
         The CMD53 write still dies at 0x00004050:4 with ret:-71, and the
         2-bit RX skew is unchanged by everything tested here.
+        Runs 0-4 go through the driver; run 5 takes the driver out entirely.
 
 === uname ===
 Linux Sensecap 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
@@ -121,16 +122,72 @@ RUN 4 — is the skew clock-dependent on this kernel?   ELIMINATED
   overlay's 10 MHz is not the variable either.
 
 
-================================================================
-WHERE THIS LEAVES IT
-================================================================
-Same board, same wiring, SPI source byte-identical between the two kernel trees,
-pinmux correct, clock irrelevant, driver init sequence irrelevant. The skew is
-present under Raspberry Pi OS and absent under OpenMANET.
+(RUN 5, appended below, was written after this section and answers point (b).)
 
-Not yet done:
-  (a) boot the OpenMANET card and dump its live DT + pinmux for comparison --
-      needs a physical card swap;
-  (b) measure the skew on this kernel with the driver entirely out of the
-      picture, via /dev/spidev0.0 -- needs config.txt edited to drop the
-      overlay, and a reboot.
+
+================================================================
+RUN 5 — the skew with the driver entirely out of the picture
+================================================================
+  log: 2026-08-22-bookworm-6.6.51-retest-spidev.txt
+
+  No reboot and no config.txt change were needed. tools/mmcspi.py's docstring
+  gives the trick: bind spidev to the existing spi0.0 with driver_override, so
+  the overlay stays in place and GPIO18 slot power and the GPIO17 pull-up are
+  preserved.
+
+      sudo rmmod morse
+      echo spidev | sudo tee /sys/bus/spi/devices/spi0.0/driver_override
+      echo spi0.0 | sudo tee /sys/bus/spi/drivers/spidev/bind
+
+  Note: mmcspi.py's reset_module() calls gpioset with libgpiod **v2** syntax
+  (-c/--hold-period/-t0). This image ships libgpiod v1.6.3, where that fails
+  silently -- sh() captures output and discards it -- so the reset pulse never
+  happens and only the `pinctrl set 17 ip pu` line takes effect. Pulse RESET_N
+  by hand first:
+      sudo pinctrl set 17 op dl; sleep 0.05; sudo pinctrl set 17 ip pu
+
+  RESULT — the skew is present with no driver loaded, on this kernel:
+      CMD0  correct CRC   R1=0x01 @bit10   raw=ff c0 7f ff ff ff
+      CMD0  bad CRC       R1=0x09 @bit10   raw=ff c2 7f ff ff ff
+      CMD13               R1=0x05 @bit10   raw=ff c1 7f ff ff ff
+      CMD63               R1=0x01 @bit10   raw=ff c0 7f ff ff ff
+      clocks, no command  no response (all 0xff)
+  Same 2-bit offset previously measured on Trixie 6.18.34. The chip still
+  validates our CRC7 and flags illegal commands, so its receive path is fine.
+
+  NEW — the offset does not depend on where the command sits in the transfer.
+  Sweeping the number of 0xff bytes clocked before CMD0 inside the same CS
+  assertion:
+      n = 0, 1, 2, 3, 4, 8, 16, 32  ->  R1=0x01 @bit10 in every case
+  So this is NOT the controller mis-sampling the first bits of a transfer. The
+  chip's response is genuinely 2 bit-times late relative to the command's byte
+  grid, wherever in the transfer that command appears.
+
+  NEW — modes 0, 2 and 3 are byte-identical; only mode 1 differs:
+      mode 0 / 2 / 3, 400 kHz and 1 MHz:  ff c0 7f ...  zero-run at bit 10
+      mode 1:                             unstable, zero-runs wander
+  Modes 0 and 3 sampling alike is expected (both sample on rising edges), but
+  modes 1 and 2 both sample on falling edges and should therefore behave alike
+  -- and they do not. Recorded as an observation; no mechanism claimed.
+
+  State restored afterwards: driver_override cleared, spidev unbound, morse
+  reloaded and bound to spi0.0.
+
+
+================================================================
+WHERE THIS LEAVES IT (after run 5)
+================================================================
+Same board, same wiring. Eliminated: kernel tree (source byte-identical),
+ack-window padding, the driver's init sequence, the pin mux, the clock rate,
+and now the driver itself -- the skew is identical through /dev/spidev0.0 with
+no driver loaded, and does not depend on where the command sits in the transfer.
+
+What is left is a genuine disagreement between the chip and the host about where
+byte boundaries are, established somewhere at or before the first response, on a
+board where the OpenMANET image needs no compensation at all.
+
+Still not done:
+  (a) boot the OpenMANET card and run this same spidev probe on it, plus dump
+      its live DT and pin mux -- needs a physical card swap. That is now the
+      single highest-value remaining experiment: it is the only direct A/B of
+      the wire behaviour between the working and failing images.

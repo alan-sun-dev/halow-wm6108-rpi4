@@ -1,0 +1,70 @@
+=== kernel ===
+6.6.51+rpt-rpi-v8
+
+=== spidev bound via driver_override (overlay left in place) ===
+crw-rw---- 1 root spi 153, 1 Aug 22 20:47 /dev/spidev0.0
+17: ip    pu | hi // GPIO17 = input
+
+=== discriminate.py ===
+指令 / 參數變化對回應的影響：
+  CMD0  正確CRC        R1=0x01 @bit10  raw=ff c0 7f ff ff ff
+  CMD0  錯誤CRC        R1=0x09 @bit10  raw=ff c2 7f ff ff ff
+  CMD8  (illegal?)   R1=0x01 @bit10  raw=ff c0 40 00 00 6a
+  CMD13 狀態查詢         R1=0x05 @bit10  raw=ff c1 7f ff ff ff
+  CMD55              無回應
+  CMD63 arg=0        R1=0x01 @bit10  raw=ff c0 7f ff ff ff
+  CMD63 arg=FFFF     R1=0x01 @bit10  raw=ff c0 7f ff ff ff
+  (只給時脈,無命令)         無回應 (全 0xff)
+
+=== preamble sweep (command position within the transfer) ===
+preamble bytes before CMD0  ->  R1 position measured from end of command
+  n=0   R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=1   R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=2   R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=3   R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=4   R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=8   R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=16  R1=0x01 @bit10  raw=ff c0 7f ff ff
+  n=32  R1=0x01 @bit10  raw=ff c0 7f ff ff
+
+=== mmcspi.py mode/clock sweep ===
+mode0  400kHz
+   CMD0 : ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+   CMD63: ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+mode0 1000kHz
+   CMD0 : ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+   CMD63: ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+mode1  400kHz
+   CMD0 : 80 ff ff ff ff ff ff ff ff 80 ff ff ff ff ff ff
+          zero-runs [(1, 7), (73, 7)]
+   CMD63: ff ff ff 84 ff ff ff ff ff ff ff ff 80 ff ff ff
+          zero-runs [(25, 4), (30, 2), (97, 7)]
+mode1 1000kHz
+   CMD0 : ff ff ff ff ff ff 82 ff ff ff ff ff ff ff ff 80
+          zero-runs [(49, 5), (55, 1), (121, 7)]
+   CMD63: ff 80 ff ff ff ff ff ff ff ff 80 ff ff ff ff ff
+          zero-runs [(9, 7), (81, 7)]
+mode2  400kHz
+   CMD0 : ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+   CMD63: ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+mode2 1000kHz
+   CMD0 : ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+   CMD63: ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+mode3  400kHz
+   CMD0 : ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+   CMD63: ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+mode3 1000kHz
+   CMD0 : ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
+   CMD63: ff c0 7f ff ff ff ff ff ff ff ff ff ff ff ff ff
+          zero-runs [(10, 7)]
