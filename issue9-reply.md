@@ -108,9 +108,20 @@ Full boot dmesg and environment snapshot are in the repo:
 
 Two things fall out of this:
 
-1. The 2-bit RX offset is a `spi-bcm2835` regression on the newer kernel, **not** a property of the module or the board. On 6.6.138 no realignment is needed at all.
+1. The 2-bit RX offset is a `spi-bcm2835` (or SPI core) regression on the newer kernel, **not** a property of the module or the board. On 6.6.138 no realignment is needed at all.
 2. That makes the failure at the top of this thread (Pi 4 + WM1302 Pi HAT + Morse-patched **6.12.25**) most likely the same regression already present in an even older kernel packaging — not a hardware limitation of BCM2835 with the MM6108.
 
 So the presumption in my earlier question ("is the BCM2835 controller known not to work with the MM6108?") is refuted by the new data point: it works, on the right kernel.
 
-Happy to bisect the exact `spi-bcm2835` commit range if that would be useful — rebuilding Raspberry Pi OS's `rpi-6.6.y` on the affected card would tell us whether the regression is in mainline `spi-bcm2835` or in the raspberrypi/linux tree specifically.
+### Related SPI regressions in the same kernel window
+
+Not the same bug, but the pattern of the kernel window is suggestive:
+
+- [raspberrypi/linux#6854](https://github.com/raspberrypi/linux/issues/6854) — Pi 5 SPI throughput drops ~9% and gains timing jitter moving from 6.6.31 → 6.12.25. Open since May 2025, no maintainer response. Different platform (RP1), different symptom (perf, not correctness), but the same kernel window.
+- [linux-spi list, msg 47394](https://www.spinics.net/lists/linux-spi/msg47394.html) — SPI kernel panic on TI am335x (`spi-omap2-mcspi`) at 6.6.71 and 6.12.8, traced to a specific `OMAP2_MCSPI_MAX_FREQ` fallback commit. Different driver, but a distinct SPI driver on a distinct SoC hitting an issue at overlapping stable tags makes a shared SPI-core-layer or bus-code change a plausible common cause.
+
+None of these three are the same bug in isolation, but "something touching SPI landed between 6.6 and 6.12 and hurt more than one platform" is the shape they share.
+
+### Offer
+
+Happy to bisect the exact commit range if that would be useful — rebuilding Raspberry Pi OS's `rpi-6.6.y` on the affected card would tell us whether the regression is in mainline `spi-bcm2835`, in the SPI core, or in the raspberrypi/linux tree specifically.
