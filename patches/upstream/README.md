@@ -1,5 +1,8 @@
 # Upstream-ready patch series for MorseMicro/morse_driver
 
+**Submitted as [MorseMicro/morse_driver#16](https://github.com/MorseMicro/morse_driver/pull/16)**
+on 2026-08-23. `PR-16-description.md` is the description as posted.
+
 Three patches against tag `mm6108-2.0.1` (commit `98e1936`). Apply in order:
 
 ```sh
