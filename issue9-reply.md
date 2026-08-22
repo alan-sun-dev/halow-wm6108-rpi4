@@ -125,3 +125,40 @@ None of these three are the same bug in isolation, but "something touching SPI l
 ### Offer
 
 Happy to bisect the exact commit range if that would be useful — rebuilding Raspberry Pi OS's `rpi-6.6.y` on the affected card would tell us whether the regression is in mainline `spi-bcm2835`, in the SPI core, or in the raspberrypi/linux tree specifically.
+
+---
+
+## Update 2, 2026-08-22 — 6.12.93 also fails, identically
+
+Rebuilt on stock **Raspberry Pi OS Bookworm** — kernel `6.12.93+rpt-rpi-v8`, no out-of-tree patches — using the same board, same driver release, and the same firmware/BCF binaries as the OpenMANET result above. The fingerprint is identical to the 6.18.34 failure:
+
+- Without `spi_rx_lshift`: CMD63 fails, same `c0 7f ff ff` 2-bit RX offset on the wire.
+- With `spi_rx_lshift=2`: firmware and BCF load (CRC32s match OpenMANET's copies byte-for-byte), then CMD53 write dies at:
+
+  ```
+  morse_spi spi0.0: spi: cmd53_write fn=1 0x00004050:4 r=0x10050002 b=0xffffffff (ret:-71)
+  ```
+
+  Register address, response bytes, and error code are verbatim to the 6.18.34 log — same bug.
+
+New evidence in the repo:
+
+- [logs/2026-08-22-bookworm-6.12.93-boot-dmesg.log](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-bookworm-6.12.93-boot-dmesg.log)
+- [logs/2026-08-22-bookworm-6.12.93-lshift-dmesg.log](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-bookworm-6.12.93-lshift-dmesg.log)
+- [logs/2026-08-22-bookworm-6.12.93-environment.txt](https://github.com/alan-sun-dev/halow-wm6108-rpi4/blob/main/logs/2026-08-22-bookworm-6.12.93-environment.txt)
+
+| Kernel | RX byte alignment | CMD53 write | Outcome |
+|---|---|---|---|
+| **6.6.138** (OpenMANET 24.10, stock) | clean, no `spi_rx_lshift` needed | passes | ✅ `wlh0` up on SG @ 22 dBm |
+| 6.12.25 (Morse-patched, top of thread) | (not measured) | fails `ret:-71` | ❌ probe fails |
+| **6.12.93** (Raspberry Pi OS Bookworm, stock) | needs `spi_rx_lshift=2` | fails `ret:-71` at `0x00004050:4` | ❌ probe fails |
+| **6.18.34+rpt-rpi-v8** (Raspberry Pi OS Trixie, stock) | needs `spi_rx_lshift=2` | fails `ret:-71` at `0x00004050:4` | ❌ probe fails |
+
+Two takeaways:
+
+1. **The regression window is now `6.6.138 → 6.12.93`** — twelve minor kernel releases narrower than after the last update.
+2. **The failure at the top of this thread is not caused by the reporter's out-of-tree patches.** Stock 6.12 is already broken. That first datapoint can be trusted at face value.
+
+If Morse's officially-supported kernel list runs 4.9 → 6.12, this bug is *inside* the supported range, not beyond it.
+
+Bisecting the exact commit is still on offer — the 6.6 → 6.12 window in `raspberrypi/linux` is smaller than 6.6 → 6.18 and probably tractable in a day of builds if it would be useful.
