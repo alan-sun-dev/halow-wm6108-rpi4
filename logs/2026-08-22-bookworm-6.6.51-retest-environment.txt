@@ -1,10 +1,11 @@
 Captured: 2026-08-22 (~20:35-20:40 UTC+8), run over SSH from the laptop
 Host: Sensecap (Raspberry Pi 4 Model B rev 1.4, SenseCAP M1 carrier, Wio-WM6108)
 Image: Raspberry Pi OS Lite (64-bit), Debian 12 (bookworm), dated 2024-11-19
-Result: SEVEN HYPOTHESES ELIMINATED, none of them fixed the failure.
+Result: TEN HYPOTHESES ELIMINATED, none of them fixed the failure.
         The CMD53 write still dies at 0x00004050:4 with ret:-71, and the
         2-bit RX skew is unchanged by everything tested here.
-        Runs 0-4 go through the driver; runs 5 and 6 take it out entirely.
+        Runs 0-4 go through the driver; 5-6 take it out entirely; 7 closes
+        every device-tree difference the OpenMANET A/B turned up.
 
 === uname ===
 Linux Sensecap 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
@@ -260,3 +261,99 @@ RUN 6 — is the skew set by the pull on MISO/MOSI/SCLK?   ELIMINATED
   test confirms that gap was real rather than a detail of the explanation.
 
   State restored: pulls back to pd, spidev unbound, morse reloaded.
+
+
+================================================================
+BOARD IDENTITY — recorded late, and why it matters
+================================================================
+These environment files recorded only `Host: Sensecap`, and there turn out to be
+two SenseCAP M1 units, both with that hostname. That made it impossible to tell
+from the archive which board a given run used, and it briefly looked as though
+the whole working-vs-failing comparison had been made across two different
+boards.
+
+It had not. The archived boot dmesg logs carry the board's MAC in the kernel
+command line, and they settle it:
+
+  2026-08-22-bookworm-6.6.51-boot-dmesg.log    smsc95xx.macaddr=E4:5F:01:52:57:E7
+  2026-08-22-bookworm-6.12.93-boot-dmesg.log   smsc95xx.macaddr=E4:5F:01:52:57:E7
+  2026-08-22-openmanet-1.8.0-full-dmesg.log    smsc95xx.macaddr=E4:5F:01:52:57:E7
+  2026-08-22-openmanet-1.8.0-ab-full-dmesg.log smsc95xx.macaddr=E4:5F:01:52:57:E7
+
+So board E4:5F:01:52:57:E7 has been observed both failing under Raspberry Pi OS
+(6.6.51 and 6.12.93) and working under OpenMANET. The "same board" claim in this
+repo and in the issue #9 comments holds, and is backed by the logs rather than by
+memory.
+
+The retest runs above (RUN 0-6) have no such line, because dmesg was cleared
+before each insmod, so they do not identify their own board. They were on the
+same card in the same machine as the 6.6.51 boot log, so they were on 57:E7 too.
+
+A trap worth writing down: the retest-*.log files live on the SD card, not on the
+board. Finding them on a machine proves only that the card has been in it since,
+not that the run happened there. That confusion is what produced the false alarm.
+
+From now on every environment file records the board MAC and serial. Two units of
+the same product with the same hostname is exactly the situation where "which
+machine was that?" stops being answerable after the fact.
+
+Second unit, for the record:
+  E4:5F:01:52:55:04, serial 100000004851d437, Raspberry Pi 4 Model B Rev 1.4
+It runs Raspberry Pi OS 6.6.51 from the same card and shows a byte-identical
+failure -- `c0 3f` / `c0 7f`, CMD63 ret:-71. A second board with a second module
+reproducing the skew is corroboration that it is not one unit's defect.
+
+
+================================================================
+RUN 7 — the four device-tree differences from the A/B   ALL ELIMINATED
+================================================================
+  Run on board E4:5F:01:52:55:04 (192.168.200.182), Raspberry Pi OS 6.6.51,
+  driver mm6108-2.0.1 with patches/morse-driver-2.0.1-rpi-spi.patch @ 000fbbe.
+
+  The A/B (logs/2026-08-22-openmanet-1.8.0-ab-environment.txt) found four
+  differences between the working and failing device trees. Two overlay changes
+  closed all of them.
+
+  (a) One chip select instead of two.
+      Added to the &spi0 fragment:   cs-gpios = <&gpio 8 1>;
+      Added to the &gpio fragment:   spi0_cs_pins { brcm,pins = <8>; ... }
+      -- the second override is needed because the base rpi DT declares
+      spi0_cs_pins as <8 7>, so GPIO7 stays claimed otherwise.
+
+      Verified in effect after reboot:
+        /proc/device-tree/soc/spi@7e204000/cs-gpios is 12 bytes (was 24)
+        pin 7 (gpio7): (MUX UNCLAIMED) (GPIO UNCLAIMED)      <- was gpio_out
+        pin 8 (gpio8): fe204000.spi ... function gpio_out
+
+      Result: morse rx c0 3f / c0 7f, CMD63 ret:-71. Unchanged. ELIMINATED.
+
+  (b) reset-gpios flag 0 instead of 1, matching OpenMANET.
+      reset-gpios = <&gpio 17 0>;
+
+      Verified in effect: the property reads 00000007 00000011 00000000.
+
+      Result: unchanged. ELIMINATED.
+
+      This one was more interesting than it looks and is worth recording. The
+      flag is GPIO_ACTIVE_LOW, and morse_hw_reset() asserts with
+      gpiod_set_value(reset, 1). With flag 1 that drives the pin low and RESET_N
+      really fires; with flag 0 it drives high, so on OpenMANET the driver's
+      reset pulse plausibly never happens at all. Given that fixing
+      reset_module() in tools/mmcspi.py -- making the reset actually occur --
+      changed CMD0's tail from `ff c0 7f` to `1f c0 7f`, "the reset pulse itself
+      puts the chip into the skewed state" was a real hypothesis. It is now
+      dead: with the flag matching OpenMANET the skew is identical.
+
+  The failing board's spi0 node now matches the working one on every difference
+  the A/B found -- cs-gpios, GPIO7, reset-gpios -- and spi-max-frequency was
+  independently swept in RUN 4. The device-tree avenue is exhausted.
+
+  Both overlay changes are still installed on 55:04; the stock dtbo is backed up
+  at /boot/firmware/overlays/mm610x-spi-sensecap.dtbo.orig.
+
+  What has never been compared: the base bcm2711-rpi-4-b.dtb (firmware partition
+  on Raspberry Pi OS vs built by OpenWrt), the VideoCore firmware (start4.elf,
+  fixup4.dat), and the kernel config. The VideoCore firmware is the interesting
+  one -- it configures the SoC clock tree before the kernel starts, the symptom
+  is a bit-level timing offset, and it is the one thing guaranteed to differ
+  between the two images that has never been looked at.

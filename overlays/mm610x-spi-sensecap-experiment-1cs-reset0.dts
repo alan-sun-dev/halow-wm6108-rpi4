@@ -1,0 +1,79 @@
+/*
+ * Wio-WM6108 (Morse Micro MM6108, SPI) in the SenseCAP M1 mPCIe slot.
+ *
+ * Pin map is the Seeed WM1302 Pi HAT one, which the M1 carrier reuses:
+ *   MISO GPIO9  MOSI GPIO10  CLK GPIO11  CS GPIO8   (spi0.0)
+ *   RESET_N GPIO17   SPI_INT GPIO5   WAKE GPIO23   BUSY GPIO24
+ * GPIO18 is the M1's own slot power enable and is not part of the HAT map.
+ *
+ * RESET_N is active low. morse_hw_reset() drives it low for 20 ms and then
+ * *floats* it (gpio_direction_input) rather than driving it high, relying on a
+ * pull-up to release the chip. The BCM2711 defaults GPIO17 to pull-down, which
+ * would hold the radio in reset forever, so GPIO17 is switched to pull-up here.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	/* Slot power enable: hog GPIO18 high for the life of the system. */
+	fragment@0 {
+		target = <&gpio>;
+		__overlay__ {
+			halow_pwr_hog {
+				gpio-hog;
+				gpios = <18 0>;
+				output-high;
+				line-name = "halow-slot-power";
+			};
+
+			/* EXPERIMENT: base DT declares spi0_cs_pins as <8 7>; OpenMANET
+			 * declares only <8>. Override to match. */
+			spi0_cs_pins {
+				brcm,pins = <8>;
+				brcm,function = <1>;	/* output */
+				brcm,pull = <2>;	/* up, same as current effective state */
+			};
+
+			halow_pins: halow_pins {
+				brcm,pins = <17 5 23 24>;
+				brcm,function = <0 0 0 0>;	/* all inputs */
+				brcm,pull = <2 1 1 1>;		/* 17 up (reset release), rest down */
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&spi0>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			/* EXPERIMENT: one chip select, not two. */
+			cs-gpios = <&gpio 8 1>;
+
+			mm610x@0 {
+				compatible = "morse,mm610x-spi";
+				reg = <0>;
+				spi-max-frequency = <10000000>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&halow_pins>;
+				reset-gpios = <&gpio 17 0>;		/* EXPERIMENT: flag 0, matching OpenMANET */
+				spi-irq-gpios = <&gpio 5 0>;
+				power-gpios = <&gpio 23 0>, <&gpio 24 0>;	/* wake, busy */
+				status = "okay";
+			};
+		};
+	};
+
+	/* spidev on CS0 would fight the driver for the bus. */
+	fragment@2 {
+		target = <&spidev0>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+};

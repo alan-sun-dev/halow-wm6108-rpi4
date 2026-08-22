@@ -2,7 +2,57 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
-## 2026-08-22 (latest): the A/B ran — the second chip select is the difference
+## 2026-08-23: every device-tree difference is now eliminated
+
+The A/B's four differences were closed with two overlay changes on the failing
+side, and the failure is byte-identical throughout.
+
+| Difference | Change | Result |
+|---|---|---|
+| `cs-gpios` two entries | `cs-gpios = <&gpio 8 1>` plus `spi0_cs_pins { brcm,pins = <8> }` — the second override is needed because the base rpi DT declares `<8 7>` | verified in effect (property 24 → 12 bytes, GPIO7 `MUX UNCLAIMED`); **skew unchanged** |
+| `reset-gpios` flag 1 | `<&gpio 17 0>`, matching OpenMANET | verified in effect; **skew unchanged** |
+| `spi-max-frequency` | — | already eliminated in RUN 4 |
+
+The `reset-gpios` one deserves its epitaph. The flag is `GPIO_ACTIVE_LOW` and
+`morse_hw_reset()` asserts with `gpiod_set_value(reset, 1)`, so flag 1 drives the
+pin low and RESET_N really fires, while flag 0 drives it high — meaning on
+OpenMANET the driver's reset pulse plausibly never happens. Since fixing
+`reset_module()` in `tools/mmcspi.py` (making the reset actually occur) changed
+CMD0's tail from `ff c0 7f` to `1f c0 7f`, "the reset pulse is what puts the chip
+into the skewed state" was a real hypothesis. Dead.
+
+**The failing board's `spi0` node now matches the working one on every difference
+the A/B found, and it still fails identically.** The device-tree avenue is
+exhausted — ten eliminations total.
+
+### Board identity, recorded late
+
+There are **two** SenseCAP M1 units and both have hostname `Sensecap`, so the
+environment files — which recorded only the hostname — could not say which board
+a run used. The archived boot dmesg settles it, via the MAC in the kernel command
+line: `E4:5F:01:52:57:E7` for the 6.6.51 boot, the 6.12.93 boot, **and** both
+OpenMANET runs. So **the same board both fails under Raspberry Pi OS and works
+under OpenMANET** — the "same board" claim holds and is now backed by logs.
+
+The second unit, `E4:5F:01:52:55:04`, runs the same card and shows a
+byte-identical failure. A second board with a second module reproducing the skew
+is corroboration, not a complication.
+
+A trap worth knowing: `retest-*.log` lives on the SD card, not the board. Finding
+those files on a machine proves only that the card has been in it since. Every
+environment file records board MAC and serial from now on.
+
+### What has never been compared
+
+The base `bcm2711-rpi-4-b.dtb` (firmware partition on Raspberry Pi OS vs built by
+OpenWrt), the **VideoCore firmware** (`start4.elf`, `fixup4.dat`), and the kernel
+config. The VideoCore firmware is the interesting one: it configures the SoC clock
+tree before the kernel starts, the symptom is a bit-level timing offset, and it is
+guaranteed to differ between the two images.
+
+---
+
+## 2026-08-22: the A/B ran — the second chip select is the difference
 
 Booted OpenMANET on the same board and captured its live device tree and pin mux
 against the failing Raspberry Pi OS capture. Four differences, one of which had

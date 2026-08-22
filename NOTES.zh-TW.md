@@ -2,7 +2,53 @@
 
 *[English](NOTES.md)*
 
-## 2026-08-22 最新：A/B 做完了 —— 差異在第二個 chip select
+## 2026-08-23：所有 device-tree 差異全部消除
+
+A/B 找到的四個差異，用兩次 overlay 改動全部關掉了，失敗指紋從頭到尾逐位元組不變。
+
+| 差異 | 改動 | 結果 |
+|---|---|---|
+| `cs-gpios` 兩個項目 | `cs-gpios = <&gpio 8 1>` 外加 `spi0_cs_pins { brcm,pins = <8> }` —— 後者必要，因為 base rpi DT 宣告的是 `<8 7>` | 確認生效（屬性 24 → 12 bytes、GPIO7 變 `MUX UNCLAIMED`）；**偏移不變** |
+| `reset-gpios` flag 1 | 改成 `<&gpio 17 0>`，和 OpenMANET 一致 | 確認生效；**偏移不變** |
+| `spi-max-frequency` | —— | RUN 4 已消除 |
+
+`reset-gpios` 這一項值得留個墓誌銘。那個 flag 是 `GPIO_ACTIVE_LOW`，而
+`morse_hw_reset()` 用 `gpiod_set_value(reset, 1)` 宣告 reset —— flag 1 會把腳位拉
+**低**、RESET_N 真的觸發；flag 0 則拉**高**，意思是 **OpenMANET 上驅動的 reset 脈衝
+很可能從來沒有真的發生過**。而今晚修好 `tools/mmcspi.py` 的 `reset_module()`、讓
+reset 真的發生之後，CMD0 的尾巴從 `ff c0 7f` 變成了 `1f c0 7f` —— 所以「reset 脈衝
+本身把晶片推進偏移狀態」是個有根據的假設。現在它死了。
+
+**失敗那塊板子的 `spi0` 節點，現在在 A/B 找到的每一項差異上都與正常那台一致，而它
+依然以完全相同的方式失敗。** DT 這條路走完了 —— 累計十項消除。
+
+### 板子身分，補記
+
+有**兩台** SenseCAP M1，而且主機名都叫 `Sensecap`，所以只記主機名的 environment
+檔沒辦法分辨某次測試跑在哪一台。存檔的開機 dmesg 解決了這件事 —— kernel command
+line 裡有 MAC：6.6.51 開機、6.12.93 開機、**以及兩次 OpenMANET**，全都是
+`E4:5F:01:52:57:E7`。
+
+所以**同一塊板子確實在 Raspberry Pi OS 下失敗、在 OpenMANET 下正常** —— "same
+board" 成立，而且現在有 log 佐證，不是靠記憶。
+
+第二台 `E4:5F:01:52:55:04` 跑同一張卡，失敗指紋逐位元組相同。第二塊板子配第二個
+模組重現同樣的偏移，是佐證而不是麻煩。
+
+一個值得記住的陷阱：`retest-*.log` 存在 SD 卡上，不在板子上。在某台機器上看到那些
+檔案，只證明卡後來被插進過那台，不證明測試是在那裡跑的。往後每份 environment 檔都
+會記板子的 MAC 與序號。
+
+### 從來沒有比對過的東西
+
+基礎的 `bcm2711-rpi-4-b.dtb`（Raspberry Pi OS 用韌體分割區的，OpenWrt 用自己編的）、
+**VideoCore 韌體**（`start4.elf`、`fixup4.dat`）、以及核心 config。VideoCore 韌體是
+其中最有意思的：它在核心啟動之前就設定好 SoC 的時脈樹，而我們的症狀是位元層級的
+時序偏移，而且它是兩份映像之間必然不同、卻從未被檢視過的東西。
+
+---
+
+## 2026-08-22：A/B 做完了 —— 差異在第二個 chip select
 
 在同一塊板子上開起 OpenMANET，把它的 live device tree 與 pinmux 擷取下來，對照
 失敗那側的擷取。四個差異，其中一個從來沒被檢查過。
