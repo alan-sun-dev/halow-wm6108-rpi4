@@ -284,9 +284,6 @@ Full method, per-run logs and the instrumented patch: https://github.com/alan-su
 
 ---
 
-> **DRAFT — not yet posted to issue #9.** Everything above this line is verbatim
-> what was posted. Below is the prepared sixth comment.
-
 ## Update 5, 2026-08-23 — my board had a second, separate bug; fixing it lands me on exactly the failure at the top of this thread
 
 Short version: the 2-bit response offset I reported was **not** the same problem as the one this issue was opened about. It was an additional bug on top of it, in `morse_spi_initsequence()`, and it affects any host with a `cs-gpios` SPI controller. With it fixed, my board now fails at `cmd53_write fn=2 0x00000000:14` — the same function and address as the original report's `fn=2 0x00000000:10`.
