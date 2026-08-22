@@ -27,11 +27,27 @@ limit. Run properly, `iw` enumerates the phy completely -- interface wlan1 type
 managed, the full cipher list, IBSS/managed/AP/AP-VLAN/monitor/mesh, and Band 2
 with per-channel regulatory state. mac80211 registration is complete.
 
-What is genuinely unproven is narrower: `iw dev wlan1 scan` returns success but
-generates **no SPI traffic at all**, and the interface has never associated or
-passed a packet. On-air operation is untested. The likely reason -- a guess, not
-a finding -- is that the chip needs Morse's own userspace to start, which is what
-the OpenWrt images ship.
+CORRECTED AGAIN 2026-08-23: the paragraph above then claimed the scan produces no
+SPI traffic. That was also wrong, for the same reason in a different disguise.
+The counter being read was a dev_info from the instrumented build; the clean
+patch series does not contain it, so grepping for the log line returned zero and
+"the log line is absent" was read as "the bus is idle".
+
+Measured with the SPI core's own statistics, which depend on nothing this repo
+wrote (/sys/bus/spi/devices/spi0.0/statistics/):
+
+  idle, 3 s        +17 messages    4.6 KB   (30 s watchdog)
+  ip link set up   +165 messages   40 KB
+  iw scan          +31, +31, +36 messages, ~8 KB each
+  errors 0         timedout 0
+
+The interface opens, the scan reaches the chip, and the driver is in continuous
+normal operation. morse_mac_ops_start, morse_mac_ops_add_interface and
+morse_ops_hw_scan are all invoked and morse_cmd_get_version() returns 0. The scan
+finds nothing because there is no HaLow network in range.
+
+What is actually untested is association and data transfer, for want of a second
+HaLow device -- not anything about the driver.
 
 
 ================================================================

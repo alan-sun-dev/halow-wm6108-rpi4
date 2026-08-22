@@ -72,14 +72,35 @@ as a technical limit. Run properly it enumerates the phy completely — `wlan1` 
 managed, full cipher list, IBSS/managed/AP/AP-VLAN/monitor/mesh, Band 2 with
 per-channel regulatory state. **mac80211 registration is complete.**
 
-The real gap is narrower: `iw dev wlan1 scan` returns success but generates **no
-SPI traffic at all**, and the interface has never associated or passed a packet.
-On-air operation is untested; the likely reason — a guess — is that the chip needs
-Morse's own userspace to start.
+~~The real gap is narrower: `iw dev wlan1 scan` returns success but generates no
+SPI traffic at all.~~ **Also wrong, corrected again.** That counter was a
+`dev_info` from the instrumented build; the clean series does not contain it, so
+the log line was absent and absence was read as idleness — the same mistake in a
+different disguise.
 
-This was the fourth time in one session of reading "did not see it" as "is not
-there", and the only one that reached a public comment before being caught.
-Corrected on issue #9 as comment 5381978970.
+Measured with the SPI core's own statistics, which depend on nothing written here
+(`/sys/bus/spi/devices/spi0.0/statistics/`):
+
+| | messages | bytes |
+|---|---|---|
+| idle, 3 s | +17 | 4.6 KB (30 s watchdog) |
+| `ip link set up` | +165 | 40 KB |
+| `iw scan` ×3 | +31, +31, +36 | ~8 KB each |
+
+`errors 0`, `timedout 0`. `morse_mac_ops_start`, `add_interface` and
+`morse_ops_hw_scan` are all invoked, `morse_cmd_get_version()` returns 0. **The
+scan reaches the chip and finds nothing because there is no HaLow network in
+range.**
+
+What is actually untested is association and data transfer, for want of a second
+HaLow device — not anything about the driver.
+
+Six times in one session, "did not see it" was read as "is not there": RUN 5's
+preamble sweep, the `mode=0x4` line, the 1.5 s power-up wait, `iw` not being on
+`PATH`, "bringing wlan1 up produces register writes" (stale dmesg, never cleared),
+and this. Two reached public comments. Corrected on issue #9 as comments
+5381978970 and 5382020693. **The pattern is the finding worth keeping: when an
+instrument reports nothing, check the instrument before believing it.**
 
 Full detail: `logs/2026-08-23-WORKING-environment.txt`.
 

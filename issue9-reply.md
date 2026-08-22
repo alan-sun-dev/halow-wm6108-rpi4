@@ -494,3 +494,31 @@ So the mac80211 registration is complete, the shadow-channel band is present wit
 What is actually still unproven is narrower, and I want to state it accurately rather than leave a vaguer claim standing: `iw dev wlan1 scan` returns success but produces **no SPI traffic at all** — the driver is not asked to do anything — and the interface has never associated or passed a packet. So on-air operation is untested. My guess, and it is only that, is that this chip needs Morse's own userspace to actually start, which is what the OpenWrt images ship.
 
 None of this changes the two defects or the fixes in the rest of that comment; those were measured directly and the SPI transport remains clean at 0 read and 0 write failures.
+
+---
+
+## Second correction, 2026-08-23
+
+Second correction, to my own correction above. Sorry for the churn — the underlying facts are better than I said, and I would rather this thread be right than tidy.
+
+I wrote that `iw dev wlan1 scan` "returns success but produces **no SPI traffic at all**". **That is false.**
+
+The counter I was reading was a `dev_info` from my own instrumented build. When I rebuilt with the clean patch series that instrumentation is not in it, so `grep` for the log line returned zero — and I read "the log line is absent" as "the bus is idle". The same mistake as the `PATH` one, in the same session.
+
+Measured properly, using the SPI core's own statistics under
+`/sys/bus/spi/devices/spi0.0/statistics/`, which do not depend on anything I wrote:
+
+```
+idle, 3 s          +17 messages     4.6 KB      (30 s watchdog)
+ip link set up     +165 messages    40 KB
+iw scan            +31, +31, +36 messages, ~8 KB each
+errors 0           timedout 0
+```
+
+So the interface opens, the scan reaches the chip, and the driver is in continuous normal operation. `morse_mac_ops_start`, `morse_mac_ops_add_interface` and `morse_ops_hw_scan` are all invoked, and `morse_cmd_get_version()` returns 0.
+
+The scan returns no results because there is no HaLow network in range to find, which is what I should have concluded in the first place.
+
+What remains genuinely untested is only association and data transfer, for want of a second HaLow device to talk to — not anything about the driver.
+
+To be clear about what still stands, since I have now corrected this twice: the two defects, the fixes, and the transport measurements were taken on the instrumented build where those counters do exist, and are unaffected. 351 SPI transactions with zero read and zero write failures, and the SPI core independently reports zero errors and zero timeouts.
