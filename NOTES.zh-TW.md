@@ -58,9 +58,18 @@ Morse 的 OpenWrt feed patch 在**三個地方**都設了 250 的硬下限。**�
 
 ### 但書
 
-`iw phy` 和 `iw dev` 都列不出 phy31。沒有深究 —— 原廠 6.6.51 的 mac80211 沒有 S1G 頻段
-支援，而 OpenMANET 跑的是 backport 的 mac80211 加上打過 patch 的 `iw`。介面存在、驅動也
-確實在驅動晶片，這是本倉庫在意的部分。
+~~`iw phy` 和 `iw dev` 都列不出 phy31 —— 原廠 mac80211 沒有 S1G 頻段支援。~~
+**這是錯的，2026-08-23 更正。** `iw` 裝在 `/sbin`，不在一般使用者的 `PATH` 裡；那些呼叫
+其實回的是 *command not found*，而我把空輸出讀成技術限制。用完整路徑跑，它**完整列出**
+這個 phy —— `wlan1` type managed、完整的加密演算法清單、IBSS/managed/AP/AP-VLAN/
+monitor/mesh、Band 2 含每個頻道的法規狀態。**mac80211 的註冊是完整的。**
+
+真正的缺口比原本說的窄：`iw dev wlan1 scan` 回傳成功，卻**完全沒有產生任何 SPI 交易**，
+而且介面從未關聯、從未傳過封包。**空中運作未經驗證。** 最可能的原因（這是推測）是這顆
+晶片需要 Morse 自己的 userspace 才會真正啟動。
+
+這是同一個 session 裡第四次把「沒看到」讀成「不存在」，也是唯一一次在被抓到之前就跑進
+公開留言的。已在 issue #9 以 comment 5381978970 更正。
 
 完整細節：`logs/2026-08-23-WORKING-environment.txt`。
 

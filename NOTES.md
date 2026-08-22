@@ -65,9 +65,21 @@ at least one of them was a real contributor that the state masked.
 
 ### Caveat
 
-`iw phy` and `iw dev` list nothing for phy31. Not investigated — stock 6.6.51
-mac80211 has no S1G band support, while OpenMANET runs backported mac80211 and a
-patched `iw`. The interface exists and the driver drives the chip.
+~~`iw phy` and `iw dev` list nothing for phy31 — stock mac80211 has no S1G band
+support.~~ **Wrong, corrected 2026-08-23.** `iw` lives in `/sbin`, off a non-root
+`PATH`; the calls were returning *command not found* and the empty output was read
+as a technical limit. Run properly it enumerates the phy completely — `wlan1` type
+managed, full cipher list, IBSS/managed/AP/AP-VLAN/monitor/mesh, Band 2 with
+per-channel regulatory state. **mac80211 registration is complete.**
+
+The real gap is narrower: `iw dev wlan1 scan` returns success but generates **no
+SPI traffic at all**, and the interface has never associated or passed a packet.
+On-air operation is untested; the likely reason — a guess — is that the chip needs
+Morse's own userspace to start.
+
+This was the fourth time in one session of reading "did not see it" as "is not
+there", and the only one that reached a public comment before being caught.
+Corrected on issue #9 as comment 5381978970.
 
 Full detail: `logs/2026-08-23-WORKING-environment.txt`.
 

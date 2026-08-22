@@ -465,3 +465,32 @@ Either would make the driver work at clocks below 50 MHz, which is currently a s
 `iw phy` and `iw dev` list nothing for `phy31` on a stock 6.6.51 kernel. I have not looked into it — stock mac80211 has no S1G band support, while the OpenWrt images run backported mac80211 and a patched `iw`. The interface exists, the driver drives the chip, and the SPI transport is clean; the remainder is a userspace/mac80211 question rather than a driver one.
 
 Patch, per-transaction logs and the full derivation: https://github.com/alan-sun-dev/halow-wm6108-rpi4 — see `logs/2026-08-23-WORKING-environment.txt`.
+
+---
+
+## Correction, 2026-08-23
+
+Correction to the caveat at the end of my previous comment.
+
+I wrote that `iw phy` and `iw dev` list nothing for the morse phy on a stock 6.6.51 kernel, and speculated that stock mac80211 lacks S1G band support. **That is wrong and I am retracting it.**
+
+`iw` is installed on that machine — in `/sbin`, which is not on a non-root user's `PATH`. My `iw` invocations were returning `command not found`, and I read the empty output as `iw` not seeing the device. Run with the full path it enumerates the phy completely:
+
+```
+phy#33
+	Interface wlan1
+		ifindex 6
+		addr 9c:04:b6:ff:df:fe
+		type managed
+
+Supported interface modes: IBSS, managed, AP, AP/VLAN, monitor, mesh point
+Supported Ciphers: CCMP-128, CCMP-256, GCMP-128, GCMP-256, CMAC, CMAC-256, GMAC-128, GMAC-256, ...
+Band 2: HT20/HT40, RX STBC 1-stream, Max AMSDU 7935 bytes
+        5180 [36] (disabled)  5200 [40] (29.0 dBm)  5220 [44] (29.0 dBm)  ...
+```
+
+So the mac80211 registration is complete, the shadow-channel band is present with per-channel regulatory state, and there is no S1G support gap of the kind I described. Nothing in that paragraph should be relied on.
+
+What is actually still unproven is narrower, and I want to state it accurately rather than leave a vaguer claim standing: `iw dev wlan1 scan` returns success but produces **no SPI traffic at all** — the driver is not asked to do anything — and the interface has never associated or passed a packet. So on-air operation is untested. My guess, and it is only that, is that this chip needs Morse's own userspace to actually start, which is what the OpenWrt images ship.
+
+None of this changes the two defects or the fixes in the rest of that comment; those were measured directly and the SPI transport remains clean at 0 read and 0 write failures.

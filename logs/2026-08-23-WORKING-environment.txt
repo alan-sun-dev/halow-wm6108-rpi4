@@ -19,10 +19,19 @@ talking to it rather than merely having probed.
 
 `spi_rx_lshift` is not used. It is not needed any more.
 
-`iw phy` and `iw dev` list nothing for phy31. Not investigated; the stock 6.6.51
-mac80211 has no S1G band support, and OpenMANET's userspace runs backported
-mac80211 plus a patched iw. The interface exists and the driver drives the chip,
-which is the part this repo was about.
+CORRECTED 2026-08-23: an earlier version of this file said `iw` lists nothing for
+the phy and blamed missing S1G support in stock mac80211. That was wrong. `iw`
+lives in /sbin, which is not on a non-root user's PATH, so the invocations were
+returning "command not found" and the empty output was read as a technical
+limit. Run properly, `iw` enumerates the phy completely -- interface wlan1 type
+managed, the full cipher list, IBSS/managed/AP/AP-VLAN/monitor/mesh, and Band 2
+with per-channel regulatory state. mac80211 registration is complete.
+
+What is genuinely unproven is narrower: `iw dev wlan1 scan` returns success but
+generates **no SPI traffic at all**, and the interface has never associated or
+passed a packet. On-air operation is untested. The likely reason -- a guess, not
+a finding -- is that the chip needs Morse's own userspace to start, which is what
+the OpenWrt images ship.
 
 
 ================================================================
