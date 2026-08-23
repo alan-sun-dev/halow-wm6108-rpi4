@@ -254,6 +254,72 @@ dot11ah 這層 shim 把 S1G 呈現成一個以 5 GHz 編號的頻段，好讓 ma
   任何持久設定。
 - `mon0` 本身只看得到 AP 自己發的 beacon。`morse0` 才是帶著晶片 rx status 的接收訊框。
 
+## AP 的發射器會停擺，而 HaLow 鏈路是你回去的路
+
+都是 2026-08-23 發現的，相隔數小時，而第一件事可能解釋了本檔案先前記為「未解釋」的
+好幾個現象。
+
+### OpenMANET AP 會停止發射，而且完全看不出來
+
+一個下午內兩次，AP 變成單向失聰：接收完全正常，但沒有任何人聽得到它。
+
+特徵，取自 AP 自己的 hostapd 日誌，兩個獨立的 station：
+
+```
+authentication: STA=9c:04:b6:ff:df:fe ... rssi=0
+wlh0: STA 9c:04:b6:ff:df:fe IEEE 802.11: did not acknowledge authentication response
+authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-67
+wlh0: STA 0c:bf:74:2c:dd:05 IEEE 802.11: did not acknowledge authentication response
+```
+
+兩個 station 的訊框都到得了 AP，兩個都收不到回覆。從 station 那端看，掃描回傳零個
+BSS —— 包括它一分鐘前還連著的那台 AP。
+
+**軟體層面完全看不出來。** `iw dev wlh0 info` 顯示介面正常、22 dBm、頻道正確。
+`ip -s link show wlh0` 顯示 TX 941 packets、`errors 0 dropped 0`。`dmesg` 沒有任何
+morse 或 SPI 錯誤。AP 自己認為它在發射。
+
+第一次發生在 `iw set txpower fixed` 之後（見前一節）。**第二次前面什麼都沒有** ——
+乾淨重開機後 22 分鐘，沒有任何介入，在兩個 station 都因閒置被踢掉之後就再也連不回來。
+所以那個 txpower 指令是誘發它的一種方式，不是唯一成因。
+
+兩次 `wifi reload` 都救不回來，兩次重開機都有效。
+
+**這是本檔案先前三個「未解釋」項目的候選共同成因**：100 次 ping 測試中的 5% 遺失、
+兩次沒有任何 deauth 或 beacon-loss 日誌的重新關聯、以及第一次持續下載在
+4194304 bytes 中的第 155648 個位元組截斷。這三個從遠端看起來，都正是「發射器間歇性
+靜默」會有的樣子。**尚未確立** —— 這個關聯性還沒被測試 —— 但之後要追那三件事，應該
+先懷疑這個。
+
+診斷筆記，因為第一次判讀是錯的：症狀看起來像「**station** 的接收壞了」，因為掃不到
+東西的是 station。指向正確方向的線索是 AP 的 station 表整個清空、而且**兩個** station
+同時失效。沒有任何 station 端的故障能解釋兩個獨立的 station 在同一瞬間一起失聰。
+
+### HaLow 鏈路是通往 station 的頻外管理通道
+
+實驗途中 Pi 的管理用 Wi-Fi 消失了 —— 它漫遊到了筆電無法路由過去的網段 —— 但那塊板子
+並沒有失聯。它的 HaLow 介面還關聯著，而那台 AP 有直連的網路線：
+
+```
+筆電 --USB 網路卡--> OpenMANET AP 10.41.254.1 --HaLow--> Pi 10.41.0.208
+```
+
+從 AP 上用 dropbear 的用戶端，密碼可以從環境變數帶入：
+
+```sh
+DROPBEAR_PASSWORD='...' dbclient -y -y -l alan 10.41.0.208 'command'
+```
+
+這救回了一塊原本無頭、無法觸及、沒有實體存取也沒有網路線的板子。
+
+一般性的心得：HaLow 網路有自己的定址、自己的無線電，獨立於場地的 LAN。不管管理網路
+發生什麼事，只要 station 還關聯著、AP 還用線接著筆電，這條路就是通的。它慢、會掉封包，
+但要一個 shell 綽綽有餘。
+
+同一次事件中另一個浪費時間的陷阱：Pi 的 Wi-Fi MAC **不是**它的乙太網路 MAC。
+`eth0` 是 `e4:5f:01:52:55:04`，`wlan0` 是 `...:55:05`。拿錯的那個去翻 ARP 表會什麼都
+找不到，看起來就像板子關機了。
+
 ## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
 
 ```

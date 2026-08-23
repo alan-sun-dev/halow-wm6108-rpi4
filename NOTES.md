@@ -302,6 +302,85 @@ not match the 150 Mbit/s.
 - `mon0` itself only shows the AP's own beacons. `morse0` is the one carrying
   received frames with the chip's rx status.
 
+## The AP's transmitter stalls, and the HaLow link is your way back in
+
+Both found on 2026-08-23, hours apart, and the first one may explain several
+things this file had recorded as unexplained.
+
+### The OpenMANET AP stops transmitting, with nothing to show for it
+
+Twice in one afternoon the AP went deaf-in-one-direction: it kept receiving
+perfectly and stopped being heard by anyone.
+
+The signature, from the AP's own hostapd log, with two independent stations:
+
+```
+authentication: STA=9c:04:b6:ff:df:fe ... rssi=0
+wlh0: STA 9c:04:b6:ff:df:fe IEEE 802.11: did not acknowledge authentication response
+authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-67
+wlh0: STA 0c:bf:74:2c:dd:05 IEEE 802.11: did not acknowledge authentication response
+```
+
+Both stations' frames arrive at the AP. Neither station hears the reply. From the
+station side a scan returns zero BSSes, including the AP it was associated with a
+minute earlier.
+
+**Nothing in software shows it.** `iw dev wlh0 info` reports the interface up at
+22 dBm on the right channel. `ip -s link show wlh0` reports TX 941 packets with
+`errors 0 dropped 0`. `dmesg` has no morse or SPI error at all. The AP believes
+it is transmitting.
+
+The first occurrence followed `iw set txpower fixed` (see the previous section).
+**The second followed nothing** — 22 minutes after a clean reboot, with no
+intervention, after both stations had been kicked for inactivity and could not
+get back in. So the txpower command is one way to provoke it, not the only cause.
+
+`wifi reload` does not recover it, either time. A reboot does, both times.
+
+**This is a candidate root cause for three things recorded earlier as
+unexplained:** the 5% packet loss on a 100-ping run, the two re-associations with
+no deauthentication or beacon-loss logged, and the first sustained download
+truncating at 155648 of 4194304 bytes. All three are what an intermittently
+silent transmitter would look like from the far end. Not established — the
+correlation has not been tested — but any future work on those should suspect
+this first.
+
+Diagnosis note, because the first read was wrong: the symptom presents as "the
+*station's* receiver is broken", since the station is the thing that cannot scan.
+What points the right way is the AP's station table emptying and *both* stations
+failing simultaneously. No station-side fault explains two independent stations
+going deaf at the same instant.
+
+### The HaLow link is an out-of-band path to the station
+
+When the Pi's management Wi-Fi went away mid-experiment — it had roamed onto a
+network segment that the laptop could not route to — the board was not lost. Its
+HaLow interface was still associated, and the AP is reachable by a direct cable:
+
+```
+laptop --USB-Ethernet--> OpenMANET AP 10.41.254.1 --HaLow--> Pi 10.41.0.208
+```
+
+From the AP, with dropbear's client, which takes the password from the
+environment:
+
+```sh
+DROPBEAR_PASSWORD='...' dbclient -y -y -l alan 10.41.0.208 'command'
+```
+
+That recovered a board that was otherwise headless and unreachable, with no
+physical access and no Ethernet.
+
+Worth keeping in mind generally: the HaLow network is on its own addressing and
+its own radio, independent of the site LAN. Whatever happens to the management
+network, that path stays up as long as the station is associated and the AP is
+cabled to the laptop. It is slow and lossy, and it is enough for a shell.
+
+A related trap that cost time in the same episode: the Pi's Wi-Fi MAC is *not*
+its Ethernet MAC. `eth0` is `e4:5f:01:52:55:04`, `wlan0` is
+`...:55:05`. Hunting the ARP table for the wrong one finds nothing and looks like
+the board is off.
+
 ## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
 
 ```
