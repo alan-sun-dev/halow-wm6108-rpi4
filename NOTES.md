@@ -2,6 +2,48 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-23, evening — a third board, an MTU black hole, and what the vendor documents say
+
+Four results. Full evidence in
+[`logs/2026-08-23-mtu-blackhole-third-implementation-and-vendor-docs.txt`](logs/2026-08-23-mtu-blackhole-third-implementation-and-vendor-docs.txt).
+
+**The reference configuration is what hides the defects.** A third SPI board
+joined the bench (Heltec HT-HC01P on an RPi 4, driver 1.15.3), and Morse's
+official Linux Porting Guide was read for the first time. Its EKH01 reference
+overlay specifies `spi-max-frequency = <50000000>` and `reset-gpios = <&gpio 5
+0>` — 50 MHz and flag 0. **Every implementation examined inherits those two
+settings from the official reference**, and they are exactly what makes defect 3
+invisible (the broken delay model only lands on a working value at 50 MHz) and
+defect 2 invisible (flag 0 means RESET_N never fires). The same document contains
+**zero** mentions of chip select, deassert, 74 clocks, initialisation sequence,
+inter-transaction delays, CMD53/CMD63 or troubleshooting — counts taken with
+positive controls. Full table in "Five implementations, one reference
+configuration", below.
+
+**A silent MTU black hole was killing bulk uplink**, and had probably been
+distorting every throughput figure in this file. The AP's `wlh0` is MTU 1500
+while its bridge partner `eth0` is 1460, so oversized frames from the HaLow side
+are dropped by the bridge with no ICMP and no counter. Uplink of 8 KiB returned
+**0 bytes after 34.7 s**; one `ip link set wlan1 mtu 1460` turned that into
+**0.32 s**. It is the likely cause of the "uplink varies 4x" and the
+155648-of-4194304 truncated download recorded here as unexplained — indicated,
+not established. Own section below.
+
+**Range and throughput across one floor.** −41.3 dBm (30 samples), 60/60 pings at
+0% loss, **2.77 Mbit/s down and 1.48 Mbit/s up** at 2 MHz. Under load the rate
+controller sits at 2 MHz **MCS7** with 90.5% success, which is the top rate the
+channel offers — so the limit is channel width, not link quality, and the `SG`
+regdomain permits 4 MHz. Third-party numbers put 4 MHz at 2.3× the 2 MHz figure.
+One floor up the house Wi-Fi did not reach and HaLow did, so the out-of-band path
+ended up carrying management for the link it was measuring.
+
+**A cross-version security-parsing difference.** A 1.15.3 station cannot see this
+AP's RSN element and therefore refuses to attempt SAE — it reads the AP as
+`[WEP]` and sits in `SCANNING`. 2.0.1 sees `Authentication suites: SAE` on the
+same AP at the same moment. The AP's `rsn_beacon_mode` defaults to
+`RSN_BEACON_DISABLED`; setting it to `2` puts the RSN IE in beacons. That did not
+by itself get the 1.15.3 board associated, and why is still open.
+
 ## 2026-08-23, later — the RSSI question is answered, and the AP stall has a software fix
 
 Two results, both measured the same afternoon. Full method, raw samples and the
@@ -157,6 +199,219 @@ host-endian, so every word comes out byte-reversed — `02 fa f0 80` (50000000)
 displays as `80f0fa02`. `od` is absent from the OpenMANET image and `xxd` from
 both; check the tool exists before believing an empty read.*
 
+## Five implementations, one reference configuration — and it is the reference that hides the defects
+
+Added 2026-08-23, after a third SPI board joined the bench and Morse's own
+documents were read. This is the section that explains *why* nobody else reports
+the three defects in `patches/upstream/`.
+
+| | this repo's station | OpenMANET AP | HT-HC01P | **Morse EKH01 reference** | MMECH06 (forum) |
+|---|---|---|---|---|---|
+| driver | 2.0.1 + our fixes | 2.0.1 | 1.15.3 | — | 1.16.4 |
+| **SPI clock** | **10 MHz** | 50 MHz | 50 MHz | **50 MHz** | 50 MHz |
+| **`reset-gpios` flag** | **1** | 0 | 0 | **0** | — |
+| reset GPIO | 17 | 17 | 5 | 5 | 5 |
+| chip selects | two (8, 7) | one (8) | one (8) | one (8, flag 1) | one (8, flag 1) |
+
+The fourth column is not another vendor. It is **Morse's own official Linux
+Porting Guide** (`MM_APPNOTE-24`, v2), section 6.1, the EKH01 EVK reference
+overlay, quoted verbatim:
+
+```dts
+mm6108: mm6108@0 {
+    compatible = "morse,mm610x-spi";
+    reg = <0>;    /* CE0 */
+    reset-gpios = <&gpio 5 0>;
+    power-gpios = <&gpio 3 0>, <&gpio 7 0>;   /* WAKE, BUSY */
+    spi-irq-gpios = <&gpio 25 0>;
+    spi-max-frequency = <50000000>;
+    status = "okay";
+};
+cs-gpios = <&gpio 8 1>;
+```
+
+So the pattern this repo kept finding across vendors is not a coincidence.
+**Everyone inherits it from the official reference**, and those two settings are
+precisely what hides two of the three defects: 50 MHz is the one clock at which
+the driver's broken delay model lands on a working value (defect 3), and a
+`reset-gpios` flag of 0 means `gpiod_set_value(reset, 1)` drives the pin *high*
+so RESET_N never fires and the chip is never knocked out of SPI mode (defect 2).
+
+The property table in the same document describes `reset-gpios` only as "GPIO
+descriptor connected to the MM6108 RESET line" and **says nothing about
+polarity**.
+
+### What the porting guide does not say
+
+Keyword counts over the extracted text of all 22 pages, taken with positive
+controls in the same pass (`Morse` 115 hits, `SPI` 21 hits, so the search works):
+
+| term | hits |
+|---|---|
+| chip select / chip-select | **0** |
+| deassert | **0** |
+| 74 | **0** |
+| init sequence / initialisation / training | **0** |
+| delay / inter-block / inter-transaction | **0** |
+| CMD53 / CMD63 | **0** |
+| probe fail / troubleshoot | **0** |
+
+The guide covers kernel patching, driver compilation, firmware, hostapd and
+wpa_supplicant, the four device-tree properties, bring-up commands and the
+`test_mode` table. It has **no troubleshooting section and documents none of the
+low-level SPI behaviour the three defects concern**.
+
+That matters upstream. The requirement that the chip needs ~74 clocks with chip
+select *deasserted* is stated publicly only in a forum thread — the i.MX93 one
+this repo already cites. **A developer porting by the official document has no
+way to learn it**, and the released driver does not implement it correctly.
+
+### A vendor claim this repo is a counter-example to
+
+From the community build thread "HaLow for Raspberry Pi OS", verbatim:
+
+> "From 1.15.3, patching the kernel is practically required, so sticking as close
+> to one of these versions as possible will make integration significantly
+> smoother."
+
+The stated reasons are mesh, channel switch announcements and SPI support, and
+the recipe cherry-picks a whole Morse kernel branch (`morse/mm/rpi-6.12.21/1.16.x`).
+
+**This repo runs on stock Raspberry Pi OS 6.6.51 with an unpatched kernel**,
+driver 2.0.1 plus the three `spi.c` fixes and nothing else, and associates with
+WPA3-SAE, runs DHCP, moves 4 MiB checksummed both ways and reports `errors 0`.
+Mesh and CSA were never exercised here, so the claim is not refuted in general —
+but for a station on 6.6.51 the kernel patches are **not** required, and that is
+measured rather than argued.
+
+Nobody in that thread reports this repo's failure signature (`c0 7f`, CMD63
+`-71`, `SPI_NO_CS`, `spi_inter_block_delay_bytes`), which is exactly what the
+table above predicts.
+
+### Third-party throughput numbers worth having
+
+From the same thread (castironclay, ~20 ft line of sight, measurement tool not
+stated):
+
+| channel width | throughput |
+|---|---|
+| 1 MHz | 0.82 Mbps |
+| 2 MHz | **3.68 Mbps** |
+| 4 MHz | **8.33 Mbps** |
+| 8 MHz | 5.16 Mbps — they note both devices were "ever so slightly under powered" |
+
+This repo measured **2.77 Mbit/s at 2 MHz** one floor up (see below), the same
+ballpark and a little lower, plausibly because our SPI runs at 10 MHz where
+theirs runs at 50, and because ours was TCP through SSH. Their 4 MHz figure is
+2.3× their 2 MHz figure, which is the best available evidence that moving this
+link to 4 MHz roughly doubles it. Their 8 MHz being *slower* than 4 MHz is a
+caution against assuming wider is always better.
+
+Morse quote the MM6108 at up to 32.3 Mbps, but that is at **8 MHz**, which the
+`SG` regdomain here does not permit (`(920 - 925 @ 4)` — 5 MHz of spectrum, 4 MHz
+maximum). It is not a comparable number. Morse's own staff put SPI-attached hosts
+at "up to 21 Mbps with iperf" on their EKH01 kit and say SPI throughput is
+dominated by host-side factors. The driver ships a bus throughput profiler,
+`test_mode=6`, for separating bus capability from link performance; `test_mode=4`
+is a chip reset and `test_mode=5` does block reads and writes.
+
+### The third board itself
+
+Heltec HT-HC01P HAT on a Raspberry Pi 4B, Heltec's factory image:
+
+```
+image      OpenWrt 23.05.5, DISTRIB_DESCRIPTION "23.05.5 2.8.5-20251107"
+kernel     5.15.167          board  RPi 4 Model B Rev 1.4, serial 100000004dd92ccc
+eth0       e4:5f:01:40:8e:91      HaLow wlan0  0c:bf:74:40:8e:91
+driver     0-rel_1_15_3_2025_Apr_16          bcf  bcf_mf08551.bin
+```
+
+**The `2.8.5` in the image name is Heltec's firmware package version, not the
+Morse driver version.** The driver is 1.15.3 — *older* than the 2.0.1 this repo
+patches. Worth stating because the image name reads like a driver version and
+invites exactly the wrong conclusion.
+
+Security note, because it is shipped this way: that image runs `ttyd` on
+`0.0.0.0:7681` with **no authentication** (`/token` returns `{"token": ""}`),
+bridged into `br-lan` with the Ethernet port and the Pi's built-in 5 GHz AP, with
+the firewall's lan zone at `input ACCEPT`, and its dnsmasq serving DHCP on lan
+with no `ignore` flag. Anyone in range of its Wi-Fi who knows the factory
+password gets a root shell with no credentials. Do not put its Ethernet on a
+shared switch before disabling the DHCP server, setting a root password and
+dealing with ttyd.
+
+Tooling on that image: `od`, `dtc`, `fdtget` and `wpa_cli` are **absent**;
+`hexdump`, `xxd`, `strings` and `wpa_cli_s1g` are present. Check before believing
+an empty read — the device tree above was read with `hexdump` after `od` returned
+nothing and the positive control showed why.
+
+### `rsn_beacon_mode`: why a 1.15.3 station cannot see this AP's security
+
+The HT-HC01P would not associate as a station of the OpenMANET AP. It scanned,
+found the AP at −52 dBm, and never attempted authentication; hostapd never logged
+its MAC at all. The supplicant's own view named it:
+
+```
+bssid              frequency  signal  flags        ssid
+3c:1a:cc:70:3f:ca  5785       -51     [WEP][ESS]   BCM2711-57e7
+```
+
+`[WEP]` means the privacy bit is set but **no RSN element could be parsed**. A
+network block requiring `key_mgmt=SAE` cannot match that, so wpa_supplicant sits
+in `wpa_state=SCANNING` forever and never tries. The same AP, at the same moment,
+seen by the two stations:
+
+| station | what its scan shows |
+|---|---|
+| this repo's, driver **2.0.1** | `RSN: Version 1, Group CCMP, Pairwise CCMP, Authentication suites: SAE` |
+| HT-HC01P, driver **1.15.3** | `capability: ESS Privacy (0x0011)` and **no RSN element at all** |
+
+Both `country=SG`, both with 5785 MHz [157] at 22 dBm available and not
+passive-scan, and the counts were taken with positive controls so the zero is
+meaningful.
+
+The reason the beacon has no RSN, from `beacon.c`:
+
+```c
+static enum morse_mac_rsn_beacon_mode
+rsn_beacon_mode __read_mostly = RSN_BEACON_DISABLED;
+
+enum morse_mac_rsn_beacon_mode {
+    RSN_BEACON_DISABLED = 0x00,   /* default */
+    RSN_BEACON_LONG     = 0x01,
+    RSN_BEACON_ALL      = 0x02
+};
+```
+
+S1G beacons omit the RSN IE by default and a station is expected to learn the
+security configuration from probe responses. 2.0.1 surfaces it; 1.15.3 does not.
+
+On the AP it is a **uci option, not a sysfs file** — the driver is built into the
+OpenMANET kernel and `/sys/module/morse` does not exist there. It is listed in
+`MM_MOD_INT` in `/lib/netifd/wireless/morse.sh`:
+
+```sh
+uci set wireless.radio1.rsn_beacon_mode='2'
+uci commit wireless && wifi reload
+```
+
+Confirmed applied in the AP's boot-time parameter dump (`rsn_beacon_mode : 2`)
+and confirmed on air — this repo's station now sees the RSN element in the beacon
+rather than only in probe responses.
+
+**Still unresolved.** The HT-HC01P did not associate in the three minutes after
+the change and hostapd still logged nothing from its MAC (positive control: 46
+hostapd lines present). Whether its supplicant needed a kick, or 1.15.3 cannot
+use the RSN IE even when it *is* in the beacon, is unknown — diagnosing it needs
+access to that board, which was unavailable at the time.
+
+**And an inconsistency, recorded rather than smoothed over:** the *other* Heltec
+(HT-H7608, same 1.15.3) associated to this same AP earlier the same day, with
+`auth_alg=0` followed by an RSN 4-way handshake — the shape of a cached PMKSA or
+of WPA2-PSK. That does not fit "1.15.3 cannot associate with this AP". It was not
+reachable for checking. Do not generalise the HC01P result to 1.15.3 on this
+evidence.
+
 ## Gotcha: a ghost station entry on the AP looks exactly like a working link
 
 Hit on 2026-08-23 while reconnecting the station after the NetworkManager profile
@@ -210,6 +465,76 @@ Worth knowing generally: an S1G AP is built to tolerate clients that sleep for a
 long time, so a long inactivity timeout is by design and a dead entry will not be
 aged out quickly. Do not wait for it.
 
+## Gotcha: a silent MTU black hole that kills bulk transfer in one direction only
+
+Found 2026-08-23 while measuring throughput one floor up. It is a property of the
+test network, not of the driver, and it has probably been distorting every
+throughput number in this repo.
+
+**Symptom.** Bulk transfer works one way and hangs the other, with no error
+anywhere. Small transfers work both ways. A trivial `ssh host echo hi` completes
+in 0.56 s throughout, so the link and the login are healthy.
+
+| size requested | uplink (Pi → laptop) | downlink (laptop → Pi) |
+|---|---|---|
+| 1024 B | 1024 B in 0.29 s | 1024 B in 0.31 s |
+| 8192 B | **0 B in 34.71 s** | 8192 B in 0.51 s |
+| 32768 B | **0 B in 34.96 s** | 32768 B in 0.67 s |
+| 524288 B | never completed | 524288 B in 1.81 s |
+
+A threshold between 1 KiB and 8 KiB is a **packet-size** boundary, not a rate
+problem. That is the tell.
+
+**Cause.**
+
+```
+AP    br-lan  mtu 1460     eth0  mtu 1460     wlh0  mtu 1500
+Pi    wlan1   mtu 1500
+Mac   en5     mtu 1500
+```
+
+`wlh0` is 1500 but its bridge partner `eth0` is 1460, and a Linux bridge takes
+the minimum of its ports, so `br-lan` is 1460. Frames larger than 1460 arriving
+from the HaLow side cannot be forwarded to the wired side, and the bridge drops
+them. **A bridge is L2 and sends no ICMP fragmentation-needed**, so neither
+endpoint is ever told. Both negotiated MSS from their own 1500-byte interfaces,
+so TCP retransmits full-size segments forever.
+
+A DF ping sweep confirms it, and its shape is worth understanding:
+
+```
+Pi -> AP    all sizes OK up to a 1500-byte frame    <- the AP is the destination;
+                                                      the frame never egresses eth0
+Mac -> Pi   OK at frame 1460, FAIL at 1468 and up   <- it is the REPLY being dropped
+```
+
+**Fix.** One command on the station, and the transfer that had hung for 35 s
+completes in 0.32 s with nothing else changed:
+
+```sh
+ip link set wlan1 mtu 1460
+nmcli connection modify halow 802-11-wireless.mtu 1460   # to persist
+```
+
+**Do not "fix" it on the AP yet.** Nothing in `/etc/` sets 1460, `uci show
+network` has no mtu option, and `dmesg` shows `br-lan` already at 1460 by second
+43.9 of boot — so a userspace daemon applies it after network config.
+`openmanetd`, `mesh11sd` and `trelay` are all installed and any could be it; an
+attempt to identify it from the `openmanetd` binary with `strings` **failed its
+own positive control**, so this is not established. Force `eth0` to 1500 and
+whatever sets 1460 will likely set it again at the next boot, turning a
+reproducible fault into an intermittent one.
+
+If more stations join, the network-wide form is to advertise the real MTU over
+DHCP from the AP: `uci add_list dhcp.lan.dhcp_option='26,1460'`.
+
+**What this probably explains.** Two entries recorded in this file as unexplained
+are exactly what a silent MTU black hole produces — "uplink varies 4x,
+0.23–0.90 Mbit/s", and "the first sustained download truncated at 155648 of
+4194304 bytes". **Strongly indicated, not established**: neither has been
+reproduced with the MTU restored. The 5% ping loss is *not* explained by this;
+small packets pass.
+
 ## Reading the link: RSSI, the numbers `iw` prints, and one way to brick the radio
 
 Three traps, all found on 2026-08-23 while trying to work out whether 5% packet
@@ -261,6 +586,7 @@ against the AP's 22 dBm:
 | 0.3 m, board to board | **+0.7 dBm** | −3 (range −2…−4) | 0 dBm |
 | 2 m, line of sight | **−15.8 dBm** | **−15.7** (range −14…−19) | −12.1 dBm |
 | 4 m, one wooden wall | −21.8 dBm + wall | **−29.9** (range −28…−32) | −27.1 dBm |
+| **one floor up** | — | **−41.3** (range −38…−44) | −37.7 dBm |
 
 The 2 m line-of-sight point lands **0.1 dB** from the free-space prediction, so
 the measurement path is accurate once the signal is inside the scale. The 0.3 m
@@ -275,8 +601,20 @@ space) and by the step (2 m → 4 m is 6.02 dB of distance, the reading moved
 14.2 dB, excess 8.2 dB).
 
 Link quality was unaffected at every position — 20/20 pings, 0% loss, RTT
-8.3–8.8 ms at 4 m through the wall. For orientation: at −30 dBm, with MCS0
-sensitivity around −95 dBm, roughly 65 dB of headroom remains.
+8.3–8.8 ms at 4 m through the wall, and 60/60 with 0% loss one floor up. For
+orientation: at −30 dBm, with MCS0 sensitivity around −95 dBm, roughly 65 dB of
+headroom remains; one floor up there is still about 50 dB.
+
+**The floor is cheap and the management network is not.** One floor up the HaLow
+link was fine while the house Wi-Fi did not reach at all, so HaLow became the
+only way to the board — the out-of-band path carrying the management traffic for
+the link it was measuring. Throughput there, after the MTU fix described below,
+was **2.77 Mbit/s down and 1.48 Mbit/s up** at 2 MHz.
+
+*One trap when measuring loss at range: a first ping run at that position
+reported 12% loss and was wrong, because the management SSH session was running
+over the same HaLow link at the time. A clean run returned all 60 sequence
+numbers. Do not measure loss on a link you are also using as your terminal.*
 
 The test was run by moving a board. **Do not attenuate with `iw set txpower
 fixed`** — see the next subsection for what that does. Station power save must be

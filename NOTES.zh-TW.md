@@ -2,6 +2,40 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-23 傍晚 —— 第三塊板子、一個 MTU 黑洞，以及廠商文件說了什麼
+
+四個結果。完整證據在
+[`logs/2026-08-23-mtu-blackhole-third-implementation-and-vendor-docs.txt`](logs/2026-08-23-mtu-blackhole-third-implementation-and-vendor-docs.txt)。
+
+**藏住缺陷的是那份參考設定。** 第三塊 SPI 板子加入了（Heltec HT-HC01P 接 RPi 4，
+驅動 1.15.3），而且第一次讀了 Morse 官方的 Linux 移植指南。它的 EKH01 參考 overlay
+寫的是 `spi-max-frequency = <50000000>` 和 `reset-gpios = <&gpio 5 0>` —— 50 MHz
+加 flag 0。**所有檢視過的實作都從官方參考繼承了這兩個設定**，而它們正好讓缺陷 3
+（壞掉的延遲換算只有在 50 MHz 才會算出可用值）和缺陷 2（flag 0 讓 RESET_N 從不觸發）
+都看不見。同一份文件裡，chip select、deassert、74 個 clock、初始化序列、交易間延遲、
+CMD53/CMD63、疑難排解 —— 出現次數全部是 **0**，而且是帶正對照統計的。完整表格見下面
+「五個實作、一份參考設定」。
+
+**一個靜默的 MTU 黑洞一直在殺掉大量上行**，而且很可能一直在扭曲本檔案裡的每一個吞吐量
+數字。AP 的 `wlh0` 是 MTU 1500，橋接夥伴 `eth0` 卻是 1460，所以從 HaLow 側來的超尺寸
+訊框被橋接器丟掉，沒有 ICMP、沒有計數器。上行 8 KiB **34.7 秒回傳 0 位元組**；一個
+`ip link set wlan1 mtu 1460` 讓它變成 **0.32 秒**。它很可能就是本檔案裡記為未解釋的
+「上行速率變動 4 倍」和「4194304 中截斷在 155648」的成因 —— 指向，但未確立。下面有
+專節。
+
+**上一層樓的距離與吞吐量。** −41.3 dBm（30 取樣）、60/60 ping 0% 遺失、**下行
+2.77 Mbit/s、上行 1.48 Mbit/s**，2 MHz。負載下速率控制器停在 2 MHz **MCS7**、成功率
+90.5%，那是這個頻寬能給的最高一檔 —— 所以限制是**頻寬**，不是鏈路品質，而 `SG`
+regdomain 允許到 4 MHz。第三方數據顯示 4 MHz 是 2 MHz 的 2.3 倍。上一層樓時家裡的
+Wi-Fi 搆不到而 HaLow 搆得到，於是頻外通道反過來扛起了它自己正在被量測的那條鏈路的
+管理流量。
+
+**一個跨版本的安全解析差異。** 1.15.3 的 station 看不見這台 AP 的 RSN 元素，因此拒絕
+嘗試 SAE —— 它把 AP 讀成 `[WEP]` 然後停在 `SCANNING`。2.0.1 在同一台 AP、同一時刻看到
+的是 `Authentication suites: SAE`。AP 的 `rsn_beacon_mode` 預設是
+`RSN_BEACON_DISABLED`；設成 `2` 就會把 RSN IE 放進 beacon。但光是這樣還沒讓那台
+1.15.3 關聯上，原因仍未解決。
+
 ## 2026-08-23 稍晚 —— RSSI 那題有答案了，AP 停擺也有軟體解法
 
 兩個結果，都是同一個下午量出來的。完整方法、原始取樣、以及過程中踩到的工具陷阱在
@@ -130,6 +164,192 @@ ping 零遺失、累計 88.9 MB 的 SPI 流量且 `errors 0`。見
 `02 fa f0 80`（50000000）會顯示成 `80f0fa02`。OpenMANET 映像沒有 `od`，兩台都沒有
 `xxd`；在相信一個空的讀值之前，先確認工具存在。*
 
+## 五個實作、一份參考設定 —— 而藏住缺陷的正是那份參考
+
+2026-08-23 新增，在第三塊 SPI 板子加入、並且第一次讀了 Morse 官方文件之後。這一節解釋
+的是**為什麼別人都沒有回報 `patches/upstream/` 裡的那三個缺陷**。
+
+| | 本 repo 的 station | OpenMANET AP | HT-HC01P | **Morse EKH01 參考** | MMECH06（論壇） |
+|---|---|---|---|---|---|
+| 驅動 | 2.0.1 + 我們的修正 | 2.0.1 | 1.15.3 | — | 1.16.4 |
+| **SPI 時脈** | **10 MHz** | 50 MHz | 50 MHz | **50 MHz** | 50 MHz |
+| **`reset-gpios` flag** | **1** | 0 | 0 | **0** | — |
+| reset 腳位 | 17 | 17 | 5 | 5 | 5 |
+| chip select | 兩個（8、7） | 一個（8） | 一個（8） | 一個（8，flag 1） | 一個（8，flag 1） |
+
+第四欄不是另一家廠商，是 **Morse 自己的官方 Linux 移植指南**（`MM_APPNOTE-24` v2）
+第 6.1 節、EKH01 EVK 的參考 overlay，逐字引用：
+
+```dts
+mm6108: mm6108@0 {
+    compatible = "morse,mm610x-spi";
+    reg = <0>;    /* CE0 */
+    reset-gpios = <&gpio 5 0>;
+    power-gpios = <&gpio 3 0>, <&gpio 7 0>;   /* WAKE, BUSY */
+    spi-irq-gpios = <&gpio 25 0>;
+    spi-max-frequency = <50000000>;
+    status = "okay";
+};
+cs-gpios = <&gpio 8 1>;
+```
+
+所以本 repo 一再在各家廠商身上看到的模式，不是巧合。**大家都是從官方參考繼承來的**，
+而那兩個設定正好藏住了三個缺陷中的兩個：50 MHz 是驅動那個壞掉的延遲換算唯一會算出可用
+值的時脈（缺陷 3），而 `reset-gpios` flag 0 讓 `gpiod_set_value(reset, 1)` 把腳位拉
+**高**，RESET_N 從來不觸發，晶片也就永遠不會被踢出 SPI 模式（缺陷 2）。
+
+同一份文件的屬性表對 `reset-gpios` 只寫「GPIO descriptor connected to the MM6108
+RESET line」，**對極性隻字未提**。
+
+### 這份移植指南沒有寫的東西
+
+對全部 22 頁抽出的文字做關鍵字統計，同一次帶正對照（`Morse` 115 次、`SPI` 21 次，
+所以搜尋確實在工作）：
+
+| 關鍵字 | 出現次數 |
+|---|---|
+| chip select / chip-select | **0** |
+| deassert | **0** |
+| 74 | **0** |
+| init sequence / initialisation / training | **0** |
+| delay / inter-block / inter-transaction | **0** |
+| CMD53 / CMD63 | **0** |
+| probe fail / troubleshoot | **0** |
+
+這份指南涵蓋核心修補、編譯驅動、韌體、hostapd 與 wpa_supplicant、四個 device tree
+屬性、bring-up 指令、以及 `test_mode` 表格。它**沒有疑難排解章節，也沒有記載任何與那
+三個缺陷相關的底層 SPI 行為**。
+
+這對上游很重要。「晶片需要約 74 個 clock 且 chip select 必須**解除**」這個要求，公開
+出處只有一篇論壇討論串 —— 就是本 repo 已經引用的那篇 i.MX93。**照著官方文件做移植的
+人，不可能知道這件事**，而 released 驅動也沒有正確實作它。
+
+### 一個本 repo 構成反例的廠商說法
+
+出自社群的 "HaLow for Raspberry Pi OS" 討論串，逐字引用：
+
+> "From 1.15.3, patching the kernel is practically required, so sticking as close
+> to one of these versions as possible will make integration significantly
+> smoother."
+
+它給的理由是 mesh、channel switch announcement 和 SPI 支援，做法是 cherry-pick 一整條
+Morse 的核心分支（`morse/mm/rpi-6.12.21/1.16.x`）。
+
+**本 repo 跑在原廠 Raspberry Pi OS 6.6.51、核心未經修補**，驅動是 2.0.1 加上三個
+`spi.c` 修正、沒有別的，而它能完成 WPA3-SAE 關聯、跑 DHCP、雙向搬 4 MiB 並校驗、
+回報 `errors 0`。這裡從來沒有用過 mesh 和 CSA，所以那個說法沒有被全面推翻 —— 但對
+6.6.51 上的 station 而言，核心修補**不是**必要的，而且這是量出來的，不是論證出來的。
+
+那串討論裡**沒有任何人**回報本 repo 追過的失敗特徵（`c0 7f`、CMD63 `-71`、
+`SPI_NO_CS`、`spi_inter_block_delay_bytes`）—— 這正是上面那張表所預測的。
+
+### 值得收著的第三方吞吐量數據
+
+同一串（castironclay，約 20 英尺無遮蔽，量測工具未說明）：
+
+| 頻寬 | 吞吐量 |
+|---|---|
+| 1 MHz | 0.82 Mbps |
+| 2 MHz | **3.68 Mbps** |
+| 4 MHz | **8.33 Mbps** |
+| 8 MHz | 5.16 Mbps —— 他們註明兩台裝置當時「供電略為不足」 |
+
+本 repo 在上一層樓、2 MHz 量到 **2.77 Mbit/s**，同一個量級、略低，合理的解釋是我們的
+SPI 跑 10 MHz 而他們跑 50 MHz，以及我們是用 TCP over SSH 量的。他們的 4 MHz 是 2 MHz
+的 **2.3 倍**，這是目前最好的證據支持「把這條鏈路改到 4 MHz 大約可以翻倍」。而他們的
+8 MHz 比 4 MHz **還慢**，是「頻寬不是越寬越好」的一個警告。
+
+Morse 標稱 MM6108 可達 32.3 Mbps，但那是在 **8 MHz** 下，而這裡的 `SG` regdomain
+不允許（`(920 - 925 @ 4)` —— 總共 5 MHz 頻譜、最大 4 MHz），所以那不是對等的數字。
+Morse 自家人員在論壇上說 SPI 主機在他們的 EKH01 套件上「up to 21 Mbps with iperf」，
+並指出 SPI 吞吐量主要取決於主機側因素。驅動內建匯流排吞吐量分析工具 `test_mode=6`，
+可以把匯流排能力和鏈路效能分開量；`test_mode=4` 是晶片重置，`test_mode=5` 做區塊讀寫。
+
+### 第三塊板子本身
+
+Heltec HT-HC01P HAT 接在 Raspberry Pi 4B 上，跑 Heltec 原廠映像：
+
+```
+映像    OpenWrt 23.05.5，DISTRIB_DESCRIPTION "23.05.5 2.8.5-20251107"
+核心    5.15.167        板子  RPi 4 Model B Rev 1.4，serial 100000004dd92ccc
+eth0    e4:5f:01:40:8e:91      HaLow wlan0  0c:bf:74:40:8e:91
+驅動    0-rel_1_15_3_2025_Apr_16          bcf  bcf_mf08551.bin
+```
+
+**映像名稱裡的 `2.8.5` 是 Heltec 韌體包的版本，不是 Morse 驅動版本。** 驅動是
+1.15.3 —— 比本 repo 修補的 2.0.1 **還舊**。特別寫下來是因為那個名字看起來很像驅動
+版本，很容易導向完全相反的結論。
+
+安全性注記，因為它出廠就是這樣：那份映像在 `0.0.0.0:7681` 跑 `ttyd` 而且**沒有任何
+認證**（`/token` 回 `{"token": ""}`），它和乙太網路孔、Pi 內建的 5 GHz AP 一起橋在
+`br-lan` 上，防火牆的 lan zone 是 `input ACCEPT`，而它的 dnsmasq 在 lan 上提供 DHCP
+且沒有 `ignore` 旗標。任何在它 Wi-Fi 範圍內、知道原廠密碼的人，都能不需憑證拿到 root
+shell。在關掉 DHCP 伺服器、設好 root 密碼、處理掉 ttyd 之前，不要把它的網路孔接到共用
+交換器上。
+
+那份映像的工具狀況：`od`、`dtc`、`fdtget`、`wpa_cli` **都沒有**；`hexdump`、`xxd`、
+`strings`、`wpa_cli_s1g` 有。相信一個空的讀取結果之前先確認工具存在 —— 上面那份
+device tree 就是在 `od` 沒有輸出、正對照顯示原因之後，改用 `hexdump` 讀到的。
+
+### `rsn_beacon_mode`：為什麼 1.15.3 的 station 看不見這台 AP 的安全設定
+
+HT-HC01P 當 OpenMANET AP 的 station 時關聯不上。它掃得到 AP（−52 dBm），卻從來沒有
+嘗試認證；AP 的 hostapd 也從來沒記錄過它的 MAC。supplicant 自己的視角道破了原因：
+
+```
+bssid              frequency  signal  flags        ssid
+3c:1a:cc:70:3f:ca  5785       -51     [WEP][ESS]   BCM2711-57e7
+```
+
+`[WEP]` 的意思是 privacy bit 有設，但**解析不到 RSN 元素**。一個要求 `key_mgmt=SAE`
+的網路設定沒辦法跟它匹配，所以 wpa_supplicant 永遠停在 `wpa_state=SCANNING`，連試都
+不會試。同一台 AP、同一時刻，兩個 station 看到的：
+
+| station | 它的掃描結果 |
+|---|---|
+| 本 repo 的，驅動 **2.0.1** | `RSN: Version 1, Group CCMP, Pairwise CCMP, Authentication suites: SAE` |
+| HT-HC01P，驅動 **1.15.3** | `capability: ESS Privacy (0x0011)`，**完全沒有 RSN 元素** |
+
+兩邊都是 `country=SG`，都有 5785 MHz [157] 22 dBm 可用、都不是 passive-scan，而且
+統計是帶正對照做的，所以那個 0 是有意義的。
+
+beacon 裡為什麼沒有 RSN，出自 `beacon.c`：
+
+```c
+static enum morse_mac_rsn_beacon_mode
+rsn_beacon_mode __read_mostly = RSN_BEACON_DISABLED;
+
+enum morse_mac_rsn_beacon_mode {
+    RSN_BEACON_DISABLED = 0x00,   /* 預設 */
+    RSN_BEACON_LONG     = 0x01,
+    RSN_BEACON_ALL      = 0x02
+};
+```
+
+S1G 的 beacon 預設省略 RSN IE，station 應該從 probe response 學到安全設定。2.0.1 會把
+它呈現出來，1.15.3 不會。
+
+在 AP 上它是一個 **uci 選項而不是 sysfs 檔案** —— 那台的驅動編進 OpenMANET 核心裡，
+`/sys/module/morse` 根本不存在。它列在 `/lib/netifd/wireless/morse.sh` 的
+`MM_MOD_INT` 裡：
+
+```sh
+uci set wireless.radio1.rsn_beacon_mode='2'
+uci commit wireless && wifi reload
+```
+
+已套用並在 AP 開機參數傾印中確認（`rsn_beacon_mode : 2`），也在空中確認 —— 本 repo 的
+station 現在會在 beacon 裡看到 RSN 元素，而不是只在 probe response 裡。
+
+**仍未解決。** 改完之後三分鐘內 HT-HC01P 依然沒有關聯，hostapd 依然沒有它 MAC 的任何
+紀錄（正對照：log 裡有 46 行 hostapd 訊息）。是它的 supplicant 需要踢一下，還是 1.15.3
+即使 RSN IE **在** beacon 裡也用不了，目前不知道 —— 要查得碰得到那台，而當時碰不到。
+
+**還有一個矛盾，記下來而不是抹平：** 另一台 Heltec（HT-H7608，同樣 1.15.3）在同一天
+稍早**確實**關聯上了同一台 AP，用的是 `auth_alg=0` 加上 RSN 四向交握 —— 那是快取
+PMKSA 或 WPA2-PSK 的形狀。這跟「1.15.3 無法關聯這台 AP」對不起來。當時那台碰不到，
+無法查證。**不要**用 HC01P 這個結果去推論整個 1.15.3。
+
 ## 陷阱：AP 上的殘留關聯項目，看起來和正常連線一模一樣
 
 2026-08-23 在刪掉又重建 NetworkManager profile、重新連線時遇到的。
@@ -175,6 +395,66 @@ station 已送出 22365 bytes，AP 只收到其中 9559；AP 的 `tx failed` 在
 一般性的認知：S1G 的 AP 本來就設計成容忍終端長時間休眠，所以老化逾時設得長是刻意的，
 一筆死掉的項目不會很快被清掉。不要等它。
 
+## 陷阱：只殺單一方向大量傳輸的靜默 MTU 黑洞
+
+2026-08-23 量測上一層樓的吞吐量時發現。它是**測試網路的性質，不是驅動的問題**，而且它
+很可能一直在扭曲本檔案裡的每一個吞吐量數字。
+
+**症狀。** 大量傳輸一個方向正常、另一個方向卡死，而且哪裡都沒有錯誤訊息。小量傳輸兩個
+方向都正常。全程 `ssh host echo hi` 都能在 0.56 秒內完成，所以鏈路和登入都是健康的。
+
+| 要求的大小 | 上行（Pi → 筆電） | 下行（筆電 → Pi） |
+|---|---|---|
+| 1024 B | 1024 B / 0.29 s | 1024 B / 0.31 s |
+| 8192 B | **0 B / 34.71 s** | 8192 B / 0.51 s |
+| 32768 B | **0 B / 34.96 s** | 32768 B / 0.67 s |
+| 524288 B | 從未完成 | 524288 B / 1.81 s |
+
+門檻落在 1 KiB 到 8 KiB 之間 —— 那是**封包尺寸**的邊界，不是速率問題。這就是判讀的關鍵。
+
+**成因。**
+
+```
+AP    br-lan  mtu 1460     eth0  mtu 1460     wlh0  mtu 1500
+Pi    wlan1   mtu 1500
+Mac   en5     mtu 1500
+```
+
+`wlh0` 是 1500，但它的橋接夥伴 `eth0` 是 1460，而 Linux 橋接器取所有 port 的最小值，
+所以 `br-lan` 是 1460。從 HaLow 側進來、大於 1460 的訊框無法轉送到有線側，橋接器直接
+丟棄。**橋接是 L2，不會送 ICMP fragmentation-needed**，所以兩端永遠不會被告知。兩端都
+是依自己那張 1500 的介面協商 MSS，於是 TCP 永無止境地重傳滿載封包。
+
+DF ping 掃描證實了它，而且形狀本身值得理解：
+
+```
+Pi -> AP    到 1500 位元組訊框全部通過   <- 目的地就是 AP 本身；
+                                          訊框根本不需要走出 eth0
+Mac -> Pi   1460 通過、1468 以上失敗     <- 失敗的是「回程」，不是去程
+```
+
+**修法。** station 上一個指令，原本卡 35 秒的傳輸變成 0.32 秒完成，其他什麼都沒動：
+
+```sh
+ip link set wlan1 mtu 1460
+nmcli connection modify halow 802-11-wireless.mtu 1460   # 要持久的話
+```
+
+**先不要從 AP 那側「修」它。** `/etc/` 底下 grep 不到任何 `1460`、`uci show network`
+沒有 mtu 選項，而 `dmesg` 顯示 `br-lan` 在開機第 43.9 秒就已經是 1460 —— 是某個使用者
+空間 daemon 在網路設定完成之後動的手。`openmanetd`、`mesh11sd`、`trelay` 都裝著，
+任何一個都有可能；試圖用 `strings` 從 `openmanetd` 二進位檔找證據時**正對照失敗了**，
+所以這件事沒有確立。硬把 `eth0` 改成 1500，那個東西很可能下次開機又設回去，把一個可
+重現的故障變成間歇性的，比現在更難查。
+
+如果之後有更多 station 加入，網路層級的做法是從 AP 用 DHCP 通告真實 MTU：
+`uci add_list dhcp.lan.dhcp_option='26,1460'`。
+
+**它很可能解釋了什麼。** 本檔案裡記為「未解釋」的兩項，正是靜默 MTU 黑洞會產生的現象 ——
+「上行速率變動 4 倍，0.23–0.90 Mbit/s」，以及「第一次持續下載在 4194304 中的第 155648
+個位元組截斷」。**強烈指向，但未確立**：這兩件事都還沒有在 MTU 修好之後重現過。那 5% 的
+ping 遺失**不能**用這個解釋，小封包不受影響。
+
 ## 判讀鏈路：RSSI、`iw` 印出的數字，以及一種弄壞電台的方法
 
 三個陷阱，都是 2026-08-23 在追「5% 封包遺失是不是訊號問題」時發現的。其中第一個是對
@@ -216,6 +496,7 @@ authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71    <- Heltec，幾公尺外
 | 0.3 m，板對板 | **+0.7 dBm** | −3（範圍 −2…−4） | 0 dBm |
 | 2 m，無遮蔽 | **−15.8 dBm** | **−15.7**（範圍 −14…−19） | −12.1 dBm |
 | 4 m，隔一道木牆 | −21.8 dBm + 牆 | **−29.9**（範圍 −28…−32） | −27.1 dBm |
+| **上一層樓** | — | **−41.3**（範圍 −38…−44） | −37.7 dBm |
 
 2 m 無遮蔽那點與自由空間預測只差 **0.1 dB**，所以只要訊號落在量測範圍內，這條量測路徑
 就是準的。0.3 m 那點是削頂的，而且削頂不只是從絕對值推論出來的，它直接顯示在**級距**
@@ -226,8 +507,18 @@ authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71    <- Heltec，幾公尺外
 （實測 −29.9 對自由空間 −21.8）與級距算（2 m → 4 m 距離上該是 6.02 dB，讀值走了
 14.2 dB，多出 8.2 dB）。
 
-每個位置的鏈路品質都不受影響：20/20 ping、0% 遺失，隔牆 4 m 時 RTT 8.3–8.8 ms。
-給個概念：−30 dBm 之下，MCS0 靈敏度約在 −95 dBm，還剩大約 65 dB 餘裕。
+每個位置的鏈路品質都不受影響：20/20 ping、0% 遺失，隔牆 4 m 時 RTT 8.3–8.8 ms，
+上一層樓時 60/60、0% 遺失。給個概念：−30 dBm 之下，MCS0 靈敏度約在 −95 dBm，還剩
+大約 65 dB 餘裕；上一層樓還剩約 50 dB。
+
+**樓板很便宜，管理網路很貴。** 上一層樓時 HaLow 鏈路完全正常，家裡的 Wi-Fi 卻完全
+搆不到，所以 HaLow 反而成了唯一一條路 —— 頻外通道扛起了「它自己正在被量測的那條鏈路」
+的管理流量。那個位置的吞吐量（在下面說的 MTU 修正之後）是**下行 2.77 Mbit/s、
+上行 1.48 Mbit/s**，2 MHz 頻寬。
+
+*量測遺失率時的一個陷阱：在那個位置第一次跑 ping 得到 12% 遺失，那是錯的 —— 因為當時
+管理用的 SSH 連線正走在同一條 HaLow 鏈路上。淨空之後重跑，60 個序號一個不漏。
+不要在一條你同時當終端機在用的鏈路上量遺失率。*
 
 這個測試是**用搬動板子**做的。**不要用 `iw set txpower fixed` 去衰減** —— 見下一小節
 它會造成什麼後果。測量期間必須把 station 的省電關掉
