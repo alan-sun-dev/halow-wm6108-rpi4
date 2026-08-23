@@ -2,6 +2,36 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-24 — the SPI clock was the ceiling, and it hid the answer to the bandwidth question
+
+**Raising the station's SPI clock from 10 MHz to 50 MHz gave 2.6× the throughput
+with zero SPI errors**, and corrected a conclusion that had already been measured
+and was wrong. At the stock 10 MHz clock a 4 MHz channel benchmarked *slower*
+than 2 MHz and was about to be written up as "4 MHz does not help"; at 50 MHz it
+is almost exactly double. The bus was the binding constraint and a wider channel
+only added retries.
+
+| SPI clock | 2 MHz air | 4 MHz air |
+|---|---|---|
+| 10 MHz | up 3.16 / down 2.46 | up 2.66 / down 2.29 |
+| **50 MHz** | up 3.55 / down 3.27 | **up 6.86 / down 6.80** |
+
+Where the bus time went: **83% of every byte on the station's SPI bus was the
+250-byte inter-transaction padding** that this repo's own defect-3 fix installs.
+The padding is correct — the chip counts clocks, not time — but for that same
+reason its wall-clock cost is 200 µs at 10 MHz against 40 µs at 50 MHz. Running
+at the non-reference clock multiplied a necessary overhead by five.
+
+No SPI errors at any rung of 10 → 20 → 50 MHz, so **the SenseCAP M1 mPCIe wiring
+is clean at 50 MHz** and the overlay's 10 MHz was conservative rather than
+necessary. Both settings are now persistent and verified across a cold boot.
+
+**One consequence for the PR:** at 50 MHz the driver's broken delay formula
+happens to produce the correct 250, so **defect 3 no longer reproduces on this
+hardware** unless the clock is set back to 10 MHz. The fix is unaffected and
+defect 2 still applies. Say it plainly upstream — a driver should not need one
+particular clock rate to compute a correct delay. Section below.
+
 ## 2026-08-23, evening — a third board, an MTU black hole, and what the vendor documents say
 
 Four results. Full evidence in
@@ -414,6 +444,171 @@ access to that board, which was unavailable at the time.
 of WPA2-PSK. That does not fit "1.15.3 cannot associate with this AP". It was not
 reachable for checking. Do not generalise the HC01P result to 1.15.3 on this
 evidence.
+
+## The SPI clock was the throughput ceiling, and 4 MHz only pays once it is raised
+
+2026-08-24. Full method and raw runs in
+[`logs/2026-08-24-spi-clock-is-the-throughput-ceiling.txt`](logs/2026-08-24-spi-clock-is-the-throughput-ceiling.txt).
+
+**Raising the station's SPI clock from 10 MHz to 50 MHz gave 2.6× the throughput
+with zero SPI errors** — and it changed the answer to a question that had already
+been measured wrong.
+
+| SPI clock | air BW | uplink | downlink |
+|---|---|---|---|
+| 10 MHz | 2 MHz | 3.16 | 2.46 |
+| 10 MHz | 4 MHz | 2.66 | 2.29 ← *looks like a regression* |
+| 50 MHz | 2 MHz | 3.55 | 3.27 |
+| **50 MHz** | **4 MHz** | **6.86** | **6.80** ← the real answer |
+
+Mbit/s, all at the same position with the station on the bench beside the AP,
+1 MiB of incompressible payload each way over SSH, three runs per cell except the
+two 10 MHz rows.
+
+**4 MHz does roughly double the throughput, and it could not show that while the
+host bus was the binding constraint.** Widening the channel with the bus already
+saturated only adds retries: at 10 MHz/4 MHz the AP logged 1569 tx retries and
+155 tx failed, against ~4 and 0 at 10 MHz/2 MHz. Measured at the stock clock,
+"4 MHz does not help on this link" was about to be written down as a finding.
+
+### Where the bus time was going: our own fix, multiplied by five
+
+The air side was fine throughout. Under load at 4 MHz mmrc selected 4 MHz MCS7
+with airtime **755** against **1582** at 2 MHz MCS7 — frame time halved, exactly
+as a doubled channel should — while application throughput did not move. When the
+layer under test improves and the number you care about does not, the bottleneck
+is elsewhere.
+
+The station's SPI transfer histogram says where:
+
+```
+256-511 bytes    2,643,750 transfers   <- 97% of all transfers
+16-31               53,614
+512-1023            13,422
+2048-4095           12,368
+1024-2047            3,220
+4096-8191               75
+                 ---------
+total            2,721,694 messages, 794,653,458 bytes
+```
+
+That 256–511 bucket is the **250-byte inter-transaction padding this repo's own
+defect-3 fix installs** (`SPI_MIN_DELAY_BYTES` in `spi.c`). At 250 bytes each it
+is roughly 661 MB of the 794 MB on the bus — **about 83% of every byte the SPI
+bus moved was padding.**
+
+The padding is correct and necessary; the chip counts *clocks*, not time, which
+is the entire content of defect 3. But because it counts clocks, its wall-clock
+cost scales inversely with the clock rate:
+
+```
+250 bytes = 2000 clocks  ->  200 µs at 10 MHz
+                         ->   40 µs at 50 MHz
+```
+
+Running at 10 MHz multiplied a necessary overhead by five. `Queue stop` was
+non-zero on both ends at that point — 148 on the station, 134 on the AP.
+
+### The ladder, and that the wiring is clean at 50 MHz
+
+`spi_clock_speed` is a module parameter and, per the comment at `spi.c:1464`,
+overrides the device tree, so no rebuild is needed:
+
+```sh
+rmmod morse
+modprobe morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=50000000
+nmcli con up halow
+```
+
+| SPI clock | uplink | downlink | SPI errors |
+|---|---|---|---|
+| 10 MHz | 2.66 | 2.29 | 0 |
+| 20 MHz | 5.732 / 5.774 / 5.746 | 5.526 / 4.690 / 5.474 | 0 |
+| 50 MHz | 6.666 / 7.047 / 6.866 | 7.164 / 7.017 / 6.218 | 0 |
+
+`errors` and `timedout` under `/sys/class/spi_master/spi0/statistics` stayed at 0
+at every rung, and `dmesg` produced no write failure, read failure, CRC error,
+CMD53 or CMD63 at any speed. **The SenseCAP M1 mPCIe wiring is clean at 50 MHz** —
+the 10 MHz in this repo's overlay was conservative rather than necessary, and it
+cost a factor of 2.6. The shape of the curve is informative too: 10→20 MHz more
+than doubles, 20→50 MHz adds about 20%, which is what it looks like when the bus
+stops being the binding constraint and the air interface takes over.
+
+For scale, the community build thread reports 3.68 Mbps at 2 MHz and 8.33 Mbps at
+4 MHz at ~20 ft on a 50 MHz SPI host. This link now measures 3.55 at 2 MHz (96%
+of theirs) and 6.86 at 4 MHz (82%).
+
+### Selecting a 4 MHz channel: the SG regulatory table
+
+Setting `s1g_chanbw=4` alone is not enough — the channel number must change too.
+Keeping `channel=42` gets a refusal worth recognising:
+
+```
+netifd: radio1: Couldn't find regulatory data for SG with ch=42 bw=4 op= chzn=
+netifd: radio1: wifi-iface 0 mode=ap ignored; requires valid country/channel setup
+```
+
+The table is a CSV at `/usr/share/morse-regdb/channels.csv`. Every SG row in the
+920–925 MHz allocation:
+
+| bw | s1g_chan | centre MHz | maps to 5G ch |
+|---|---|---|---|
+| 1 | 37 / 39 / 41 / 43 / 45 | 920.5 … 924.5 | 149 … 165 |
+| 2 | 38 | 921.0 | 151 |
+| 2 | 42 | 923.0 | 159 |
+| **4** | **40** | **922.0** | 155 |
+
+**There is exactly one 4 MHz channel in SG: channel 40, centred 922.0 MHz** —
+which is why the Heltec HT-HC01P shipped configured for channel 40.
+
+```sh
+uci set wireless.radio1.channel='40'
+uci set wireless.radio1.s1g_chanbw='4'
+uci commit wireless && wifi reload
+```
+
+Read back what the radio actually did with `morse_cli -i wlh0 channel`. `iw`
+shows only the dot11ah mapping, where 4 MHz appears as an 80 MHz-wide mapped
+channel and 2 MHz as 40 MHz.
+
+### Consequence for the upstream work: defect 3 stops reproducing at 50 MHz
+
+**At 50 MHz the driver's broken formula happens to be right.**
+`40000ns / (clk_period * 8)` evaluates to 250 bytes at 50 MHz — the correct
+value — which is exactly why every vendor running the reference clock never sees
+defect 3. This repo found it only because it was running at 10 MHz, where the
+same formula gives 50, and 50 fails.
+
+The fix is unaffected: `SPI_MIN_DELAY_BYTES` is an unconditional floor of 250, so
+it produces the same value at 50 MHz and stays correct. Defect 2 is unaffected
+too — it is about chip select during the init burst, not timing, and it still
+applies here because this repo's overlay sets `reset-gpios` flag 1 so RESET_N
+actually fires.
+
+**But anyone reproducing defect 3 from this repo must set the clock back first:**
+
+```sh
+modprobe morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=10000000
+```
+
+Worth saying plainly in the PR rather than hiding: the configuration that exposes
+the defect is the non-default clock. That argues *for* the fix, not against it —
+a driver should not depend on one particular clock rate to compute a correct
+delay.
+
+### Final configuration
+
+AP: `channel 40`, `s1g_chanbw 4` → 922.0 MHz, 4 MHz operating, 2 MHz primary.
+Station: `/etc/modprobe.d/morse.conf` now reads
+
+```
+options morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=50000000
+```
+
+with the previous contents kept as `morse.conf.bak-20260824`. Verified from a
+cold boot rather than from the file — `spi_clock_speed = 50000000`, the override
+line in `dmesg` at t=10.16 s, SPI errors 0, link up at `10.41.0.208` with MTU
+1500, uplink 7.091 / 7.044 / 6.673 and downlink 6.442 / 6.691 / 6.698 Mbit/s.
 
 ## Gotcha: a ghost station entry on the AP looks exactly like a working link
 
