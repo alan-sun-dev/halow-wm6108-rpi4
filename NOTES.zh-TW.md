@@ -12,13 +12,39 @@ clock 數的）。乾淨的 series 是 `patches/upstream/000{1,2,3}-*.patch`，�
 `patches/morse-driver-2.0.1-rpi-spi.patch` 仍是調查用的工作檔（儀器與實驗參數），
 不要拿它給任何人。
 
-**板子 `E4:5F:01:52:55:04` 目前不是乾淨狀態。** 那台 Pi 的 `~/halow-test/morse_driver`
-裡，`spi.c`、`mac.c`、`hw_scan.c` 三個檔都被改過：`mac.c` 與 `hw_scan.c` 帶著六行
-`MORSE-PROBE` 的 `pr_info`，是為了追哪些 mac80211 callback 有被呼叫而加的；目前載入的
-模組有那些探針，但**沒有** SPI 修正（`strings morse.ko | grep -c SPI_NO_CS` 回 0）。
-要回到乾淨可運作的建置：在那裡 `git checkout -- .`，再重新套 `patches/upstream/`。
-安裝的 overlay 是「所有 DT 差異一次全上」的實驗版；原廠版備份在
-`/boot/firmware/overlays/mm610x-spi-sensecap.dtbo.orig` 與 `/boot/firmware/config.txt.orig`。
+**這個 series 已在 repo 的原廠 overlay 下驗證過** —— RESET_N 真的會觸發、兩組 chip
+select、除了 `country=` 與 `bcf=` 之外不帶任何模組參數，並且是在冷開機、由核心自動
+載入的情況下確認的。完整紀錄在
+[`logs/2026-08-23-stock-overlay-clean-series-environment.txt`](logs/2026-08-23-stock-overlay-clean-series-environment.txt)。
+同一輪也在相同的 device tree 下載入未修正的建置，重現了原始失敗 —— `c0 7f`、CMD63
+`-71` —— 所以這個 A/B 固定了 device tree，只變動驅動 binary。
+
+**板子 `E4:5F:01:52:55:04` 現在是乾淨且可運作的狀態**，位於 `192.168.200.182`：
+
+- `~/halow-test/morse_driver` 是 tag `mm6108-2.0.1` 加上 `patches/upstream/`，沒有
+  別的（`git diff --stat` 只動 `spi.c`，62 行新增、8 行刪除）
+- 已裝回原廠 overlay；實驗版以 `mm610x-spi-sensecap.dtbo.experiment` 保留在旁邊，
+  最初的原始備份仍是 `.orig`
+- `config.txt` 保留 `gpio=18=op,dh`，README 與 TESTING 都要求這一行
+- 乾淨建置已安裝到
+  `/lib/modules/6.6.51+rpt-rpi-v8/updates/{morse.ko.xz,dot11ah/dot11ah.ko.xz}`，
+  與建置產物逐位元相同；2026-08-22 的舊版以 `*.stale-20260822` 保留
+- `/etc/modprobe.d/morse.conf` 寫入 `options morse country=SG
+  bcf=bcf_fgh100mhaamd.bin`，讓自動載入帶著正確的 regdomain，而不是漏掉它
+- 原本在樹裡的探針儀器存放於
+  `~/halow-test/SAVED-probe-tree-20260823-0914.patch` 與
+  `~/halow-test/SAVED-morse-probe-build.ko`
+
+**一則更正。** 本節先前的版本寫著載入中的模組「有探針但**沒有** SPI 修正」，依據是
+`strings morse.ko | grep -c SPI_NO_CS` 回 0。那個檢查是無效的：`SPI_NO_CS` 是巨集常數，
+在整份 patch 裡沒有出現在任何字串常數中，所以修正版同樣會回 0。那個模組其實是有修正的。
+同一天的相關失誤：第一次讀 device tree 用了 `xxd`，這個 image 根本沒裝，而錯誤又被同一行
+的 `2>/dev/null` 吞掉。**任何回 0 的 `grep -c`，旁邊都需要一個對照組** —— 新紀錄裡的每
+一筆讀值都是這樣取的。
+
+**關於順序。**「一旦晶片被以 CS asserted 的狀態定址過就回不來」這句，適用範圍是**沒有
+前置 reset** 的訓練 burst。未修正的模組 probe 失敗，並不會讓後續修正版的模組跟著失敗，
+因為 probe 會先 reset 再送 burst —— 2026-08-23 實測確認。
 
 還沒驗證的是連線與資料傳輸，那需要第二台 HaLow 裝置。
 

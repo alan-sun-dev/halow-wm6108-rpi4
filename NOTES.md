@@ -13,15 +13,47 @@ submitted as [morse_driver#16](https://github.com/MorseMicro/morse_driver/pull/1
 `patches/morse-driver-2.0.1-rpi-spi.patch` remains the investigation's working
 file (instrumentation, experiment parameters); it is not the one to send anyone.
 
-**Board `E4:5F:01:52:55:04` is not in a clean state.** In `~/halow-test/morse_driver`
-on that Pi, `spi.c`, `mac.c` and `hw_scan.c` are all modified: `mac.c` and
-`hw_scan.c` carry six `MORSE-PROBE` `pr_info` lines added to find which mac80211
-callbacks fire, and the currently loaded module has those probes but **not** the
-SPI fixes (`strings morse.ko | grep -c SPI_NO_CS` returns 0). To get back to a
-clean working build: `git checkout -- .` there, then re-apply `patches/upstream/`.
-The installed overlay is the all-DT-matches experiment; stock is backed up at
-`/boot/firmware/overlays/mm610x-spi-sensecap.dtbo.orig` and
-`/boot/firmware/config.txt.orig`.
+**The series is verified under the repo's stock overlay** — RESET_N genuinely
+firing, two chip selects, no module parameters beyond `country=` and `bcf=`,
+confirmed on a cold boot with the module auto-loaded. Full capture in
+[`logs/2026-08-23-stock-overlay-clean-series-environment.txt`](logs/2026-08-23-stock-overlay-clean-series-environment.txt).
+That run also reproduced the original failure under the same device tree by
+loading an unfixed build — `c0 7f`, CMD63 `-71` — so the A/B holds the device
+tree constant and varies only the driver binary.
+
+**Board `E4:5F:01:52:55:04` is now in a clean, working state**, at
+`192.168.200.182`:
+
+- `~/halow-test/morse_driver` is tag `mm6108-2.0.1` plus `patches/upstream/` and
+  nothing else (`git diff --stat` → `spi.c` only, 62 insertions, 8 deletions)
+- the stock overlay is installed; the experiment overlay is kept beside it as
+  `mm610x-spi-sensecap.dtbo.experiment`, and the untouched original as `.orig`
+- `config.txt` keeps `gpio=18=op,dh`, which README and TESTING both require
+- the clean build is installed at
+  `/lib/modules/6.6.51+rpt-rpi-v8/updates/{morse.ko.xz,dot11ah/dot11ah.ko.xz}`,
+  byte-identical to the build, with the stale 2026-08-22 copies kept as
+  `*.stale-20260822`
+- `/etc/modprobe.d/morse.conf` carries `options morse country=SG
+  bcf=bcf_fgh100mhaamd.bin`, so the auto-load is correct rather than missing its
+  regdomain
+- the probe instrumentation that was in the tree is saved at
+  `~/halow-test/SAVED-probe-tree-20260823-0914.patch` and
+  `~/halow-test/SAVED-morse-probe-build.ko`
+
+**A correction.** An earlier version of this section said the loaded module "has
+the probes but **not** the SPI fixes", on the evidence of `strings morse.ko |
+grep -c SPI_NO_CS` returning 0. That check is worthless: `SPI_NO_CS` is a macro
+constant and appears in no string literal anywhere in the patch, so a fixed build
+scores 0 as well. The module in question did have the fixes. Related, from the
+same day: a first attempt to read the device tree used `xxd`, which this image
+does not have, with the error swallowed by `2>/dev/null` on the same line. Any
+`grep -c` that returns 0 needs a positive control beside it — the readings in the
+new log were all taken that way.
+
+**Note on ordering.** "Once the chip has been addressed with CS asserted it does
+not recover" applies to a training burst with no preceding reset. A failed probe
+by an unfixed module does not poison the chip for a subsequent fixed one, because
+probe resets before it bursts — measured 2026-08-23.
 
 What remains untested is association and data transfer, which needs a second
 HaLow device.

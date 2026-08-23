@@ -54,6 +54,18 @@ SPI from a Raspberry Pi 4.
 > `patches/morse-driver-2.0.1-rpi-spi.patch` is the investigation's working file
 > — instrumentation and experiment parameters — and is not the one to use.
 >
+> **Verified under this repo's own overlay, on a cold boot.** The runs above were
+> made with an experiment overlay installed over the stock filename, which sets
+> `reset-gpios` flag 0 — OpenMANET's setting, under which RESET_N never fires.
+> Re-run 2026-08-23 with the stock overlay in place: `reset-gpios` flag 1 so
+> RESET_N genuinely fires, two chip selects from `dtparam=spi=on`, module
+> auto-loaded at boot, no parameters beyond `country=` and `bcf=` — `phy1` on
+> `spi0.0`, `wlan1` up, `errors 0`, `timedout 0`, zero failure lines. The same
+> boot reproduced the original failure under the identical device tree by loading
+> an unfixed build (`c0 7f`, CMD63 `-71`), so the A/B holds the device tree
+> constant and varies only the driver binary. Capture in
+> [`logs/2026-08-23-stock-overlay-clean-series-environment.txt`](logs/2026-08-23-stock-overlay-clean-series-environment.txt).
+>
 > **Not specific to this carrier.** Defect 2 measured on 6.6.51; by inspection it
 > applies to any host where `spi_setup()` forces `SPI_CS_HIGH` for a `cs-gpios`
 > device, which is mainline and every rpi kernel carrying `950-0204`. The fix

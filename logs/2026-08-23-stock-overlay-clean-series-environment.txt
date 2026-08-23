@@ -1,0 +1,195 @@
+Captured: 2026-08-23 ~09:30 UTC+8, over SSH from the laptop
+Board:  E4:5F:01:52:55:04, serial 100000004851d437, at 192.168.200.182
+        Raspberry Pi 4 Model B Rev 1.4, SenseCAP M1 carrier, Wio-WM6108
+Image:  Raspberry Pi OS Lite (64-bit), Debian 12 bookworm
+        Linux 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08)
+Driver: MorseMicro/morse_driver tag mm6108-2.0.1 (commit 98e1936) with
+        patches/upstream/000{1,2,3}-*.patch and nothing else
+        (git diff --stat: spi.c | 70 ++++++--, 1 file changed, 62 insertions, 8 deletions)
+
+RESULT: the clean upstream series works under the REPO'S STOCK OVERLAY, with
+RESET_N genuinely firing and two chip selects in the device tree.
+
+  phy1 -> platform/soc/fe204000.spi/spi_master/spi0/spi0.0
+  wlan1 -> phy1, MAC 9c:04:b6:ff:df:fe
+  SPI core statistics: errors 0, timedout 0
+  dmesg: zero lines matching probe failed|CMD63|failed to init|morse rx:|-71
+
+Verified on a cold boot with the module auto-loaded by the kernel -- nothing
+inserted by hand.
+
+
+================================================================
+WHY THIS RUN EXISTS
+================================================================
+Every previous passing run on this board -- phy31 (the first "it works"), phy33
+(the clean-series verification behind commit abe3632) and phy35 -- was made with
+`overlays/mm610x-spi-sensecap-experiment-all.dts` installed over the stock
+filename `mm610x-spi-sensecap.dtbo`. That overlay sets
+
+  reset-gpios = <&gpio 17 0>
+
+which is OpenMANET's setting, under which RESET_N never actually fires. It also
+adds a single `cs-gpios` entry and changes the pin pulls. `config.txt` says only
+`dtoverlay=mm610x-spi-sensecap`, so the filename gives no hint that a different
+overlay is loaded; the dtbo mtime is the only local tell.
+
+That meant the combination actually being shipped -- clean series + the repo's
+stock overlay, where RESET_N does fire -- had never been measured. Both halves
+had been measured, never together. This run closes that gap.
+
+
+================================================================
+THE CONFIGURATION, AS READ FROM THE LIVE DEVICE TREE
+================================================================
+Read with `od` (this image has no `xxd`), each read next to a positive control
+so that an empty or zero result cannot be mistaken for a finding:
+
+  positive control, spi-max-frequency   00 98 96 80          = 10000000 (10 MHz)
+  mm610x@0/reset-gpios                  00000007 00000011 00000001
+                                        phandle, pin 17, flag 1 -> ACTIVE_LOW,
+                                        so RESET_N genuinely fires
+  spi@7e204000/cs-gpios                 00000007 00000008 00000001
+                                        00000007 00000007 00000001
+                                        TWO chip selects, from the base DT via
+                                        dtparam=spi=on
+  halow_pins/brcm,pull                  00000002 00000001 00000001 00000001
+                                        17 up, 5/23/24 down -- the stock values
+
+config.txt:
+   8: dtparam=spi=on
+  54: dtoverlay=mm610x-spi-sensecap
+  55: gpio=18=op,dh          <- kept; README:228 and TESTING:346 require it
+
+This is the DT of the configuration that originally failed.
+
+
+================================================================
+THE A/B: SAME BOOT, SAME DEVICE TREE, ONLY THE BINARY CHANGES
+================================================================
+Both halves were measured within one boot under the stock overlay, with `dmesg -C`
+immediately before each load.
+
+WITHOUT the fixes -- the stale module in /lib/modules (built 2026-08-22 18:42),
+auto-loaded at boot:
+
+  morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+  Resetting Morse Chip
+  morse rx: 00000000: c0 3f ff ff ff ff ff ff ff ff ff ff
+  morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+  morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+  morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+  morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+  morse rx: 00000000: c0 7f ff ff ff ff ff ff ff ff ff ff
+  morse_spi spi0.0: morse_spi_probe: failed to init SPI with CMD63 (ret:-71)
+  morse_spi_probe: probe failed (ret:-71)
+  morse_spi: probe of spi0.0 failed with error -71
+
+  no netdev, no phy on spi0.0
+
+`c0 7f` where `01 ff` is expected: the two-bit-time offset, the original
+signature, reproduced exactly.
+
+WITH the fixes -- the clean series, loaded with the documented parameters only:
+
+  sudo insmod ./morse.ko country=SG bcf=bcf_fgh100mhaamd.bin
+
+  Resetting Morse Chip
+  morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+  morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+  morse_spi spi0.0: Driver loaded with kernel module parameters
+
+  phy2 -> spi0.0, wlan1 present, zero failure lines, errors 0, timedout 0
+
+Firmware and BCF CRC32s match every previous run: 0xbe7b5c8f and 0x941b2a82.
+
+This is a cleaner A/B than any earlier one, because the device tree is the stock
+one for both halves. The only variable is the driver binary.
+
+Note on ordering: the stale module had already failed probe and addressed the
+chip with CS asserted before the fixed module was inserted, and the fixed module
+still recovered. The "once addressed with CS asserted it does not recover" rule
+in NOTES.md applies to a training burst with no preceding reset -- probe resets
+the chip first, then bursts, which is the order 0002 requires.
+
+
+================================================================
+COLD-BOOT VERIFICATION
+================================================================
+The clean build was then installed over the stale copies and the board rebooted,
+so that what loads at boot is what was tested:
+
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+      (stale copies kept alongside as *.stale-20260822)
+  /etc/modprobe.d/morse.conf:
+      options morse country=SG bcf=bcf_fgh100mhaamd.bin
+
+`country=SG` is not optional -- see TESTING.md, "Before transmitting anything".
+Installed copies verified byte-identical to the build with
+`xzcat ... | cmp - morse.ko`.
+
+After the reboot, uptime 32 s, nothing loaded by hand:
+
+  reset-gpios      00000007 00000011 00000001    (still stock)
+  morse srcversion 87374779AA811C291578351
+  country          SG
+  bcf              bcf_fgh100mhaamd.bin
+  spi_inter_block_delay_bytes  0     <- default; 0003 floors it in the driver
+  spi_post_write_status_bytes  4     <- default; 0003 floors it in the driver
+  spi_clock_speed              0
+  spi_rx_lshift                (parameter does not exist in the clean series)
+
+  phy1 -> spi0.0
+  wlan1, MAC 9c:04:b6:ff:df:fe, type managed, wiphy 1
+  errors 0, timedout 0
+  zero failure lines in dmesg
+
+  [    7.748029] Morse Micro Dot11ah driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+  [   10.131803] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+  [   10.132004] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+  [   10.132038] Resetting Morse Chip
+  [   10.234449] morse_io: Device node '/dev/morse_io' created successfully
+  [   10.247207] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+  [   10.251760] morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+  [   11.424760] morse_spi spi0.0: Driver loaded with kernel module parameters
+
+
+================================================================
+OPERATION
+================================================================
+Measured with the SPI core's own counters, which depend on nothing this repo
+wrote (/sys/bus/spi/devices/spi0.0/statistics/):
+
+  ip link set wlan1 up    +11 messages
+  iw dev wlan1 scan       +19 messages
+  iw dev wlan1 scan       +23 messages
+  idle, 35 s              +250 messages   (30 s watchdog)
+  errors 0   timedout 0   throughout
+
+wlan1 sits at operstate down / NO-CARRIER with the interface UP, and the scans
+return nothing. That is the absence of any HaLow network in range, not a fault:
+the scans reach the chip, which is what the counter deltas show.
+
+Association and data transfer remain untested, for want of a second HaLow
+device. Nothing about the driver is in doubt.
+
+
+================================================================
+WHAT THIS CHANGES
+================================================================
+Nothing in patches/upstream/ needed to change. The series is unmodified, and it
+is now measured in the configuration the repo actually tells people to build:
+stock overlay, RESET_N firing, two chip selects, no module parameters beyond
+country= and bcf=.
+
+What it removes is a hole in the evidence. Until this run, the passing result and
+the stock device tree had never been observed at the same time, and the overlay
+that was actually installed disabled RESET_N -- the very thing 0002 exists to
+survive. Had the fixes depended on that overlay, the repo's own instructions
+would not have reproduced its own result, and nothing on hand would have shown it.
+
+Method note, consistent with the rest of this investigation: the first attempt at
+reading the device tree used `xxd`, which is not installed on this image, and the
+error was being swallowed by a `2>/dev/null` on the same line. Every reading above
+was re-taken with `od` and a positive control alongside it.
