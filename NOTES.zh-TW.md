@@ -2,6 +2,62 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-24 收尾 —— 現在所有東西在哪
+
+session 結束時實際連上去確認的，不是憑記憶寫的。
+
+**Station `E4:5F:01:52:55:04`**（serial `100000004851d437`、RPi OS bookworm 6.6.51）
+
+```
+wlan0  192.168.108.19/24 在 SSID `Sun`     wlan1  10.41.0.208/16、MTU 1500
+驅動 srcversion 87374779AA811C291578351   （mm6108-2.0.1 + patches/upstream/）
+DT spi-max-frequency  02 fa f0 80 = 50,000,000     spi_clock_speed 參數 0
+modprobe.d/morse.conf：options morse country=SG bcf=bcf_fgh100mhaamd.bin
+spi errors 0  timedout 0        已關聯 3c:1a:cc:70:3f:ca
+NM autoconnect 優先序：sun 20、preconfigured（Unifi）10、halow 0
+```
+
+為距離測試裝的 `halow-rssilog.service` **已經移除** —— unit 和腳本都刪了，沒有任何東西
+還在戳無線電。它的輸出留在板子上的 `/home/alan/rssi-logs/`（5 個檔、13776 行），另有備份。
+**注意副作用：現在沒有東西會重新確保 `power_save off` 了**，NetworkManager 下次重連時
+可能把它打開。之後要量 RSSI 或遺失率之前記得先強制關掉 —— 做法在 2026-08-23 的距離測試
+log 裡。
+
+**AP `E4:5F:01:52:57:E7`**（serial `1000000093d173dd`、OpenMANET 24.10 / 6.6.138）
+
+```
+br-lan 10.41.254.1/16      MTU：eth0 1500、br-lan 1500、wlh0 1500
+無線電：922.0 MHz、4 MHz 操作、2 MHz 主頻寬   （uci channel=40 s1g_chanbw=4）
+rsn_beacon_mode=2          2 台 station 關聯中
+openmanetd / alfred / mesh11sd：全部開機停用
+```
+
+`eth0` 的 1500 目前是手動設的值，但把它設成 1460 的 `openmanetd` 已經開機停用，所以
+重開機之後也會是 1500。
+
+**筆電**：`en0` 192.168.108.200 在 `Sun`，`en5` 10.41.0.100/16 用線接 AP。
+
+**第三、四台**：Heltec HT-H7608 關聯在 AP 上（只能當無線層對照，IP 層從來不通）；
+Heltec HT-HC01P 在一台 Pi 4 上、`10.42.0.1`、目前沒接線，設定成 `BCM2711-57e7` 的
+station 但關聯不上。
+
+### 未解，依值得接手的順序
+
+1. **HT-HC01P 關聯不上。** `rsn_beacon_mode=2` 已經把 RSN IE 放進 beacon 並在空中確認，
+   它依然完全不嘗試認證，hostapd 也沒有它 MAC 的任何紀錄。需要碰得到那台：把 `en5`
+   接到它、Mac 這側設 `10.42.0.100/24`，或者連它自己的 5 GHz AP `HC01P-mgmt`。第一件
+   要看的是它現在掃描有沒有 RSN，用
+   `wpa_cli_s1g -p /var/run/wpa_supplicant_s1g -i wlan0`。
+2. **HT-HC01P 的 `ttyd` 沒有認證**，而且和它的網路孔、5 GHz AP 橋在一起，防火牆 lan
+   zone 是 `input ACCEPT`。沒接線時曝險有限，但在它接上任何共用交換器之前必須先處理。
+3. **HT-H7608 的矛盾。** 同樣 1.15.3 驅動，稍早卻用 `auth_alg=0` 加 RSN 四向交握關聯上
+   了同一台 AP。未解，而且它讓「1.15.3 不行」這個推論不能一般化。
+4. **`openmanetd` 拿掉之後，AP 還會不會停擺？** 已記錄三次，其中兩次前面什麼都沒發生。
+   救法已知（`echo 1 > $P/reset`）而且便宜。值得單純觀察。
+5. **station 與 AP 的省電設定不對盤**（`enable_ps=2` 對 AP 的 0）是不是舊那 5% ping
+   遺失的成因 —— 從未測試，而且記錄器移除後 station 的省電狀態由 NetworkManager 決定。
+6. **真正的距離極限。** 上一層樓時還有 −41 dBm、約 50 dB 餘裕，離極限還很遠。
+
 ## 2026-08-24 —— SPI 時脈才是天花板，而它藏住了頻寬那題的答案
 
 **把 station 的 SPI 時脈從 10 MHz 拉到 50 MHz，吞吐量變成 2.6 倍、零 SPI 錯誤**，並且

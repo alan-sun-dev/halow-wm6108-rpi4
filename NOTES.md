@@ -2,6 +2,70 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-24, session close — where everything is now
+
+Verified live at the end of the session, not recalled.
+
+**Station `E4:5F:01:52:55:04`** (serial `100000004851d437`, RPi OS bookworm 6.6.51)
+
+```
+wlan0  192.168.108.19/24 on SSID `Sun`     wlan1  10.41.0.208/16, MTU 1500
+driver srcversion 87374779AA811C291578351  (mm6108-2.0.1 + patches/upstream/)
+DT spi-max-frequency  02 fa f0 80 = 50,000,000     spi_clock_speed param 0
+modprobe.d/morse.conf: options morse country=SG bcf=bcf_fgh100mhaamd.bin
+spi errors 0  timedout 0        associated to 3c:1a:cc:70:3f:ca
+NM autoconnect priority: sun 20, preconfigured (Unifi) 10, halow 0
+```
+
+The `halow-rssilog.service` installed for the range test **has been removed** —
+unit and script deleted, nothing left polling the radio. Its output is kept on
+the board at `/home/alan/rssi-logs/` (5 files, 13776 lines) and backed up off it.
+Note the consequence: **nothing re-asserts `power_save off` any more**, so
+NetworkManager may turn it back on at the next reconnect. Force it off before any
+future RSSI or loss measurement — the recipe is in the 2026-08-23 range-test log.
+
+**AP `E4:5F:01:52:57:E7`** (serial `1000000093d173dd`, OpenMANET 24.10 / 6.6.138)
+
+```
+br-lan 10.41.254.1/16      MTUs eth0 1500, br-lan 1500, wlh0 1500
+radio: 922.0 MHz, 4 MHz operating, 2 MHz primary   (uci channel=40 s1g_chanbw=4)
+rsn_beacon_mode=2          2 stations associated
+openmanetd / alfred / mesh11sd: all boot-disabled
+```
+
+`eth0` at 1500 is currently a hand-set value, but `openmanetd` — the thing that
+was setting 1460 — is disabled at boot, so a reboot lands on 1500 too.
+
+**Laptop**: `en0` 192.168.108.200 on `Sun`, `en5` 10.41.0.100/16 cabled to the AP.
+
+**Third and fourth nodes**: Heltec HT-H7608 associated to the AP (radio-layer
+control only, its IP layer never answers); Heltec HT-HC01P on a Pi 4 at
+`10.42.0.1`, currently uncabled, configured as a station of `BCM2711-57e7` but
+not associating.
+
+### Open, in the order they are worth picking up
+
+1. **The HT-HC01P will not associate.** `rsn_beacon_mode=2` put the RSN IE in the
+   beacon and confirmed it on air, and it still never attempts authentication —
+   hostapd logs nothing from its MAC. Needs access to that board: reach it by
+   cabling `en5` to it and setting the Mac side to `10.42.0.100/24`, or by
+   joining its own 5 GHz AP `HC01P-mgmt`. First thing to look at is whether its
+   scan now shows RSN, with `wpa_cli_s1g -p /var/run/wpa_supplicant_s1g -i wlan0`.
+2. **`ttyd` on the HT-HC01P has no authentication** and is bridged with its
+   Ethernet port and 5 GHz AP, with the firewall's lan zone at `input ACCEPT`.
+   Low exposure while it is uncabled; fix before it ever touches a shared switch.
+3. **The HT-H7608 contradiction.** Same 1.15.3 driver, associated to this AP
+   earlier with `auth_alg=0` plus an RSN 4-way. Unexplained, and it argues
+   against generalising the HC01P result.
+4. **Does the AP stall recur now that `openmanetd` is gone?** Three occurrences
+   are recorded, two after no trigger. The recovery is known (`echo 1 > $P/reset`)
+   and cheap. Worth simply watching.
+5. **The station/AP power-save mismatch** (`enable_ps=2` against the AP's 0) as a
+   contributor to the old 5% ping loss — never tested, and now that the logger is
+   gone the station's power save is whatever NetworkManager last left it.
+6. **Real range.** The link was still at −41 dBm one floor up with ~50 dB of
+   headroom, so the limit is nowhere near found.
+
 ## 2026-08-24 — the SPI clock was the ceiling, and it hid the answer to the bandwidth question
 
 **Raising the station's SPI clock from 10 MHz to 50 MHz gave 2.6× the throughput
