@@ -96,6 +96,51 @@ ping 零遺失、累計 88.9 MB 的 SPI 流量且 `errors 0`。見
 `02 fa f0 80`（50000000）會顯示成 `80f0fa02`。OpenMANET 映像沒有 `od`，兩台都沒有
 `xxd`；在相信一個空的讀值之前，先確認工具存在。*
 
+## 陷阱：AP 上的殘留關聯項目，看起來和正常連線一模一樣
+
+2026-08-23 在刪掉又重建 NetworkManager profile、重新連線時遇到的。
+
+**症狀。** 每一項都說鏈路是通的，但什麼都過不去。
+
+  station   iw dev wlan1 link      -> Connected to 3c:1a:cc:70:3f:ca
+            wpa_cli status         -> wpa_state=COMPLETED、key_mgmt=SAE、
+                                      pairwise=CCMP、pmf=2
+            NetworkManager         -> connected
+            位址                    -> 10.41.0.208/16
+  AP        iw dev wlh0 station dump -> authorized: yes、associated: yes
+
+  然而      ip neigh               -> 10.41.254.1 FAILED（ARP 永遠解析不出來）
+            雙向 ping              -> 100% 遺失
+            連續三輪的遺失率        -> 60%、86.7%、100%
+
+兩邊 dmesg 都沒有東西，SPI 也沒有錯誤。認證層完成了，資料訊框過不去。
+
+**成因。** AP 留著上一次關聯遺留下來、對應這個 station MAC 的舊項目。刪除
+NetworkManager profile 時 station 確實有送 deauth —— station 的 dmesg 裡有
+`wlan1: deauthenticating from 3c:1a:cc:70:3f:ca by local choice (Reason:
+3=DEAUTH_LEAVING)` —— 但 AP 沒有處理它。四分鐘後那筆還在，`inactive time:
+242070 ms`、`tx failed: 20`，AP 一直對著空氣重送。接下來的關聯就疊在這筆上面。
+
+**`wifi reload` 清不掉它。** 介面確實被拆掉重建 —— `wlh0` 的 ifindex 都變了 ——
+而那筆項目還在。這是實測的，不是推測：在 station 已確認斷開的狀態下重載，AP 的表裡
+仍然有一筆它的 MAC。
+
+**真正能清掉的做法**（這個映像沒有 `hostapd_cli`）：
+
+```sh
+iw dev wlh0 station del 9c:04:b6:ff:df:fe
+```
+
+表立刻清空，station 下一次嘗試就關聯成功並且通了 —— ARP 解析出來、20/20 次 ping、
+零遺失。
+
+**怎麼辨識。** 比對兩邊的位元組計數，不要看狀態旗標 —— 兩邊的旗標都在說謊。當時
+station 已送出 22365 bytes，AP 只收到其中 9559；AP 的 `tx failed` 在增加而
+`tx retries` 是 0。一筆 `inactive time` 和 station 實際行為對不上的項目，就是線索。
+
+一般性的認知：S1G 的 AP 本來就設計成容忍終端長時間休眠，所以老化逾時設得長是刻意的，
+一筆死掉的項目不會很快被清掉。不要等它。
+
 ## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
 
 ```

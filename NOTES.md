@@ -111,6 +111,59 @@ host-endian, so every word comes out byte-reversed — `02 fa f0 80` (50000000)
 displays as `80f0fa02`. `od` is absent from the OpenMANET image and `xxd` from
 both; check the tool exists before believing an empty read.*
 
+## Gotcha: a ghost station entry on the AP looks exactly like a working link
+
+Hit on 2026-08-23 while reconnecting the station after the NetworkManager profile
+had been deleted and recreated.
+
+**Symptom.** Everything says the link is up and nothing passes.
+
+  station   iw dev wlan1 link      -> Connected to 3c:1a:cc:70:3f:ca
+            wpa_cli status         -> wpa_state=COMPLETED, key_mgmt=SAE,
+                                      pairwise=CCMP, pmf=2
+            NetworkManager         -> connected
+            an address             -> 10.41.0.208/16
+  AP        iw dev wlh0 station dump -> authorized: yes, associated: yes
+
+  and yet   ip neigh               -> 10.41.254.1 FAILED   (ARP never resolves)
+            ping both directions   -> 100% loss
+            loss over three runs   -> 60%, then 86.7%, then 100%
+
+Nothing in dmesg on either side. No SPI errors. The authentication layer
+completes; data frames do not get through.
+
+**Cause.** The AP was holding a stale entry for the station's MAC from the
+previous association. Deleting the NetworkManager profile did send a deauth --
+`wlan1: deauthenticating from 3c:1a:cc:70:3f:ca by local choice (Reason:
+3=DEAUTH_LEAVING)` is in the station's dmesg -- and the AP did not act on it. Four
+minutes later the entry was still there, `inactive time: 242070 ms`, `tx failed:
+20`, with the AP pinging into the void. The next association was then built on
+top of that entry.
+
+**`wifi reload` does not clear it.** The interface is torn down and recreated --
+`wlh0` even changes ifindex -- and the entry survives. This was measured, not
+assumed: after a reload with the station provably disconnected, the AP's table
+still had one entry for its MAC.
+
+**What does clear it**, on an image with no `hostapd_cli`:
+
+```sh
+iw dev wlh0 station del 9c:04:b6:ff:df:fe
+```
+
+Table empties immediately, and the station associates and passes traffic on the
+next attempt -- ARP resolved, 20/20 pings, 0% loss.
+
+**How to recognise it.** Compare the two sides' byte counters rather than their
+status flags, which both lie. The station had transmitted 22365 bytes while the
+AP had received 9559 of them; the AP's `tx failed` was climbing with `tx retries`
+at 0. An entry whose `inactive time` does not match what the station has actually
+been doing is the tell.
+
+Worth knowing generally: an S1G AP is built to tolerate clients that sleep for a
+long time, so a long inactivity timeout is by design and a dead entry will not be
+aged out quickly. Do not wait for it.
+
 ## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
 
 ```
