@@ -47,7 +47,23 @@
 			mm610x@0 {
 				compatible = "morse,mm610x-spi";
 				reg = <0>;
-				spi-max-frequency = <10000000>;
+				/*
+				 * 50 MHz: the value every reference design uses --
+				 * Morse's own EKH01 overlay in APPNOTE-24, OpenMANET,
+				 * and the Heltec HT-HC01P. Measured clean on this
+				 * carrier (SPI errors 0, timedout 0, no CRC/CMD53/
+				 * CMD63 at any rung of a 10/20/50 MHz ladder) and
+				 * worth 2.6x the throughput of the 10 MHz this file
+				 * used to carry: the driver's inter-transaction delay
+				 * is counted in clocks, so its 250-byte floor costs
+				 * 200 us at 10 MHz and 40 us at 50.
+				 *
+				 * To reproduce defect 3 (patches/upstream/0003), put
+				 * the clock back at load time -- the module parameter
+				 * overrides this node in both directions:
+				 *   modprobe morse country=SG bcf=... spi_clock_speed=10000000
+				 */
+				spi-max-frequency = <50000000>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&halow_pins>;
 				reset-gpios = <&gpio 17 1>;		/* active low */

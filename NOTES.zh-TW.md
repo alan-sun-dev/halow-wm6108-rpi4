@@ -509,19 +509,43 @@ modprobe morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=10000000
 這件事該在 PR 裡明講而不是藏起來：**暴露這個缺陷的組態是非預設時脈。** 那是支持修正的
 論據，不是反對的 —— 一個驅動不該依賴特定時脈才算得出正確的延遲。
 
-### 最終組態
+### 最終組態：時脈由 overlay 提供，不是模組參數
 
-AP：`channel 40`、`s1g_chanbw 4` → 922.0 MHz、4 MHz 操作頻寬、2 MHz 主頻寬。
-station：`/etc/modprobe.d/morse.conf` 現在是
+模組參數是為了不重編就能跑階梯測試。最終組態把時脈放回它該在的地方 —— device tree。
+本 repo 的 `overlays/mm610x-spi-sensecap.dts` 現在是 `spi-max-frequency = <50000000>`，
+並附註解說明理由與如何還原。
 
 ```
-options morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=50000000
+AP       channel 40 + s1g_chanbw 4   ->  922.0 MHz、4 MHz 操作、2 MHz 主頻寬
+station  overlays/mm610x-spi-sensecap.dts -> 50 MHz，已編譯安裝
+         /etc/modprobe.d/morse.conf 回到：options morse country=SG bcf=bcf_fgh100mhaamd.bin
 ```
 
-原內容保留為 `morse.conf.bak-20260824`。**驗證是從冷開機做的、不是看檔案內容** ——
-`spi_clock_speed = 50000000`、`dmesg` 在 t=10.16 秒有覆寫那一行、SPI 錯誤 0、
-`10.41.0.208` 連線正常、MTU 1500，上行 7.091 / 7.044 / 6.673、下行
-6.442 / 6.691 / 6.698 Mbit/s。
+原本的 10 MHz blob 保留在旁邊，檔名 `mm610x-spi-sensecap.dtbo.10mhz`（`.orig` 也是
+10 MHz）。兩個都是**用 `fdtget` 驗過內容**而不是靠檔名相信 —— `.dtbo` 是 50000000、
+`.10mhz` 是 10000000、`.orig` 是 10000000。
+
+驗證是從冷開機做的，而且刻意驗 **blob 和實際節點**、不是驗原始檔：
+
+```
+modprobe.conf            options morse country=SG bcf=bcf_fgh100mhaamd.bin
+spi_clock_speed 參數      0                 <- DT 在管
+實際 DT 節點值            02 fa f0 80       = 50,000,000
+dmesg 裡 "Overriding..."  0 次              <- 完全沒有參數介入
+spi errors 0   timedout 0   driver failures 0
+上行  7.463 / 7.372 / 7.401 Mbit/s
+下行  6.303 / 6.979 / 6.919 Mbit/s
+```
+
+**缺陷 3 仍然重現得出來**，因為模組參數對 device tree 的覆寫是**雙向**的
+（`spi->max_speed_hz = max_speed_hz`，無條件賦值）：
+
+```sh
+modprobe morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=10000000
+```
+
+所以 repo 保住了重現路徑，又不必留著那個慢的預設值。如果要連 device tree 一起還原，
+把 `mm610x-spi-sensecap.dtbo.10mhz` 蓋回去再重開機即可。
 
 ## 陷阱：AP 上的殘留關聯項目，看起來和正常連線一模一樣
 

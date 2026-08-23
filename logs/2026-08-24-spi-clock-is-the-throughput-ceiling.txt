@@ -209,3 +209,44 @@ produced a run of three FAIL results that were nothing to do with the clock;
 timeout` over `dmesg` returns three hits at every clock rate that are entirely
 benign — `crc32` in the firmware load lines and `default_cmd_timeout_ms` in the
 parameter dump. Print the matches, do not just count them.
+
+
+ADDENDUM — the clock moved into the device tree
+===============================================
+
+The module parameter was the way to run the ladder without a rebuild. The
+settled configuration puts the clock in the overlay instead:
+`overlays/mm610x-spi-sensecap.dts` now carries
+`spi-max-frequency = <50000000>`, compiled with `dtc -@` and installed over
+`/boot/firmware/overlays/mm610x-spi-sensecap.dtbo`, and
+`/etc/modprobe.d/morse.conf` is back to `options morse country=SG
+bcf=bcf_fgh100mhaamd.bin`.
+
+Checked on the blob and the live node, not the source file:
+
+  mm610x-spi-sensecap.dtbo          50000000
+  mm610x-spi-sensecap.dtbo.10mhz    10000000     <- the previous one, kept
+  mm610x-spi-sensecap.dtbo.orig     10000000
+
+  after a cold boot:
+  spi_clock_speed param                    0
+  /proc/device-tree/.../spi-max-frequency  02 fa f0 80  = 50,000,000
+  "Overriding the device tree" in dmesg    0 occurrences
+  spi errors 0, timedout 0, driver failures 0
+  uplink   7.463 / 7.372 / 7.401 Mbit/s
+  downlink 6.303 / 6.979 / 6.919 Mbit/s
+
+Reproducing defect 3 is unaffected: the module parameter overrides the device
+tree in both directions, so `spi_clock_speed=10000000` at load time still puts
+the bus back where the defect is visible. For a full device-tree reproduction,
+install the `.10mhz` blob over the active one and reboot.
+
+One self-inflicted measurement failure worth recording, because it is the trap
+written up earlier in this same session and it was walked into again within the
+hour. The first uplink runs after the reboot all returned zero bytes, which
+looks exactly like the MTU black hole. It was not: the payload file lived in
+/tmp on the station, the reboot cleared /tmp, and the command that recreated it
+had `2>/dev/null` on it, so its failure was invisible. MTUs were 1500 end to end
+and a DF sweep passed at a full 1500-byte frame throughout. Re-run with stderr
+visible, the file was simply missing, and the uplink was in fact the fastest
+measured all day.

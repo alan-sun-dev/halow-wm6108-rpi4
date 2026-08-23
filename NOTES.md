@@ -596,19 +596,49 @@ the defect is the non-default clock. That argues *for* the fix, not against it �
 a driver should not depend on one particular clock rate to compute a correct
 delay.
 
-### Final configuration
+### Final configuration: the overlay carries it, not a module parameter
 
-AP: `channel 40`, `s1g_chanbw 4` → 922.0 MHz, 4 MHz operating, 2 MHz primary.
-Station: `/etc/modprobe.d/morse.conf` now reads
+The module parameter was the way to run the ladder without a rebuild. The
+settled configuration puts the clock where it belongs — in the device tree, so
+`overlays/mm610x-spi-sensecap.dts` in this repo now reads
+`spi-max-frequency = <50000000>` with a comment explaining why and how to undo
+it.
 
 ```
-options morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=50000000
+AP       channel 40 + s1g_chanbw 4   ->  922.0 MHz, 4 MHz operating, 2 MHz primary
+station  overlays/mm610x-spi-sensecap.dts -> 50 MHz, compiled and installed
+         /etc/modprobe.d/morse.conf back to: options morse country=SG bcf=bcf_fgh100mhaamd.bin
 ```
 
-with the previous contents kept as `morse.conf.bak-20260824`. Verified from a
-cold boot rather than from the file — `spi_clock_speed = 50000000`, the override
-line in `dmesg` at t=10.16 s, SPI errors 0, link up at `10.41.0.208` with MTU
-1500, uplink 7.091 / 7.044 / 6.673 and downlink 6.442 / 6.691 / 6.698 Mbit/s.
+The previous 10 MHz blob is kept beside the installed one as
+`mm610x-spi-sensecap.dtbo.10mhz` (`.orig` is also 10 MHz), and both were checked
+with `fdtget` rather than trusted by filename — `.dtbo` 50000000, `.10mhz`
+10000000, `.orig` 10000000.
+
+Verified from a cold boot, and deliberately verified on the *blob* and the *live
+node* rather than on the source file:
+
+```
+modprobe.conf            options morse country=SG bcf=bcf_fgh100mhaamd.bin
+spi_clock_speed param    0                 <- the DT is in charge
+live DT node             02 fa f0 80       = 50,000,000
+"Overriding the device tree" in dmesg   0  <- no parameter involved
+spi errors 0   timedout 0   driver failures 0
+uplink   7.463 / 7.372 / 7.401 Mbit/s
+downlink 6.303 / 6.979 / 6.919 Mbit/s
+```
+
+**Reproducing defect 3 still works**, because the module parameter overrides the
+device tree in *both* directions (`spi->max_speed_hz = max_speed_hz`,
+unconditional):
+
+```sh
+modprobe morse country=SG bcf=bcf_fgh100mhaamd.bin spi_clock_speed=10000000
+```
+
+so the repo keeps its reproduction path without keeping the slow default. If a
+full device-tree reproduction is wanted, install
+`mm610x-spi-sensecap.dtbo.10mhz` over the active one and reboot.
 
 ## Gotcha: a ghost station entry on the AP looks exactly like a working link
 
