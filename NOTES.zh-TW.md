@@ -141,6 +141,85 @@ station 已送出 22365 bytes，AP 只收到其中 9559；AP 的 `tx failed` 在
 一般性的認知：S1G 的 AP 本來就設計成容忍終端長時間休眠，所以老化逾時設得長是刻意的，
 一筆死掉的項目不會很快被清掉。不要等它。
 
+## RSSI 讀值為 0 dBm，而 `iw` 報的鏈路數字不是真的鏈路
+
+兩個各自獨立的陷阱，2026-08-23 在追「5% 封包遺失是不是訊號問題」時一起發現的。
+
+### RSSI：晶片根本不填這個欄位
+
+`iw dev wlan1 link` 和 `iw dev wlh0 station dump` 兩邊、兩個方向都回報
+`signal: 0 dBm`、`signal avg: 0 dBm`。這不是驅動接線的問題：
+
+- `mac.c:7180` —— `ieee80211_hw_set(hw, SIGNAL_DBM)` 有宣告，所以只要有值
+  mac80211 就會回報
+- `mac.c:6123` —— `rx_status->signal = le16_to_cpu(hdr_rx_status->rssi)` 有賦值，
+  之後五十行內沒有任何地方覆寫它
+
+0 來自 `morse_skb_rx_status.rssi`（`skb_header.h:313`），也就是晶片逐訊框填寫的欄位。
+在 AP 端抓原始 radiotap 證實了這點 —— AP 跑的是 Morse 原廠未修改的 OpenWrt 建置，
+收的是 station 送過去的訊框：
+
+```
+4543312655us tsft  MCS 5  923 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
+4543431956us tsft  MCS 0  922 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
+```
+
+三十個訊框，全部 `0dBm`。同一個標頭裡的 `tsft` 時間戳是有填的，所以不是整個 PHY
+metadata 區塊都空白 —— 是 RSSI 和 `noise_dbm` 特別沒被填。
+
+晶片另外還有幾個 RSSI 來源，驅動全都沒用：`MORSE_CMD_ID_GET_RSSI`
+（`morse_commands.h:2825`，帶 `rssi0/1/2`）定義了但從未呼叫；
+`morse_skb_rx_status.noise_dbm` 從未被讀取；`morse_cmd_evt_scan_result.rssi` 只在
+full-mac 的 `wiphy.c` 路徑用到，而我們跑的不是那條。
+
+**連帶影響。** `msta->avg_rssi` 永遠是 0，所有用到它的地方都等於死掉：mesh 的鄰居
+挑選會拿它比較（`mesh.c:628`）、`bss_stats` 會記錄它、速率控制用它初始化
+（`rc.c:293` → `mmrc_init_rates`）。最後這項裡，`MMRC_SHORT_RANGE_RSSI_LIMIT = -70`，
+0 會通過 `rssi >= -70`，於是評分表從 MCS7 起跳 —— 而那個原本會從 MCS3 起跳、註解明說
+是為了避免打掉評分表 evidence 的 1/2 MHz 分支，永遠走不到。這一點不要過度解讀：在
+`morse_rc_sta_add` 執行的當下，`avg_rssi` 本來就還沒被任何訊框更新過，就算驅動正常
+它也會是 0。可以確定的是，它之後也永遠不會變成別的值。
+
+**這個硬體上拿不到任何鏈路餘裕數據**，所以「是不是訊號問題」無法用驅動自己的數字回答。
+
+### `iw` 報的是 dot11ah 的對映，不是實際的無線電
+
+這個更危險，因為那些數字看起來很合理。
+
+| | `iw dev wlan1 link` 說的 | 無線電實際在做的 |
+|---|---|---|
+| 頻率 | 5785 MHz（channel 157）| **922–923 MHz** |
+| 速率 | VHT-MCS 7、150.0 MBit/s、40 MHz | **MCS 0 與 MCS 5**、1–2 MHz |
+
+dot11ah 這層 shim 把 S1G 呈現成一個以 5 GHz 編號的頻段，好讓 mac80211 和原廠的
+使用者空間工具不用改就能運作。`iw` 印出來關於頻率和速率的一切都是那層對映。在一條
+實測 1.3 Mbit/s 的鏈路上看到 150 Mbit/s，不是需要追查的矛盾，那就是對映本身。
+
+要交叉查證，看 `debugfs .../morse/mmrc_table`（真正的速率選擇），或直接抓 radiotap。
+當時 mmrc 選的是 2 MHz SGI MCS0，12 次嘗試成功 2 次 —— 這和實測吞吐吻合，和
+150 Mbit/s 不吻合。
+
+### 怎麼抓 radiotap（兩次嘗試都是第一次失敗，所以寫下來）
+
+- **建置必須有 monitor 支援。** Makefile 裡是
+  `morse-$(CONFIG_MORSE_MONITOR) += monitor.o`，而 TESTING.md 的建置指令沒有帶這個
+  變數。在斷定「抓不到東西」之前，先用 `strings morse.ko | grep -c morse_mon` 確認。
+  我們 station 的建置沒有編進去，所以那邊不重建就抓不了。
+- **`morse0` 網卡拉起來還不夠。** 訊框只有在 `mors->monitor_mode` 為真時才會送到它
+  （`mac.c:6889`），而該旗標來自 `IEEE80211_CONF_MONITOR`（`mac.c:4033`）—— 也就是
+  必須存在一個 monitor vif。加一個就夠了，那個 vif 不必是抓包的介面：
+
+  ```sh
+  iw phy phy3 interface add mon0 type monitor && ip link set mon0 up
+  ip link set morse0 up
+  tcpdump -i morse0 -c 30 -e -nn      # radiotap，含真實的 MHz 與 MCS
+  iw dev mon0 del; ip link set morse0 down
+  ```
+
+  在 AP 上這樣做，AP 服務沒有中斷 —— 全程 `type AP` 與 SSID 都不受影響，也沒有更動
+  任何持久設定。
+- `mon0` 本身只看得到 AP 自己發的 beacon。`morse0` 才是帶著晶片 rx status 的接收訊框。
+
 ## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
 
 ```

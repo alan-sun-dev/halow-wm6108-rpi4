@@ -164,6 +164,97 @@ Worth knowing generally: an S1G AP is built to tolerate clients that sleep for a
 long time, so a long inactivity timeout is by design and a dead entry will not be
 aged out quickly. Do not wait for it.
 
+## RSSI reads 0 dBm, and what `iw` reports about the link is not the link
+
+Two separate traps, found together on 2026-08-23 while trying to work out whether
+5% packet loss was a signal problem.
+
+### RSSI: the chip does not populate it
+
+`iw dev wlan1 link` and `iw dev wlh0 station dump` both report `signal: 0 dBm`
+and `signal avg: 0 dBm`, on both boards, in both directions. It is not a driver
+plumbing fault:
+
+- `mac.c:7180` — `ieee80211_hw_set(hw, SIGNAL_DBM)` is declared, so mac80211 will
+  report a signal if given one
+- `mac.c:6123` — `rx_status->signal = le16_to_cpu(hdr_rx_status->rssi)` assigns
+  it, and nothing overwrites it in the fifty lines that follow
+
+The zero comes from `morse_skb_rx_status.rssi` (`skb_header.h:313`), the
+per-frame field the chip fills in. Confirmed by capturing raw radiotap on the AP,
+which runs Morse's own unmodified OpenWrt build, on frames received from the
+station:
+
+```
+4543312655us tsft  MCS 5  923 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
+4543431956us tsft  MCS 0  922 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
+```
+
+Thirty frames, `0dBm` throughout. The `tsft` timestamps in the same header are
+populated, so it is not that the whole PHY metadata block is empty — RSSI and
+`noise_dbm` specifically are not filled.
+
+The chip has other RSSI sources the driver never uses: `MORSE_CMD_ID_GET_RSSI`
+(`morse_commands.h:2825`, with `rssi0/1/2`) is defined and never called;
+`morse_skb_rx_status.noise_dbm` is never read; `morse_cmd_evt_scan_result.rssi`
+is used only on the full-mac `wiphy.c` path, which is not the one in use here.
+
+**Consequence.** `msta->avg_rssi` is permanently 0, which makes every consumer of
+it dead: mesh peer selection compares it (`mesh.c:628`), `bss_stats` records it,
+and the rate controller is seeded with it (`rc.c:293` → `mmrc_init_rates`). In
+that last one, with `MMRC_SHORT_RANGE_RSSI_LIMIT = -70`, a zero passes
+`rssi >= -70` and the table starts at MCS7 — and the 1/2 MHz branch that would
+otherwise start at MCS3, whose comment says it exists to avoid resetting the rate
+table evidence, is unreachable. Be careful how much weight you put on that: at
+`morse_rc_sta_add` time nothing has updated `avg_rssi` yet, so it would be 0 for
+a working driver too. What is certain is that it never becomes anything else.
+
+**There is no link margin available from this hardware**, so "is it a signal
+problem?" cannot be answered from the driver's own numbers.
+
+### `iw` reports the dot11ah mapping, not the radio
+
+This one is more dangerous, because the numbers look plausible.
+
+| | what `iw dev wlan1 link` says | what the radio is doing |
+|---|---|---|
+| Frequency | 5785 MHz (channel 157) | **922–923 MHz** |
+| Rate | VHT-MCS 7, 150.0 MBit/s, 40 MHz | **MCS 0 and MCS 5**, 1–2 MHz |
+
+The dot11ah shim presents S1G as a 5 GHz-numbered band so that mac80211 and
+stock userspace tools work unmodified. Everything `iw` prints about frequency and
+bitrate is that mapping. A reported 150 Mbit/s on a link measuring 1.3 Mbit/s is
+not a contradiction to investigate; it is the mapping.
+
+Cross-check against `debugfs .../morse/mmrc_table`, which shows the real rate
+selection, or capture radiotap. On this link mmrc had selected 2 MHz SGI MCS0
+with 2 successes in 12 attempts, which matches the measured throughput and does
+not match the 150 Mbit/s.
+
+### How to capture radiotap, since neither attempt worked first time
+
+- **The build must have monitor support.** `morse-$(CONFIG_MORSE_MONITOR) +=
+  monitor.o` in the Makefile, and the build line in TESTING.md does not pass it.
+  Check with `strings morse.ko | grep -c morse_mon` before concluding a capture
+  found nothing. Our station build has it compiled out, so no monitor capture is
+  possible there without a rebuild.
+- **The `morse0` netdev being up is not enough.** Frames reach it only when
+  `mors->monitor_mode` is true (`mac.c:6889`), which is set from
+  `IEEE80211_CONF_MONITOR` (`mac.c:4033`) — that is, only while a monitor vif
+  exists. Adding one is enough; it does not have to be the capture interface:
+
+  ```sh
+  iw phy phy3 interface add mon0 type monitor && ip link set mon0 up
+  ip link set morse0 up
+  tcpdump -i morse0 -c 30 -e -nn      # radiotap with the real MHz and MCS
+  iw dev mon0 del; ip link set morse0 down
+  ```
+
+  Done on the AP this way, the AP kept serving — `type AP` and the SSID were
+  unaffected throughout, and nothing persistent was changed.
+- `mon0` itself only shows the AP's own beacons. `morse0` is the one carrying
+  received frames with the chip's rx status.
+
 ## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
 
 ```
