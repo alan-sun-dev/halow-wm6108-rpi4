@@ -55,8 +55,13 @@ not recover" applies to a training burst with no preceding reset. A failed probe
 by an unfixed module does not poison the chip for a subsequent fixed one, because
 probe resets before it bursts — measured 2026-08-23.
 
-What remains untested is association and data transfer, which needs a second
-HaLow device.
+Association and data transfer are verified as of 2026-08-23, cross-implementation
+against Morse's own OpenWrt build as the AP: WPA3-SAE with PMF, DHCP over the
+air, 4 MiB checksummed in both directions, 200/200 pings at 0% loss, 88.9 MB of
+SPI traffic with `errors 0`. See
+[`logs/2026-08-23-association-verified-environment.txt`](logs/2026-08-23-association-verified-environment.txt),
+which also lists what is still unknown — range, throughput ceiling, link margin
+(RSSI reads 0 dBm), and two unexplained events.
 
 ## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
 
@@ -148,8 +153,19 @@ Measured with the SPI core's own statistics, which depend on nothing written her
 scan reaches the chip and finds nothing because there is no HaLow network in
 range.**
 
-What is actually untested is association and data transfer, for want of a second
-HaLow device — not anything about the driver.
+**CORRECTED 2026-08-23 (later): the last clause is wrong.** A HaLow AP was
+broadcasting a few metres away throughout every scan quoted here — the second
+SenseCAP M1, running OpenMANET. It was invisible because it was on `country=US`
+and this station on `country=SG`; the dot11ah mapping resolves a mapped channel
+to a different S1G frequency per country, so the station was scanning a plan the
+AP was not on. With both set to `SG` the AP appears on the first scan and the
+station associates. The honest claim was "no network on the channel plan being
+scanned", and it was never checked against the AP on the same bench. Same failure
+mode as the rest of this section: an empty result taken at face value.
+
+What was untested is association and data transfer. **Both are verified as of
+2026-08-23** — see
+[`logs/2026-08-23-association-verified-environment.txt`](logs/2026-08-23-association-verified-environment.txt).
 
 Six times in one session, "did not see it" was read as "is not there": RUN 5's
 preamble sweep, the `mode=0x4` line, the 1.5 s power-up wait, `iw` not being on

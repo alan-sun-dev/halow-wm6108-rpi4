@@ -71,9 +71,21 @@ SPI from a Raspberry Pi 4.
 > device, which is mainline and every rpi kernel carrying `950-0204`. The fix
 > belongs in the driver.
 >
-> **Untested:** association and data transfer, for want of a second HaLow device
-> — not anything about the driver. Scans reach the chip and find nothing because
-> there is no HaLow network in range.
+> **Association and data transfer are verified** (2026-08-23), against a peer
+> running a different driver: this patched driver as the station, Morse's own
+> OpenWrt build as the AP on a second board. WPA3-SAE with PMF, DHCP over the
+> air, 4 MiB transferred and checksummed in both directions — 1.3–1.5 Mbit/s
+> down, 0.2–0.9 Mbit/s up at 2 MHz bandwidth on 923.0 MHz — 200/200 pings at 0%
+> loss, and 88.9 MB of SPI traffic with `errors 0`. Detail, including what is
+> still unknown, in
+> [`logs/2026-08-23-association-verified-environment.txt`](logs/2026-08-23-association-verified-environment.txt).
+>
+> **Correction.** This section previously said scans found nothing "because
+> there is no HaLow network in range". That was wrong: an AP was broadcasting a
+> few metres away throughout. It was invisible because it was on `country=US`
+> and the station on `country=SG`, and the dot11ah mapping resolves the same
+> mapped channel to a different S1G frequency per country. Aligning both to `SG`
+> made it appear on the first scan.
 
 > **Update 2026-08-22.** Four end-to-end tests on the same board, changing only the OS image:
 >

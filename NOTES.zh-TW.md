@@ -46,7 +46,12 @@ select、除了 `country=` 與 `bcf=` 之外不帶任何模組參數，並且是
 前置 reset** 的訓練 burst。未修正的模組 probe 失敗，並不會讓後續修正版的模組跟著失敗，
 因為 probe 會先 reset 再送 burst —— 2026-08-23 實測確認。
 
-還沒驗證的是連線與資料傳輸，那需要第二台 HaLow 裝置。
+連線與資料傳輸已於 2026-08-23 驗證，而且是跨實作的 —— 對端是 Morse 自家 OpenWrt 建置
+當 AP：WPA3-SAE 含 PMF、DHCP 透過空中鏈路取得、雙向各 4 MiB 並比對校驗碼、200/200 次
+ping 零遺失、累計 88.9 MB 的 SPI 流量且 `errors 0`。見
+[`logs/2026-08-23-association-verified-environment.txt`](logs/2026-08-23-association-verified-environment.txt)，
+裡面也列出仍然未知的部分 —— 距離、吞吐上限、鏈路餘裕（RSSI 讀值為 0 dBm），以及兩個
+未解釋的事件。
 
 ## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
 
@@ -126,7 +131,16 @@ monitor/mesh、Band 2 含每個頻道的法規狀態。**mac80211 的註冊是�
 三個回呼都有被呼叫，`morse_cmd_get_version()` 回傳 0。**掃描確實到達晶片，找不到東西是
 因為附近沒有 HaLow 網路。**
 
-真正未驗證的只有**關聯與資料傳輸**，因為沒有第二台 HaLow 裝置可以對接 —— 和驅動無關。
+**2026-08-23 後續更正：上面最後那句是錯的。** 這裡引用的每一次掃描，全程都有一台
+HaLow AP 在幾公尺外廣播 —— 就是第二塊 SenseCAP M1，跑著 OpenMANET。它之所以看不見，
+是因為它在 `country=US` 而這台 station 在 `country=SG`；dot11ah 的對映會讓同一個對映
+頻道號在不同 country 下對應到不同的 S1G 頻率，所以 station 掃的是 AP 根本不在的頻道
+計畫。兩邊都設成 `SG` 之後，第一次掃描就看到 AP，而且成功關聯。誠實的說法應該是
+「掃描的頻道計畫上沒有網路」，而且根本沒有拿同一張桌上的那台 AP 去對照過。這和本節其他
+地方是同一個失敗模式：把空的結果照單全收。
+
+當時未驗證的是關聯與資料傳輸。**兩者都已於 2026-08-23 驗證** —— 見
+[`logs/2026-08-23-association-verified-environment.txt`](logs/2026-08-23-association-verified-environment.txt)。
 
 同一個 session 裡有**六次**把「沒看到」讀成「不存在」：RUN 5 的墊底掃描、`mode=0x4` 那行、
 1.5 秒上電等待、`iw` 不在 `PATH`、「拉起 wlan1 會產生暫存器寫入」（dmesg 沒清）、以及這次。

@@ -60,8 +60,17 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 > `spi_setup()` 會對 `cs-gpios` 裝置強制 `SPI_CS_HIGH` 的主機都一樣 —— 那包含
 > mainline 以及所有帶 `950-0204` 的 rpi 核心。修正應該做在驅動裡。
 >
-> **尚未驗證的是**連線與資料傳輸，因為手上沒有第二台 HaLow 裝置 —— 不是驅動本身有
-> 疑慮。掃描確實有打到晶片，掃不到東西是因為附近沒有 HaLow 網路。
+> **連線與資料傳輸已驗證**（2026-08-23），而且對接的是跑不同驅動的對端：這個修正後的
+> 驅動當 station，第二塊板子上 Morse 自家的 OpenWrt 建置當 AP。WPA3-SAE 含 PMF、DHCP
+> 透過空中鏈路取得、雙向各傳 4 MiB 並比對校驗碼 —— 在 923.0 MHz、2 MHz 頻寬下，下行
+> 1.3–1.5 Mbit/s、上行 0.2–0.9 Mbit/s —— 200/200 次 ping 零遺失，累計 88.9 MB 的 SPI
+> 流量且 `errors 0`。細節與仍然未知的部分見
+> [`logs/2026-08-23-association-verified-environment.txt`](logs/2026-08-23-association-verified-environment.txt)。
+>
+> **更正。** 本節先前寫著掃不到東西是「因為附近沒有 HaLow 網路」。那是錯的：全程都有
+> 一台 AP 在幾公尺外廣播。它之所以看不見，是因為 AP 在 `country=US` 而 station 在
+> `country=SG`，而 dot11ah 的對映會讓同一個對映頻道號在不同 country 下對應到不同的
+> S1G 頻率。兩邊都對齊成 `SG` 之後，第一次掃描就看到了。
 
 > **2026-08-22 進度更新。** 同硬體四次實測，只換作業系統映像：
 >

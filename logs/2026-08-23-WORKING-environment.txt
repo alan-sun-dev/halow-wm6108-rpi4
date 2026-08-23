@@ -46,8 +46,19 @@ normal operation. morse_mac_ops_start, morse_mac_ops_add_interface and
 morse_ops_hw_scan are all invoked and morse_cmd_get_version() returns 0. The scan
 finds nothing because there is no HaLow network in range.
 
-What is actually untested is association and data transfer, for want of a second
-HaLow device -- not anything about the driver.
+CORRECTED AGAIN, 2026-08-23 later: "no HaLow network in range" is wrong, and it
+is the third correction in this file for the same reason. The second SenseCAP M1
+was running OpenMANET as a HaLow AP a few metres away, and had been for hours,
+throughout every scan quoted above. It was invisible because it was on
+country=US and this station on country=SG: under the dot11ah mapping the same
+mapped channel number resolves to a different real S1G frequency per country, so
+the station was scanning a channel plan the AP was not on. Setting both to SG
+made it appear on the first scan. The claim that could be supported was "nothing
+on the channel plan being scanned"; the AP on the same bench was never used as a
+control.
+
+What was untested is association and data transfer. Both are verified as of
+2026-08-23 -- see 2026-08-23-association-verified-environment.txt.
 
 
 ================================================================
