@@ -2,6 +2,38 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-23 稍晚 —— RSSI 那題有答案了，AP 停擺也有軟體解法
+
+兩個結果，都是同一個下午量出來的。完整方法、原始取樣、以及過程中踩到的工具陷阱在
+[`logs/2026-08-23-rssi-range-test-and-ap-stall-recovery.txt`](logs/2026-08-23-rssi-range-test-and-ap-stall-recovery.txt)。
+
+**`signal: 0 dBm` 就是飽和 —— 用搬動板子證實的，不是論證出來的。** station 被搬到三個
+距離，每個位置取樣 30 次、共 60 秒，而且每次搬動之前先把預測值寫下來。2 m 無遮蔽那點
+與自由空間預測只差 **0.1 dB**（實測 −15.7，預測 −15.8）；0.3 m 的桌面那點是削頂的，而
+削頂顯示在級距上（16.5 dB 的真實路徑損耗只讓讀值走了 11.7 dB）。附帶產物：室內**木牆
+在 923 MHz 衰減 8 dB**，兩種獨立算法一致到 0.1 dB。細節見下面「判讀鏈路」。
+
+**AP 發射器停擺可以不用重開機救回來。** `wifi reload` ✗ → debugfs `restart` ✗ →
+debugfs **`reset` ✓**。前兩次之後記在這裡的「只有重開機救得回來」是錯的。完整重載韌體
+（`restart`）不夠，要走 bus reset。可能的原因是這台 AP 的 `reset-gpios` flag 是 0，
+RESET_N 從來不會觸發，只有 bus reset 那條路徑碰得到晶片。第三次跟第二次一樣，前面什麼
+都沒發生。細節見下面「AP 的發射器會停擺」。
+
+**兩個值得帶著走的診斷更正。** Heltec 的 *ping* 不能當對照組 —— 鏈路健康時它也是不通
+的；只有它的 RSSI 讀值和關聯事件可以。還有 station 的**省電預設是開的**，這會讓停擺
+看起來像連 beacon 都停了（其實沒有）；任何量測都要先把它關掉。
+
+**兩塊板子現在在哪裡。** 家裡多了第二個 SSID `Sun` / `192.168.108.0/24`，而它和舊的
+`Unifi` / `192.168.200.0/24` **兩個都在廣播** —— 遷移進行中，還沒完成。station `55:04`
+在 `Sun` 上、位於 **`192.168.108.19`**（它的 `sun` NetworkManager profile 的
+autoconnect-priority 已調到 20，高於 `preconfigured` 的 10，後者保留當退路）。AP 不變，
+仍在 `10.41.254.1`。筆電可以用金鑰認證**直接**連到 station 的 HaLow 位址
+`10.41.0.208` —— 為什麼這比先前記的做法簡單，見下面「HaLow 鏈路是頻外管理通道」。
+
+為了搬移測試，station 上裝了一支暫時的記錄器 —— `halow-rssilog.service`，開機自動啟動，
+寫到 `/home/alan/rssi-logs/`，並且每 60 秒重新確保 `power_save off`。搬移測試做完之後
+記得移除，指令在上面那個 log 檔的最後。
+
 ## 2026-08-23 收尾 —— 目前留下的狀態
 
 工作已完成並送出上游。三個缺陷全在驅動的 `spi.c`：`-Werror` 下編不過的 `#warning`、
@@ -19,7 +51,9 @@ select、除了 `country=` 與 `bcf=` 之外不帶任何模組參數，並且是
 同一輪也在相同的 device tree 下載入未修正的建置，重現了原始失敗 —— `c0 7f`、CMD63
 `-71` —— 所以這個 A/B 固定了 device tree，只變動驅動 binary。
 
-**板子 `E4:5F:01:52:55:04` 現在是乾淨且可運作的狀態**，位於 `192.168.200.182`：
+**板子 `E4:5F:01:52:55:04` 現在是乾淨且可運作的狀態。** 寫下這段時它在
+`192.168.200.182`；當天稍晚的那一輪之後，它已經在 SSID `Sun` 上、位於
+`192.168.108.19` —— 見本檔案最上面那節。其餘狀態：
 
 - `~/halow-test/morse_driver` 是 tag `mm6108-2.0.1` 加上 `patches/upstream/`，沒有
   別的（`git diff --stat` 只動 `spi.c`，62 行新增、8 行刪除）
@@ -168,13 +202,38 @@ authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71    <- Heltec，幾公尺外
 `hdr_rx_status->rssi` 填進 `rx_status->signal`、之後沒有被覆寫 —— 但收到 0 並不是
 韌體拒絕量測，那就是晶片對那條鏈路回報的值。
 
-**最可能的原因是飽和。** 兩塊 SenseCAP M1 放在同一張桌上。923 MHz、間距 0.3 m 的
-自由空間損耗約 21 dB，22 dBm 的發射端會在接收端產生約 **+1 dBm** —— 已經超出量測
-範圍的頂端。削頂成 0 正是這種情況會有的樣子，而且它解釋了本 repo 裡每一個 0：這兩塊
-板子從來沒有相距超過一公尺過。
+**原因就是飽和，而且現在是量出來的，不是論證出來的。** 兩塊 SenseCAP M1 放在同一張
+桌上。923 MHz、間距 0.3 m 的自由空間損耗約 21 dB，22 dBm 的發射端會在接收端產生約
+**+1 dBm** —— 已經超出量測範圍的頂端。削頂成 0 正是這種情況會有的樣子，而且它解釋了
+本 repo 裡每一個 0：這兩塊板子從來沒有相距超過一公尺過。
 
-**尚未證實。** 要證實得衰減鏈路、看讀值是否落回範圍內。**不要用
-`iw set txpower fixed` 去做** —— 見下一小節。實體搬開才是安全的做法，而那還沒做。
+同一天稍晚，station 那塊板子被搬離 AP，在三個距離各取樣 30 次、每次間隔 2 秒。每次搬動
+**之前**先寫下預測值，用 923 MHz 的 FSPL(dB) = 20·log10(d_m) + 31.75 對上 AP 的
+22 dBm：
+
+| 位置 | 預測 | AP 側實測 | station 側 |
+|---|---|---|---|
+| 0.3 m，板對板 | **+0.7 dBm** | −3（範圍 −2…−4） | 0 dBm |
+| 2 m，無遮蔽 | **−15.8 dBm** | **−15.7**（範圍 −14…−19） | −12.1 dBm |
+| 4 m，隔一道木牆 | −21.8 dBm + 牆 | **−29.9**（範圍 −28…−32） | −27.1 dBm |
+
+2 m 無遮蔽那點與自由空間預測只差 **0.1 dB**，所以只要訊號落在量測範圍內，這條量測路徑
+就是準的。0.3 m 那點是削頂的，而且削頂不只是從絕對值推論出來的，它直接顯示在**級距**
+上：0.3 m 到 2 m 的真實路徑損耗是 16.5 dB，讀值卻只走了 11.7 dB（−4 → −15.7）。近端被
+壓縮了 4–5 dB，這正是讀值頂到刻度上限的行為。
+
+附帶得到一個數字：**室內木牆在 923 MHz 衰減 8 dB**。兩種獨立算法一致 —— 絕對值算
+（實測 −29.9 對自由空間 −21.8）與級距算（2 m → 4 m 距離上該是 6.02 dB，讀值走了
+14.2 dB，多出 8.2 dB）。
+
+每個位置的鏈路品質都不受影響：20/20 ping、0% 遺失，隔牆 4 m 時 RTT 8.3–8.8 ms。
+給個概念：−30 dBm 之下，MCS0 靈敏度約在 −95 dBm，還剩大約 65 dB 餘裕。
+
+這個測試是**用搬動板子**做的。**不要用 `iw set txpower fixed` 去衰減** —— 見下一小節
+它會造成什麼後果。測量期間必須把 station 的省電關掉
+（`iw dev wlan1 set power_save off`）；開著的話接收端有一部分時間是關的，所有讀數都是
+透過那個狀態取得的。完整方法與原始取樣見
+[`logs/2026-08-23-rssi-range-test-and-ap-stall-recovery.txt`](logs/2026-08-23-rssi-range-test-and-ap-stall-recovery.txt)。
 
 **實務上該記住的：**
 
@@ -184,7 +243,10 @@ authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71    <- Heltec，幾公尺外
   `bss_stats`、以及速率控制的種子（`rc.c:293` → `mmrc_init_rates`）—— 都拿到 0。最後
   這項裡 `MMRC_SHORT_RANGE_RSSI_LIMIT = -70`，0 會通過 `rssi >= -70`，評分表從 MCS7
   起跳，讓原本會從 MCS3 起跳的 1/2 MHz 分支走不到。這是**桌面擺法**造成的真實效應，
-  不是驅動缺陷。
+  不是驅動缺陷。這段是從原始碼讀出來的，**尚未**經過觀察確認：搬移測試後在 −30 dBm
+  下，AP 的 mmrc 表確實顯示選中 2 MHz LGI MCS0，但那張表剛被重置、裡面每個 attempt
+  計數都是 0，所以那是它的初始狀態，兩個方向都不構成證據。要驗證 seeding 行為得另外
+  設計實驗。
 - 先前記下的那些「晶片有但驅動沒用」的設施仍然沒用，也仍然值得知道：
   `MORSE_CMD_ID_GET_RSSI`（`morse_commands.h:2825`，含 `rssi0/1/2`）定義了但從未呼叫、
   `morse_skb_rx_status.noise_dbm` 從未被讀取、`morse_cmd_evt_scan_result.rssi` 只在
@@ -281,9 +343,90 @@ morse 或 SPI 錯誤。AP 自己認為它在發射。
 
 第一次發生在 `iw set txpower fixed` 之後（見前一節）。**第二次前面什麼都沒有** ——
 乾淨重開機後 22 分鐘，沒有任何介入，在兩個 station 都因閒置被踢掉之後就再也連不回來。
-所以那個 txpower 指令是誘發它的一種方式，不是唯一成因。
+**第三次前面同樣什麼都沒有**，發生在 2026-08-23 稍晚，那一段期間只下過唯讀指令。所以
+那個 txpower 指令是誘發它的一種方式，不是唯一成因；三次裡有兩次完全沒有觸發原因。
 
-兩次 `wifi reload` 都救不回來，兩次重開機都有效。
+### 救援階梯 —— `reset` 有效，而且它跟 `restart` 不是同一件事
+
+前兩次之後這裡記的是「只有重開機救得回來」。**那是錯的。** 第三次是在**沒有重開機**的
+情況下救回來的，而且各階不能互相取代：
+
+| 手段 | 結果 |
+|---|---|
+| `wifi reload` | 救不回來 |
+| debugfs `restart`（`echo 1 >`） | **救不回來** |
+| debugfs `reset`（`echo 1 >`） | **救得回來** |
+| 重開機 | 救得回來 |
+
+```sh
+# 先找 phy —— 驅動每次重新初始化它就會被重新編號
+#（這次 bus reset 前是 phy0，之後變 phy2）
+P=$(find /sys/kernel/debug/ieee80211 -maxdepth 2 -name morse)
+echo 1 > $P/reset
+```
+
+從 2.0.1 原始碼的 `debug.c` 和 `mac.c` 看，這兩個入口是不同深度的復原：`restart` 排入
+`mors->recovery.driver_restart` → `morse_mac_restart()`，重載韌體並重新初始化 MAC，失敗
+時它會自己升級成 bus reset；`reset` 則直接排入 `mors->recovery.bus_reset` →
+`morse_bus_reset()`。
+
+`restart` 乾淨完成，但沒有用：
+
+```
+morse_spi spi0.0: morse_mac_restart: Restarting HW
+morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+ieee80211 phy0: Hardware restart was requested
+```
+
+**透過 SPI 完整重載韌體並不足夠** —— 這件事本身就值得知道：卡住的東西能撐過把韌體
+映像重新寫進晶片。接著 `reset` 完全恢復了：雙向 20/20、0% 遺失、RTT 8.5 ms，之後在
+1 Hz 連續監測的 18 分鐘內都維持著（486 次回應、41 次遺失，其中 40 次是為了把板子搬到
+下一個測量位置而刻意斷電的那段）。
+
+`wifi reload` 做不到的可能原因：**這台 AP 的 `reset-gpios` flag 是 0**，所以 RESET_N
+在這塊板子上從來不會觸發。拆掉並重建介面沒辦法讓晶片經歷一次硬體重置，而 bus reset
+那條路徑碰得到它。這正是讓這台 AP 對 station 遇到的三個 SPI 缺陷全都免疫的同一個
+device-tree 屬性 —— 在這裡它反過來害了自己。
+
+### 停擺時主機側看得到什麼：什麼都沒有
+
+第三次發生時量的，兩個讀數器都在量測失敗案例的同時、用已知正常的案例驗證過：
+
+| 測試 | 結果 |
+|---|---|
+| station 送 5 個 ping → AP 的 rx 計數 | **+774 bytes** —— 上行送達 |
+| AP 送 5 個 ping → station 的 rx 計數 | **+0 bytes** —— 下行不送達 |
+| 兩側閒置 6 秒、不產生流量 | +152 / +154 —— 兩個讀數器都是活的 |
+
+停擺 49 分鐘後，AP 的 debugfs `page_stats`：
+
+```
+Beacon Tx: 29040        <- 49 分鐘 / 100 ms beacon = 29400；量測當下 beacon
+Data Tx: 5659              仍然持續被交給晶片
+Page write fail: 0
+No page: 0
+Queue stop: 0
+Tx aged out: 0
+TX ps filtered: 0
+TX status invalid: 0
+```
+
+`dmesg` 從開機第 16 秒之後就沒再出現任何一行。溫度 46 °C。`ip -s link` 報
+`errors 0 dropped 0`。受影響的那個 station，mmrc 整張表只有 **2 次 total attempts**
+—— 速率控制器幾乎沒被要求送過任何東西。主機側每一個計數器都是乾淨的，所以故障點在
+驅動看得見的範圍之外。
+
+### Heltec 是無線層的對照組，絕不是 IP 層的
+
+診斷過程中用過「AP 也 ping 不到 Heltec，所以是 AP 全機故障」這個推論，**它不成立**。
+即使現在鏈路健康、AP 讀到它的訊號在 −69…−76 且持續更新，AP 依然 ping 不到
+`10.41.0.197` —— 它的 IP 層因為自己不相干的原因不通。
+
+真正有份量的是無線層的證據：`restart` 之後，Heltec 在 AP 的 hostapd log 裡完成了完整
+握手 —— `authenticated` → `associated` → `AP-STA-CONNECTED` →
+`EAPOL-4WAY-HS-COMPLETED` —— 那需要 AP 發射得出去，而同一時間另一台 station 的 ping
+仍然全滅。要用它當對照，就用 `station dump` 裡的 RSSI 和它的關聯事件。不要用 ping。
 
 **這是本檔案先前三個「未解釋」項目的候選共同成因**：100 次 ping 測試中的 5% 遺失、
 兩次沒有任何 deauth 或 beacon-loss 日誌的重新關聯、以及第一次持續下載在
@@ -294,6 +437,35 @@ morse 或 SPI 錯誤。AP 自己認為它在發射。
 診斷筆記，因為第一次判讀是錯的：症狀看起來像「**station** 的接收壞了」，因為掃不到
 東西的是 station。指向正確方向的線索是 AP 的 station 表整個清空、而且**兩個** station
 同時失效。沒有任何 station 端的故障能解釋兩個獨立的 station 在同一瞬間一起失聰。
+
+### station 的省電會遮蔽它，也會污染任何透過它取得的量測
+
+station 這側的省電**預設是開的** —— `iw dev wlan1 get power_save` 回報 `on`，morse 模組
+的 `enable_ps` 參數讀出來是 `2`。AP 那側則是反過來設的：`enable_ps=0`、
+`enable_dynamic_ps_offload=0`、`enable_twt=0`。
+
+AP 停擺期間，station 的 rx 計數在 8 秒內成長了 **0 個封包**，讀起來像是「連 beacon 都
+沒有進來」。一個指令就把它變成 **8 秒 +154 個封包**，其他什麼都沒動：
+
+```sh
+iw dev wlan1 set power_save off
+```
+
+station 本來是睡著的。看起來像發射器死掉的那部分現象，其實是接收端自己關著。
+
+這件事有兩層影響：
+
+- **對量測。** 任何在省電開啟時取得的 RSSI 或遺失率，都是透過一個有一部分時間是關閉的
+  接收端取得的。上面那個搬移測試就是為此把它強制關掉，而且每 60 秒重新確保一次，因為
+  NetworkManager 會在重新連線時把它打開回去。
+- **對診斷。** 它讓一個 AP 側的故障看起來比實際更嚴重，也就是為什麼第三次發生時第一次
+  判讀是「發射器完全死了，連 beacon 都沒有」。beacon 一直都發得出去。
+
+把省電關掉**並沒有**讓下行恢復 —— 單播路徑一直到 bus reset 之後才復原。這兩個效應是
+獨立的，只是疊在一起。
+
+station 與 AP 的省電設定不對盤，目前**尚未**被測試是否造成任何後果。它是先前記錄的
+5% 封包遺失的合理候選成因之一，值得專門設計一次實驗。
 
 ### HaLow 鏈路是通往 station 的頻外管理通道
 
@@ -311,6 +483,18 @@ DROPBEAR_PASSWORD='...' dbclient -y -y -l alan 10.41.0.208 'command'
 ```
 
 這救回了一塊原本無頭、無法觸及、沒有實體存取也沒有網路線的板子。
+
+**還有一個更簡單的形式，而且應該優先用它。** AP 的 `br-lan` 同時橋接 `eth0` 和 `wlh0`，
+而筆電的 USB 網路卡就在同一個 `10.41.0.0/16` 裡。所以筆電可以**直接**連到 station 的
+HaLow 位址，用一般的金鑰認證 —— 不需要先跳到 AP、不需要 dropbear 用戶端，也不需要把
+密碼放進命令列：
+
+```sh
+ssh alan@10.41.0.208
+```
+
+2026-08-23 端到端驗證過。上面那個兩段式的 `dbclient` 做法仍然有效，是筆電沒有接線到
+AP 時的後備。
 
 一般性的心得：HaLow 網路有自己的定址、自己的無線電，獨立於場地的 LAN。不管管理網路
 發生什麼事，只要 station 還關聯著、AP 還用線接著筆電，這條路就是通的。它慢、會掉封包，

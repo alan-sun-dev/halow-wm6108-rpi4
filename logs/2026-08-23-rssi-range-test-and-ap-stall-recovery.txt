@@ -1,0 +1,310 @@
+2026-08-23 (later session) — two results
+========================================
+
+1. The RSSI saturation hypothesis is confirmed by moving a board.
+2. The AP transmitter stall is recoverable in software, via debugfs `reset`.
+   `wifi reload` and debugfs `restart` both fail to recover it.
+
+Everything below was measured on the same afternoon, in this order.
+
+
+ENVIRONMENT
+-----------
+
+Station (device under test)
+  serial        100000004851d437
+  eth0 MAC      e4:5f:01:52:55:04      wlan0 MAC  e4:5f:01:52:55:05
+  HaLow netdev  wlan1, 9c:04:b6:ff:df:fe, 10.41.0.208/16
+  OS            Raspberry Pi OS Lite 64-bit, kernel 6.6.51+rpt-rpi-v8
+  driver        morse, srcversion 87374779AA811C291578351
+                (mm6108-2.0.1 + patches/upstream/, country=SG,
+                 bcf=bcf_fgh100mhaamd.bin via /etc/modprobe.d/morse.conf)
+  firmware      mm6108.bin crc32 0xbe7b5c8f, bcf crc32 0x941b2a82
+  overlay       stock mm610x-spi-sensecap, reset-gpios flag 1
+  management    wlan0 on SSID `Sun`, 192.168.108.19/24
+
+AP
+  serial        1000000093d173dd
+  eth0 MAC      e4:5f:01:52:57:e7
+  HaLow netdev  wlh0, 3c:1a:cc:70:3f:ca, SSID BCM2711-57e7, 22 dBm
+  OS            OpenMANET 24.10, r28739-d9340319c6, kernel 6.6.138
+  radio         S1G 923.0 MHz, BW 2 MHz, mapped ch157, SAE + PMF
+  uci           enable_ps=0, enable_dynamic_ps_offload=0, enable_twt=0,
+                enable_ext_xtal_init=1
+  reset-gpios   flag 0 — RESET_N never fires on this board
+
+Third node (control)
+  Heltec HT-H7608, 0c:bf:74:2c:dd:05, associated to the same AP from
+  another room. Radio-layer control only; see the note on its ping below.
+
+Laptop
+  macOS, en0 on `Sun` 192.168.108.200, en5 USB-Ethernet 10.41.0.100/16
+  cabled to the AP.
+
+
+PART 1 — RSSI SATURATION: CONFIRMED
+===================================
+
+Method
+------
+
+The station board was carried to three positions. The AP is the receiver
+under test and stayed put, cabled to the laptop, so its reading is
+available continuously regardless of what happens to the station's
+management network. Both ends were sampled at 2 s intervals by loggers
+running on the machines themselves.
+
+Station power save was forced OFF for the whole measurement
+(`iw dev wlan1 set power_save off`, re-asserted every 60 s by the logger).
+This matters — see PART 3.
+
+No transmit power was changed. `iw set txpower fixed` was not used; it is
+what killed the AP's transmitter on an earlier attempt at this test.
+
+Predictions were written down before each move. Free-space path loss at
+923 MHz: FSPL(dB) = 20*log10(d_m) + 31.75, and the AP transmits at 22 dBm,
+so predicted RX = 22 - FSPL.
+
+Results
+-------
+
+  position                    predicted     AP-side measured        station-side
+                                            (30 samples / 60 s)
+  ------------------------    ----------    --------------------    ------------
+  0.3 m, board to board        +0.7 dBm     -3   (range -2..-4)      0 dBm
+  2 m, line of sight          -15.8 dBm     -15.7 (range -14..-19)   -12.1 dBm
+  4 m, one wooden wall        -21.8 dBm     -29.9 (range -28..-32)   -27.1 dBm
+                              + wall loss
+
+Raw AP-side samples, 2 m line of sight:
+  -19 -14 -18 -17 -14 -16 -17 -16 -16 -16 -19 -16 -15 -16 -14
+  -15 -16 -14 -14 -16 -15 -16 -16 -15 -16 -16 -15 -15 -15 -14
+  mean -15.7 dBm over 30 samples
+
+Raw AP-side samples, 4 m through one wooden wall:
+  -30 -30 -29 -30 -28 -29 -30 -29 -29 -29 -30 -29 -29 -29 -30
+  -30 -31 -30 -30 -30 -32 -31 -31 -31 -30 -31 -30 -30 -30 -30
+  mean -29.9 dBm over 30 samples
+
+What this establishes
+---------------------
+
+1. The 2 m line-of-sight point lands 0.1 dB from the free-space prediction.
+   The measurement path is accurate once the signal is inside the scale.
+
+2. The 0.3 m point is clipped. The true value there is about +0.7 dBm,
+   above the top of the scale, and the reported value sits at 0 to -4.
+   The compression is visible in the step: true path loss from 0.3 m to
+   2 m is 16.5 dB, while the reading moved only 11.7 dB (-4 -> -15.7).
+   The near end is compressed by 4-5 dB, which is what a reading against
+   its ceiling looks like.
+
+3. `signal: 0 dBm` therefore means "off the top of the scale", confirmed
+   by measurement rather than inferred. The earlier conclusion that the
+   firmware does not populate RSSI was wrong, and the correction that
+   replaced it (saturation, marked "not proven") is now proven.
+
+4. The wooden wall costs 8 dB at 923 MHz. Two independent ways of
+   computing it agree: absolute (-29.9 measured vs -21.8 free space =
+   8.1 dB) and by the step (2 m -> 4 m is 6.02 dB of distance, the
+   reading moved 14.2 dB, excess 8.2 dB).
+
+Link quality was unaffected at every position: 20/20 pings, 0% loss,
+RTT 8.3-8.8 ms at 4 m through the wall.
+
+Margin, for orientation only: at -30 dBm with MCS0 sensitivity around
+-95 dBm there is roughly 65 dB of headroom left. Any question of the form
+"is this a signal problem?" asked with the boards on one bench was
+unanswerable, and the answer at bench distance was always going to be no.
+
+One thing NOT established
+-------------------------
+
+NOTES says a zero `avg_rssi` seeds the rate controller at MCS7 via
+`MMRC_SHORT_RANGE_RSSI_LIMIT = -70`. At -30 dBm the AP's mmrc table shows
+2 MHz LGI MCS0 selected — but that table had just been reset and every
+attempt counter in it was 0, so this is its initial state, not evidence
+that the seeding behaviour changed. Testing that needs its own design.
+
+
+PART 2 — THE AP TRANSMITTER STALL: A RECOVERY LADDER
+====================================================
+
+The stall recurred on its own during this session, with no `iw set
+txpower fixed` and no intervention of any kind — only read-only commands
+had been issued. This is the third occurrence and the second that
+followed nothing.
+
+Diagnosis, by counter correlation
+---------------------------------
+
+Both readers were validated against a known-good case in the same breath
+as the failing one, per the standing rule about empty measurements.
+
+  test                                              result
+  ------------------------------------------------  ------------------
+  station sends 5 pings -> AP rx counter delta       +774 bytes   (up OK)
+  AP sends 5 pings -> station rx counter delta       +0 bytes     (down dead)
+  both sides idle 6 s, no traffic generated          +152 / +154  (readers live)
+
+So: uplink delivers, downlink does not, and both counters are moving, so
+neither reader is broken.
+
+Host side shows nothing wrong. debugfs `page_stats` on the AP, 49 minutes
+after boot:
+
+  Beacon Tx: 29040          <- 49 min at 100 ms beacon = 29400. Beacons are
+  Data Tx: 5659                being handed to the chip right up to the moment
+  Page write fail: 0           of measurement.
+  No page: 0
+  Queue stop: 0
+  Tx aged out: 0
+  TX ps filtered: 0
+  TX status invalid: 0
+
+`dmesg` on the AP has not produced a line since second 16 of boot.
+Thermal 46 C. `ip -s link` reports errors 0 dropped 0. The driver
+believes it is transmitting and the host has no counter that disagrees.
+
+The rate controller had barely been asked to do anything: for the
+affected station, mmrc's whole table showed 2 total attempts.
+
+The recovery ladder
+-------------------
+
+  rung                                  outcome
+  -----------------------------------   ---------------------------------
+  `wifi reload`                         does not recover  (recorded earlier)
+  debugfs `restart`  (echo 1 >)         does not recover  (measured here)
+  debugfs `reset`    (echo 1 >)         RECOVERS          (measured here)
+  reboot                                recovers          (recorded earlier)
+
+Paths, on this driver:
+  /sys/kernel/debug/ieee80211/phy<N>/morse/{restart,reset}
+The phy number changes when the driver re-initialises — it was phy0
+before the bus reset and phy2 after. Find it, do not hardcode it.
+
+What each rung does, from debug.c and mac.c in the 2.0.1 source:
+  `restart` -> mors->recovery.driver_restart -> morse_mac_restart()
+               reloads firmware, re-inits the MAC. On failure it escalates
+               to a bus reset by itself.
+  `reset`   -> mors->recovery.bus_reset -> morse_bus_reset()
+
+`restart` completed cleanly and did not help:
+
+  morse_spi spi0.0: morse_mac_restart: Restarting HW
+  morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+  morse_spi spi0.0: Loaded BCF from morse/bcf_fgh100mhaamd.bin, size 1251, crc32 0x941b2a82
+  ieee80211 phy0: Hardware restart was requested
+
+A full firmware reload over SPI is therefore not enough. That is worth
+knowing on its own: whatever is stuck survives reloading the firmware
+image into the chip.
+
+`reset` recovered it completely:
+
+  AP -> station   20/20, 0% loss, RTT min/avg/max 7.6/8.5/14.1 ms
+  station -> AP   20/20, 0% loss, RTT min/avg/max 4.8/8.6/12.5 ms
+
+and the link then stayed up for the remaining 18 minutes of continuous
+1 Hz monitoring: 486 replies, 41 losses, and 40 of those 41 are the
+deliberate power-off window while the board was carried to position 2.
+One isolated loss at 13:48:25 is the only unexplained one.
+
+A likely reason `wifi reload` cannot do it: this AP's `reset-gpios` flag
+is 0, so RESET_N never fires on this board. Tearing down and recreating
+the interface cannot put the chip through a hardware reset. The bus reset
+path is what reaches it. This is the same device-tree property that made
+the AP immune to the three SPI defects the station hit; here it works
+against it.
+
+Measured, not established: whether the stall's root cause is in the chip
+or the RF front end. Everything host-side is clean, and receive keeps
+working throughout, so the failure is downstream of anything the driver
+can see.
+
+A discriminator that turned out to be worthless
+-----------------------------------------------
+
+"AP cannot ping the Heltec either, therefore the failure is AP-wide" was
+used during this diagnosis. It does not hold: the AP cannot ping the
+Heltec at 10.41.0.197 even now, with the link healthy and the AP reading
+its signal at -69..-76 and updating. The Heltec's IP layer is not
+reachable for its own unrelated reasons.
+
+What did carry weight, and still does, is radio-layer evidence: right
+after the `restart`, the Heltec completed a full 4-way handshake
+(authenticated -> associated -> AP-STA-CONNECTED -> EAPOL-4WAY-HS-COMPLETED)
+in the AP's hostapd log, which requires the AP to transmit, while the
+station's pings were still failing. Use the Heltec as a radio-layer
+control — its RSSI reading in `station dump`, and its association events
+— never as an IP-layer one.
+
+
+PART 3 — STATION POWER SAVE MASKS THE STALL
+===========================================
+
+The station's power save is on by default: `iw dev wlan1 get power_save`
+returns `on`, and the morse module's `enable_ps` parameter reads 2. The
+AP is configured the other way: `enable_ps=0`,
+`enable_dynamic_ps_offload=0`, `enable_twt=0`.
+
+While the AP was stalled, the station's rx counter grew by 0 packets in
+8 s — reading as "not even beacons are arriving". Setting
+
+  iw dev wlan1 set power_save off
+
+changed that to +154 packets in 8 s with no other change. The station had
+been asleep; the absence of received frames was partly its own doing.
+
+This matters twice over:
+
+- For measurement. Any RSSI or loss figure taken with power save on is
+  taken through a receiver that is off part of the time. The range test
+  in PART 1 was run with it forced off for this reason.
+- For diagnosis. It made an AP-side fault look worse than it was, and it
+  is why the first read of this session's failure was "the transmitter is
+  completely dead, beacons included". Beacons were going out the whole
+  time.
+
+Turning power save off did NOT restore the downlink — the unicast path
+stayed dead until the bus reset. The two are independent.
+
+The station/AP power-save mismatch is untested as a cause of anything.
+It is a plausible contributor to the 5% packet loss recorded earlier and
+deserves its own experiment.
+
+
+HOW THE MEASUREMENT WAS RUN
+===========================
+
+AP side, /tmp/rssilog, 2 s cadence, both stations' signal plus our
+station's inactive time. AP side also /tmp/pingmon, 1 Hz, recording
+reachability of both stations.
+
+Station side, a systemd unit installed for the test:
+
+  /home/alan/halow-rssilog.sh          the logger
+  /etc/systemd/system/halow-rssilog.service
+  /home/alan/rssi-logs/rssi-<stamp>.log
+
+It is enabled at boot on purpose: the board was carried out of management
+range and power-cycled, and the requirement was that it keep recording
+without anyone able to reach it. It also re-asserts `power_save off` every
+60 s, because NetworkManager can turn it back on across a reconnect.
+
+Remove it when the range work is finished:
+
+  sudo systemctl disable --now halow-rssilog.service
+  sudo rm /etc/systemd/system/halow-rssilog.service /home/alan/halow-rssilog.sh
+
+Two tooling traps hit while setting this up, both worth avoiding:
+
+- `pkill -f pirssilog` issued over SSH matches the SSH command line
+  itself and kills the session that issued it. The command appears to do
+  nothing at all — no output, no error. Build the pattern from a variable
+  so the literal string is not in your own cmdline.
+- busybox `ping` on the AP rejects fractional `-i` values, and busybox
+  `nc` does not take the flags used for a banner grab; it prints usage,
+  which reads like a successful empty result. Neither `arping` nor `od`
+  nor `xxd` exists on that image.
