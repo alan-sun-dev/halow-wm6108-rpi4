@@ -407,3 +407,78 @@ and dealing with ttyd.
 Tooling note for that image: `od`, `dtc`, `fdtget` and `wpa_cli` are
 absent; `hexdump`, `xxd`, `strings` and `wpa_cli_s1g` are present. Check
 before believing an empty read.
+
+
+PART 6 — THE MTU ROOT CAUSE, IDENTIFIED (added later the same evening)
+======================================================================
+
+PART 1 left "which daemon sets eth0 to 1460" as not established, and warned
+against forcing eth0 to 1500 before knowing. It is now known.
+
+Method
+------
+
+Disable all three candidate daemons, reboot, then start them back one at a
+time and watch the MTU. Single variable per step.
+
+  step                                                      eth0    br-lan
+  -------------------------------------------------------   -----   ------
+  reboot, openmanetd + alfred + mesh11sd all disabled        1500    1500
+  start mesh11sd, wait 20 s                                  1500    1500
+  start alfred, wait 20 s                                    1500    1500
+  start openmanetd, wait 20 s                                1460    1460
+
+The 1500 was sampled at 65 s, 90 s, 115 s and 140 s of uptime, well past the
+43.9 s mark at which it used to change, so it was not simply a race that had
+not fired yet. `ps` confirmed none of the three were running before the
+experiment.
+
+**openmanetd sets it.** Presumably reserving 40 bytes for batman-adv
+encapsulation, on a mesh that is not running here at all — alfred is launched
+against `br-ahwlan` and `bat0`, neither of which exists on this board, which
+is the source of the repeated `can't get interface: No such device` in the
+log.
+
+Stopping openmanetd does NOT undo it
+------------------------------------
+
+The change is one-way. After `/etc/init.d/openmanetd stop`, eth0 stayed at
+1460. Either reboot with it disabled, or put the MTU back by hand:
+
+  /etc/init.d/openmanetd disable      # and alfred, mesh11sd if the mesh is unused
+  ip link set eth0 mtu 1500           # only to fix the running system
+
+Confirmation, against the test that originally failed
+-----------------------------------------------------
+
+With eth0/br-lan/wlh0 all at 1500 and the station back to a 1500 MTU:
+
+  DF ping sweep, 6 packets each     1400 / 1440 / 1460 / 1472 payload
+                                    all 0% loss, including a full 1500-byte frame
+  uplink   8192 B                   8192 B in 0.32 s     (was 0 B in 34.7 s)
+  uplink 262144 B                   2.450 Mbit/s
+  downlink 512 KiB                  2.880 Mbit/s, md5 verified equal
+
+Those throughput figures are NOT a clean before/after against the 1.48 /
+2.77 Mbit/s in PART 2: the board had been carried back to the bench by then,
+so position and MTU both changed. What is clean is the 8 KiB uplink going
+from zero bytes to complete.
+
+The AP is unaffected by losing those three daemons: SSID up, both stations
+associated, `rsn_beacon_mode=2` preserved across the reboot, and every
+standard OpenWrt tool still present.
+
+A measurement note, twice over
+------------------------------
+
+A first DF sweep with `-c 2` reported payload 1440 FAIL and payload 1472 OK —
+a larger frame passing while a smaller one failed, which is physically
+impossible. It was sampling noise from a two-packet test. Re-run with six
+packets, every size passed. Two packets is not a measurement.
+
+Separately, a service check reported all three daemons `enabled=no
+running=yes` immediately after a reboot that had disabled them. That was
+`pgrep -f <name>` matching the SSH command line that contained the name —
+the same self-match trap recorded in PART 1's tooling notes, hit for the
+third time in one session. `ps` filtered by column, with the pattern absent
+from the invoking command, showed none of them running.

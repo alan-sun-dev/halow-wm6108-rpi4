@@ -25,7 +25,10 @@ distorting every throughput figure in this file. The AP's `wlh0` is MTU 1500
 while its bridge partner `eth0` is 1460, so oversized frames from the HaLow side
 are dropped by the bridge with no ICMP and no counter. Uplink of 8 KiB returned
 **0 bytes after 34.7 s**; one `ip link set wlan1 mtu 1460` turned that into
-**0.32 s**. It is the likely cause of the "uplink varies 4x" and the
+**0.32 s**. **The source is `openmanetd`** — identified by disabling three
+candidate daemons, rebooting to 1500, and starting them back one at a time until
+one moved it. Disabling it leaves the whole path at 1500 and the AP serving
+normally. It is the likely cause of the "uplink varies 4x" and the
 155648-of-4194304 truncated download recorded here as unexplained — indicated,
 not established. Own section below.
 
@@ -516,17 +519,51 @@ ip link set wlan1 mtu 1460
 nmcli connection modify halow 802-11-wireless.mtu 1460   # to persist
 ```
 
-**Do not "fix" it on the AP yet.** Nothing in `/etc/` sets 1460, `uci show
-network` has no mtu option, and `dmesg` shows `br-lan` already at 1460 by second
-43.9 of boot — so a userspace daemon applies it after network config.
-`openmanetd`, `mesh11sd` and `trelay` are all installed and any could be it; an
-attempt to identify it from the `openmanetd` binary with `strings` **failed its
-own positive control**, so this is not established. Force `eth0` to 1500 and
-whatever sets 1460 will likely set it again at the next boot, turning a
-reproducible fault into an intermittent one.
+### Root cause: `openmanetd` sets it, and it is identified
 
-If more stations join, the network-wide form is to advertise the real MTU over
-DHCP from the AP: `uci add_list dhcp.lan.dhcp_option='26,1460'`.
+Nothing in `/etc/` sets 1460 and `uci show network` has no mtu option — the value
+is applied at runtime, `dmesg` showing `br-lan` already at 1460 by second 43.9 of
+boot. It was pinned down by disabling the three candidate daemons, rebooting, and
+then starting them back one at a time:
+
+| step | `eth0` | `br-lan` |
+|---|---|---|
+| reboot with `openmanetd`, `alfred`, `mesh11sd` all disabled | **1500** | **1500** |
+| start `mesh11sd`, wait 20 s | 1500 | 1500 |
+| start `alfred`, wait 20 s | 1500 | 1500 |
+| **start `openmanetd`, wait 20 s** | **1460** | **1460** |
+
+Single variable, and the 1500 held at 65 s, 90 s, 115 s and 140 s of uptime —
+well past the 43.9 s mark where it used to change. **`openmanetd` is what sets
+it**, presumably reserving 40 bytes for batman-adv encapsulation on a mesh that
+is not running on this board at all (`alfred` is launched against `br-ahwlan` and
+`bat0`, neither of which exists, which is what fills the log with `can't get
+interface: No such device`).
+
+**Stopping `openmanetd` does not undo it** — the change is one-way. Either reboot
+with it disabled, or set the MTU back by hand once it is stopped:
+
+```sh
+/etc/init.d/openmanetd disable      # and alfred, mesh11sd if the mesh is unused
+ip link set eth0 mtu 1500           # only needed to fix the running system
+```
+
+With that done, `eth0`, `br-lan` and `wlh0` are all 1500, a DF ping sweep passes
+at every size up to a full 1500-byte frame (6 packets each, 0% loss), and the
+8 KiB uplink that returned **0 bytes in 34.7 s** returns **8192 bytes in 0.32 s**.
+The AP keeps serving normally without those three daemons — SSID up, both
+stations associated, `rsn_beacon_mode` preserved across the reboot.
+
+Fixing it at the source rather than clamping the station is also faster, because
+full-size frames carry less per-packet overhead: uplink of 256 KiB moved at
+2.450 Mbit/s and 512 KiB downlink at 2.880 Mbit/s with md5 verified. *Those
+figures are not a clean before/after against the 1.48 / 2.77 Mbit/s recorded one
+floor up — the board had been carried back to the bench by then, so position and
+MTU both changed.*
+
+If a station cannot be changed and the AP must keep the small MTU, the
+network-wide form is to advertise the real value over DHCP:
+`uci add_list dhcp.lan.dhcp_option='26,1460'`.
 
 **What this probably explains.** Two entries recorded in this file as unexplained
 are exactly what a silent MTU black hole produces — "uplink varies 4x,
