@@ -97,7 +97,7 @@ mapping, not the radio. `iw` reports S1G as a 5 GHz-numbered band so that stock
 userspace works unmodified. Radiotap captured on the AP shows the real values for
 this same link: 922-923 MHz, MCS 0 and MCS 5 at 1-2 MHz. A "150 Mbit/s" line
 above a measured 1.3 Mbit/s is the mapping, not a contradiction. See NOTES.md,
-"RSSI reads 0 dBm, and what `iw` reports about the link is not the link".
+"Reading the link: RSSI, the numbers `iw` prints, and one way to brick the radio".
 
 Result, AP side:
 
@@ -201,6 +201,20 @@ report RSSI, so there is no link-margin figure in any of this and no way to tell
 from these numbers how much headroom the link has. The two boards were on the
 same bench, a few metres apart.
 
+CORRECTED 2026-08-23 later: "the driver does not report RSSI" is wrong. It does.
+A third node -- a Heltec HT-H7608, same MM6108, joining this same AP from a few
+metres away -- reads -71 to -75 dBm and varies, while our station on the same
+bench reads 0 in the same minute, in the AP's own hostapd log and in
+`iw station dump`. The measurement path works; a 0 is what this driver reports
+when the signal is off the top of the scale, which at 22 dBm over the ~0.3 m
+between these two boards is where it would be (free-space loss at 923 MHz over
+that distance is about 21 dB, so roughly +1 dBm arrives). The saturation
+explanation is not proven -- the attenuation test that would prove it has not
+been run. What is certain is that the earlier claim was drawn from two boards
+that were never far enough apart to produce a measurable number. See NOTES.md,
+"Reading the link: RSSI, the numbers `iw` prints, and one way to brick the
+radio".
+
 
 ================================================================
 WHAT IS STILL NOT KNOWN
@@ -209,7 +223,8 @@ WHAT IS STILL NOT KNOWN
 - throughput ceiling, and why uplink varies by 4x
 - why the first sustained downlink truncated
 - why the link re-associated twice with nothing logged
-- link margin, which cannot be measured while RSSI reads 0 dBm
+- link margin between these two boards, which cannot be measured while they sit
+  close enough to saturate the reading
 - behaviour at bandwidths other than 2 MHz, and on channels other than 923.0 MHz
 - anything about a second station, or about the AP role on the patched driver
 

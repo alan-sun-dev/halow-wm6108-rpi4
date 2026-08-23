@@ -164,53 +164,100 @@ Worth knowing generally: an S1G AP is built to tolerate clients that sleep for a
 long time, so a long inactivity timeout is by design and a dead entry will not be
 aged out quickly. Do not wait for it.
 
-## RSSI reads 0 dBm, and what `iw` reports about the link is not the link
+## Reading the link: RSSI, the numbers `iw` prints, and one way to brick the radio
 
-Two separate traps, found together on 2026-08-23 while trying to work out whether
-5% packet loss was a signal problem.
+Three traps, all found on 2026-08-23 while trying to work out whether 5% packet
+loss was a signal problem. The first of them is a correction to what this section
+said when it was first written.
 
-### RSSI: the chip does not populate it
+### RSSI: it *is* populated — a zero means the signal is off the top of the scale
 
-`iw dev wlan1 link` and `iw dev wlh0 station dump` both report `signal: 0 dBm`
-and `signal avg: 0 dBm`, on both boards, in both directions. It is not a driver
-plumbing fault:
+**This subsection previously concluded that the chip does not fill the RSSI
+field. That was wrong, and it was wrong for the usual reason: the only two boards
+available reported 0, and one observation repeated twice was treated as a
+property of the hardware.**
 
-- `mac.c:7180` — `ieee80211_hw_set(hw, SIGNAL_DBM)` is declared, so mac80211 will
-  report a signal if given one
-- `mac.c:6123` — `rx_status->signal = le16_to_cpu(hdr_rx_status->rssi)` assigns
-  it, and nothing overwrites it in the fifty lines that follow
-
-The zero comes from `morse_skb_rx_status.rssi` (`skb_header.h:313`), the
-per-frame field the chip fills in. Confirmed by capturing raw radiotap on the AP,
-which runs Morse's own unmodified OpenWrt build, on frames received from the
-station:
+A third node settled it. On 2026-08-23 a Heltec HT-H7608 (same MM6108 silicon,
+Heltec's own OpenWrt build over SDIO, driver 1.15.3, a different `mm6108.bin`)
+joined the same AP from a few metres away. The AP is the OpenMANET board — the
+same driver family that reports 0 for our station. Its own hostapd log, within
+the same minute:
 
 ```
-4543312655us tsft  MCS 5  923 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
-4543431956us tsft  MCS 0  922 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
+authentication: STA=9c:04:b6:ff:df:fe ... rssi=0      <- our station, on the same bench
+authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71    <- the Heltec, a few metres away
 ```
 
-Thirty frames, `0dBm` throughout. The `tsft` timestamps in the same header are
-populated, so it is not that the whole PHY metadata block is empty — RSSI and
-`noise_dbm` specifically are not filled.
+and `iw dev wlh0 station dump` agreed: ours pinned at `0 dBm`, the Heltec at
+`-73`/`-75 dBm` and varying. Same AP, same receiving chip, same moment. The
+measurement path works.
 
-The chip has other RSSI sources the driver never uses: `MORSE_CMD_ID_GET_RSSI`
-(`morse_commands.h:2825`, with `rssi0/1/2`) is defined and never called;
-`morse_skb_rx_status.noise_dbm` is never read; `morse_cmd_evt_scan_result.rssi`
-is used only on the full-mac `wiphy.c` path, which is not the one in use here.
+So the driver trace below is still correct — `SIGNAL_DBM` is declared at
+`mac.c:7180`, `rx_status->signal` is assigned from `hdr_rx_status->rssi` at
+`mac.c:6123`, nothing overwrites it — but the value arriving as 0 is not the
+firmware refusing to measure. It is what the chip reports for that particular
+link.
 
-**Consequence.** `msta->avg_rssi` is permanently 0, which makes every consumer of
-it dead: mesh peer selection compares it (`mesh.c:628`), `bss_stats` records it,
-and the rate controller is seeded with it (`rc.c:293` → `mmrc_init_rates`). In
-that last one, with `MMRC_SHORT_RANGE_RSSI_LIMIT = -70`, a zero passes
-`rssi >= -70` and the table starts at MCS7 — and the 1/2 MHz branch that would
-otherwise start at MCS3, whose comment says it exists to avoid resetting the rate
-table evidence, is unreachable. Be careful how much weight you put on that: at
-`morse_rc_sta_add` time nothing has updated `avg_rssi` yet, so it would be 0 for
-a working driver too. What is certain is that it never becomes anything else.
+**The likely reason is saturation.** The two SenseCAP M1 boards sit on the same
+bench. At 923 MHz over 0.3 m the free-space path loss is about 21 dB, so a 22 dBm
+transmitter puts roughly **+1 dBm** into the receiver — above the top of the
+scale. A reading clipped to 0 is exactly what that would look like, and it
+explains every zero in this repo: the two boards have never been more than about
+a metre apart.
 
-**There is no link margin available from this hardware**, so "is it a signal
-problem?" cannot be answered from the driver's own numbers.
+**Not proven.** The test that would prove it is to attenuate the link and see the
+value drop into range. Do not try to do that with `iw set txpower fixed` — see
+the next subsection. Moving a board physically is the safe way, and it has not
+been done.
+
+**What to take from this practically:**
+
+- `signal: 0 dBm` on this driver means "off the top of the scale", not "not
+  measured". Two boards on one bench cannot produce a usable RSSI, and no
+  question of the form "is this a signal problem?" can be answered in that
+  arrangement.
+- `msta->avg_rssi` is 0 at bench distance, so its consumers — mesh peer selection
+  (`mesh.c:628`), `bss_stats`, and the rate-controller seed (`rc.c:293` →
+  `mmrc_init_rates`) — get a 0. In the last one, with
+  `MMRC_SHORT_RANGE_RSSI_LIMIT = -70`, a zero passes `rssi >= -70` and the table
+  starts at MCS7, making the 1/2 MHz branch that would start at MCS3 unreachable.
+  That is a real effect of the bench arrangement, not a driver defect.
+- The unused chip facilities noted before are still unused, and still worth
+  knowing about: `MORSE_CMD_ID_GET_RSSI` (`morse_commands.h:2825`, with
+  `rssi0/1/2`) is defined and never called, `morse_skb_rx_status.noise_dbm` is
+  never read, and `morse_cmd_evt_scan_result.rssi` is used only on the full-mac
+  `wiphy.c` path.
+
+The radiotap capture quoted before — thirty frames from our station, all
+`0dBm` — is still an accurate capture. It was taken while both boards were on the
+bench, so it shows the same clipped value, and it does not support the conclusion
+that was drawn from it.
+
+### `iw set txpower fixed` can leave the transmitter dead, and `wifi reload` will not fix it
+
+Found by breaking the AP with it on 2026-08-23, while trying to test the
+saturation hypothesis above.
+
+`iw dev wlh0 set txpower fixed 1000` then `... 0` then `... 2200` on the
+OpenMANET AP. Afterwards `iw dev wlh0 info` reported `txpower 22.00 dBm` and the
+interface looked entirely healthy — but nothing could hear it. Both stations
+dropped, and the AP's own hostapd log showed the shape of it clearly:
+
+```
+authentication: STA=9c:04:b6:ff:df:fe ... rssi=0
+wlh0: STA 9c:04:b6:ff:df:fe IEEE 802.11: did not acknowledge authentication response
+authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71
+wlh0: STA 0c:bf:74:2c:dd:05 IEEE 802.11: did not acknowledge authentication response
+```
+
+Receive still worked for both stations. Transmit did not. `wifi reload` — which
+tears down and recreates the interface — did **not** recover it. A full reboot
+did.
+
+Diagnosis note: the first read of this was "the station's receiver is broken",
+because the station could not scan. The station was fine. What pointed the right
+way was that the AP's station table emptied and *both* stations failed at once,
+which no station-side fault explains.
 
 ### `iw` reports the dot11ah mapping, not the radio
 

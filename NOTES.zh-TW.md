@@ -141,46 +141,80 @@ station 已送出 22365 bytes，AP 只收到其中 9559；AP 的 `tx failed` 在
 一般性的認知：S1G 的 AP 本來就設計成容忍終端長時間休眠，所以老化逾時設得長是刻意的，
 一筆死掉的項目不會很快被清掉。不要等它。
 
-## RSSI 讀值為 0 dBm，而 `iw` 報的鏈路數字不是真的鏈路
+## 判讀鏈路：RSSI、`iw` 印出的數字，以及一種弄壞電台的方法
 
-兩個各自獨立的陷阱，2026-08-23 在追「5% 封包遺失是不是訊號問題」時一起發現的。
+三個陷阱，都是 2026-08-23 在追「5% 封包遺失是不是訊號問題」時發現的。其中第一個是對
+本節初版內容的更正。
 
-### RSSI：晶片根本不填這個欄位
+### RSSI **有**被填 —— 讀到 0 是因為訊號超出量測範圍上限
 
-`iw dev wlan1 link` 和 `iw dev wlh0 station dump` 兩邊、兩個方向都回報
-`signal: 0 dBm`、`signal avg: 0 dBm`。這不是驅動接線的問題：
+**本小節先前的結論是「晶片不填 RSSI 欄位」。那是錯的，而且錯在同一個老毛病：手上
+只有兩塊板子、兩塊都報 0，就把一個重複兩次的觀察當成硬體的性質。**
 
-- `mac.c:7180` —— `ieee80211_hw_set(hw, SIGNAL_DBM)` 有宣告，所以只要有值
-  mac80211 就會回報
-- `mac.c:6123` —— `rx_status->signal = le16_to_cpu(hdr_rx_status->rssi)` 有賦值，
-  之後五十行內沒有任何地方覆寫它
-
-0 來自 `morse_skb_rx_status.rssi`（`skb_header.h:313`），也就是晶片逐訊框填寫的欄位。
-在 AP 端抓原始 radiotap 證實了這點 —— AP 跑的是 Morse 原廠未修改的 OpenWrt 建置，
-收的是 station 送過去的訊框：
+第三個節點解決了這件事。2026-08-23，一台 Heltec HT-H7608（同樣的 MM6108 矽晶、
+Heltec 自家 OpenWrt 建置、走 SDIO、驅動 1.15.3、不同的 `mm6108.bin`）從幾公尺外連上
+同一台 AP。那台 AP 就是 OpenMANET 板 —— 和「對我們的 station 報 0」的是同一個驅動
+家族。它自己的 hostapd 日誌，同一分鐘內：
 
 ```
-4543312655us tsft  MCS 5  923 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
-4543431956us tsft  MCS 0  922 MHz  0dBm signal  SA:9c:04:b6:ff:df:fe
+authentication: STA=9c:04:b6:ff:df:fe ... rssi=0      <- 我們的 station，同一張桌上
+authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71    <- Heltec，幾公尺外
 ```
 
-三十個訊框，全部 `0dBm`。同一個標頭裡的 `tsft` 時間戳是有填的，所以不是整個 PHY
-metadata 區塊都空白 —— 是 RSSI 和 `noise_dbm` 特別沒被填。
+`iw dev wlh0 station dump` 也一致：我們的固定在 `0 dBm`，Heltec 是 `-73`／`-75 dBm`
+且會變動。同一台 AP、同一顆接收晶片、同一時刻。量測路徑是好的。
 
-晶片另外還有幾個 RSSI 來源，驅動全都沒用：`MORSE_CMD_ID_GET_RSSI`
-（`morse_commands.h:2825`，帶 `rssi0/1/2`）定義了但從未呼叫；
-`morse_skb_rx_status.noise_dbm` 從未被讀取；`morse_cmd_evt_scan_result.rssi` 只在
-full-mac 的 `wiphy.c` 路徑用到，而我們跑的不是那條。
+所以下面那段驅動追蹤仍然正確 —— `mac.c:7180` 有宣告 `SIGNAL_DBM`、`mac.c:6123` 有把
+`hdr_rx_status->rssi` 填進 `rx_status->signal`、之後沒有被覆寫 —— 但收到 0 並不是
+韌體拒絕量測，那就是晶片對那條鏈路回報的值。
 
-**連帶影響。** `msta->avg_rssi` 永遠是 0，所有用到它的地方都等於死掉：mesh 的鄰居
-挑選會拿它比較（`mesh.c:628`）、`bss_stats` 會記錄它、速率控制用它初始化
-（`rc.c:293` → `mmrc_init_rates`）。最後這項裡，`MMRC_SHORT_RANGE_RSSI_LIMIT = -70`，
-0 會通過 `rssi >= -70`，於是評分表從 MCS7 起跳 —— 而那個原本會從 MCS3 起跳、註解明說
-是為了避免打掉評分表 evidence 的 1/2 MHz 分支，永遠走不到。這一點不要過度解讀：在
-`morse_rc_sta_add` 執行的當下，`avg_rssi` 本來就還沒被任何訊框更新過，就算驅動正常
-它也會是 0。可以確定的是，它之後也永遠不會變成別的值。
+**最可能的原因是飽和。** 兩塊 SenseCAP M1 放在同一張桌上。923 MHz、間距 0.3 m 的
+自由空間損耗約 21 dB，22 dBm 的發射端會在接收端產生約 **+1 dBm** —— 已經超出量測
+範圍的頂端。削頂成 0 正是這種情況會有的樣子，而且它解釋了本 repo 裡每一個 0：這兩塊
+板子從來沒有相距超過一公尺過。
 
-**這個硬體上拿不到任何鏈路餘裕數據**，所以「是不是訊號問題」無法用驅動自己的數字回答。
+**尚未證實。** 要證實得衰減鏈路、看讀值是否落回範圍內。**不要用
+`iw set txpower fixed` 去做** —— 見下一小節。實體搬開才是安全的做法，而那還沒做。
+
+**實務上該記住的：**
+
+- 這個驅動報 `signal: 0 dBm` 的意思是「超出量測上限」，不是「沒有量測」。兩塊板子放在
+  同一張桌上就拿不到可用的 RSSI，任何「這是不是訊號問題」的提問在那個擺法下都無法回答。
+- 桌面距離下 `msta->avg_rssi` 是 0，所以它的使用者 —— mesh 鄰居挑選（`mesh.c:628`）、
+  `bss_stats`、以及速率控制的種子（`rc.c:293` → `mmrc_init_rates`）—— 都拿到 0。最後
+  這項裡 `MMRC_SHORT_RANGE_RSSI_LIMIT = -70`，0 會通過 `rssi >= -70`，評分表從 MCS7
+  起跳，讓原本會從 MCS3 起跳的 1/2 MHz 分支走不到。這是**桌面擺法**造成的真實效應，
+  不是驅動缺陷。
+- 先前記下的那些「晶片有但驅動沒用」的設施仍然沒用，也仍然值得知道：
+  `MORSE_CMD_ID_GET_RSSI`（`morse_commands.h:2825`，含 `rssi0/1/2`）定義了但從未呼叫、
+  `morse_skb_rx_status.noise_dbm` 從未被讀取、`morse_cmd_evt_scan_result.rssi` 只在
+  full-mac 的 `wiphy.c` 路徑使用。
+
+先前引用的那段 radiotap 擷取 —— 我們 station 的三十個訊框全是 `0dBm` —— 本身是準確的
+擷取。它是在兩塊板子都在桌上時取的，所以顯示的是同一個削頂值，**它不足以支撐當時從它
+推出的結論**。
+
+### `iw set txpower fixed` 可能讓發射器停擺，而且 `wifi reload` 救不回來
+
+2026-08-23 為了測上面那個飽和假設，把 AP 弄壞才發現的。
+
+對 OpenMANET AP 下 `iw dev wlh0 set txpower fixed 1000`，接著 `... 0`，再 `... 2200`。
+事後 `iw dev wlh0 info` 顯示 `txpower 22.00 dBm`，介面看起來完全正常 —— 但沒有任何人
+收得到它。兩個 station 同時掉線，而 AP 自己的 hostapd 日誌把樣貌講得很清楚：
+
+```
+authentication: STA=9c:04:b6:ff:df:fe ... rssi=0
+wlh0: STA 9c:04:b6:ff:df:fe IEEE 802.11: did not acknowledge authentication response
+authentication: STA=0c:bf:74:2c:dd:05 ... rssi=-71
+wlh0: STA 0c:bf:74:2c:dd:05 IEEE 802.11: did not acknowledge authentication response
+```
+
+兩個 station 的接收它都還收得到，發射則不行。`wifi reload` —— 會拆掉並重建介面 ——
+**救不回來**，必須完整重開機。
+
+診斷筆記：最初的判讀是「station 的接收壞了」，因為 station 掃不到東西。station 是好的。
+指向正確方向的線索是：**AP 的 station 表整個清空、而且兩個 station 同時失效** —— 這是
+任何 station 端的故障都解釋不了的。
 
 ### `iw` 報的是 dot11ah 的對映，不是實際的無線電
 
