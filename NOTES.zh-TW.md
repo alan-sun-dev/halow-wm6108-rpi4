@@ -53,6 +53,49 @@ ping 零遺失、累計 88.9 MB 的 SPI 流量且 `errors 0`。見
 裡面也列出仍然未知的部分 —— 距離、吞吐上限、鏈路餘裕（RSSI 讀值為 0 dBm），以及兩個
 未解釋的事件。
 
+## 兩塊板子的對照（2026-08-23）
+
+兩台是相同硬體、跑相同的韌體位元組。所有差異都集中在最後三列，而那三列正是整個
+調查在講的事。
+
+| | Station | AP |
+|---|---|---|
+| **角色** | HaLow 用戶端，修正後的驅動 | HaLow 基地台，Morse 自家建置 |
+| 主機 | RPi 4B Rev 1.4（`c03114`），4 GB | RPi 4B Rev 1.4（`c03114`）|
+| 載板／模組 | SenseCAP M1 + Wio-WM6108 (MM6108A1) | 同左 |
+| 序號 | `100000004851d437` | `1000000093d173dd` |
+| eth0 MAC | `e4:5f:01:52:55:04` | `e4:5f:01:52:57:e7` |
+| HaLow 網卡 | `wlan1`，`9c:04:b6:ff:df:fe` | `wlh0`，`3c:1a:cc:70:3f:ca` |
+| 作業系統 | Raspberry Pi OS Lite 64-bit，bookworm | OpenMANET 24.10（OpenWrt `r28739-d9340319c6`，`bcm27xx/bcm2711`）|
+| 核心 | `6.6.51+rpt-rpi-v8` | `6.6.138` |
+| 驅動 | `mm6108-2.0.1`（`98e1936`）+ `patches/upstream/` | Morse 的 OpenWrt 建置，編進核心 |
+| 驅動版本字串 | `0-rel_mm6108_2_0_1_2026_Jun_11` | 完全相同 |
+| 載入形式 | 核心模組，`srcversion 87374779AA811C291578351` | 內建，`lsmod` 查不到 |
+| 參數 | 由 `modprobe.d` 帶 `country=SG bcf=bcf_fgh100mhaamd.bin` | UCI `radio1`，另有 `enable_ext_xtal_init=1`、`enable_ps=0`、`enable_twt=0` |
+| Supplicant | 原廠 `wpa_supplicant` 2.10，由 NetworkManager 1.42.4 驅動 | `hostapd_s1g` / `wpa_supplicant_s1g`（Morse 專用建置）|
+| `mm6108.bin` | 468304 bytes，md5 `27199922700526947ec1efdaaff8163d` | 逐位元組相同 |
+| `bcf_fgh100mhaamd.bin` | 1251 bytes，md5 `4e128ad574304d1aec778c5ba5611f8f` | 逐位元組相同 |
+| SPI 控制器 | `brcm,bcm2835-spi`，`spi0.0` | 同左 |
+| DT 節點名 | `mm610x@0` | `mm6108@0` |
+| 射頻 | managed，`country=SG` | AP，S1G 923.0 MHz / BW 2 MHz，對映 ch157，22 dBm，SSID `BCM2711-57e7`，SAE + PMF，`wds=1` |
+| **SPI 時脈** | **10 MHz**（`00 98 96 80`）| **50 MHz**（`02 fa f0 80`）|
+| **`reset-gpios`** | pin 17 **flag 1** —— RESET_N 真的會觸發 | pin 17 **flag 0** —— RESET_N 從來不觸發 |
+| **chip select 數** | **兩組**（gpio 8、gpio 7），來自 `dtparam=spi=on` | **一組**（gpio 8）|
+| 腳位提升／下拉 | `halow_pins`：17 上拉，5/23/24 下拉；沒有 `spi0_pins` 群組，所以 MISO/MOSI/SCLK 維持 BCM2711 預設（下拉）| `morse_reset` 17 上拉、`morse_irq` 5 上拉、`morse_wake` 23 上拉、`morse_busy` 24 下拉；`spi0_pins` 9/10/11 上拉 |
+
+**AP 為什麼從來沒踩到那三個缺陷**，答案就在那幾列裡。50 MHz 是驅動的延遲換算剛好會
+產生可用值的唯一時脈，所以缺陷 3 隱形；`reset-gpios` flag 0 讓 RESET_N 永遠不觸發，
+晶片不會被踢出 SPI 模式，所以缺陷 2 隱形。Station 是 10 MHz 且 RESET_N 真的會拉，
+兩個缺陷都會現形 —— 而 `patches/upstream/` 那組修正就是撐住它的東西。
+
+腳位拉電阻與 chip select 數的差異，在 A/B 過程中都已個別排除為成因（見下方各節）；
+列在這裡是因為它們是真實存在的組態差異，不是因為它們和故障有關。
+
+*讀 device-tree 屬性要注意位元組序：DT 是大端。`od -An -tx1` 依序印出原始位元組，
+是安全的形式。`hexdump -e '1/4 "%08x "'` 和 `%d` 印的是主機端序，每個字都會反轉 ——
+`02 fa f0 80`（50000000）會顯示成 `80f0fa02`。OpenMANET 映像沒有 `od`，兩台都沒有
+`xxd`；在相信一個空的讀值之前，先確認工具存在。*
+
 ## 2026-08-23：成功了 —— `wlan1` 在原廠 Raspberry Pi OS 上起來了
 
 ```

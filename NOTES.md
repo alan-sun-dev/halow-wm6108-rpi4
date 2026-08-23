@@ -63,6 +63,54 @@ SPI traffic with `errors 0`. See
 which also lists what is still unknown — range, throughput ceiling, link margin
 (RSSI reads 0 dBm), and two unexplained events.
 
+## The two boards, side by side (2026-08-23)
+
+Both are the same hardware running the same firmware bytes. Everything that
+differs is in the last three rows, and those three rows are what this whole
+investigation was about.
+
+| | Station | AP |
+|---|---|---|
+| **Role** | HaLow client, the patched driver | HaLow AP, Morse's own build |
+| Host | RPi 4B Rev 1.4 (`c03114`), 4 GB | RPi 4B Rev 1.4 (`c03114`) |
+| Carrier / module | SenseCAP M1 + Wio-WM6108 (MM6108A1) | same |
+| Serial | `100000004851d437` | `1000000093d173dd` |
+| eth0 MAC | `e4:5f:01:52:55:04` | `e4:5f:01:52:57:e7` |
+| HaLow netdev | `wlan1`, `9c:04:b6:ff:df:fe` | `wlh0`, `3c:1a:cc:70:3f:ca` |
+| OS | Raspberry Pi OS Lite 64-bit, bookworm | OpenMANET 24.10 (OpenWrt `r28739-d9340319c6`, `bcm27xx/bcm2711`) |
+| Kernel | `6.6.51+rpt-rpi-v8` | `6.6.138` |
+| Driver | `mm6108-2.0.1` (`98e1936`) + `patches/upstream/` | Morse's OpenWrt build, compiled into the kernel |
+| Driver version string | `0-rel_mm6108_2_0_1_2026_Jun_11` | identical |
+| Load form | module, `srcversion 87374779AA811C291578351` | built in, nothing in `lsmod` |
+| Parameters | `country=SG bcf=bcf_fgh100mhaamd.bin` via `modprobe.d` | UCI `radio1`, plus `enable_ext_xtal_init=1`, `enable_ps=0`, `enable_twt=0` |
+| Supplicant | stock `wpa_supplicant` 2.10 under NetworkManager 1.42.4 | `hostapd_s1g` / `wpa_supplicant_s1g` (Morse builds) |
+| `mm6108.bin` | 468304 bytes, md5 `27199922700526947ec1efdaaff8163d` | byte-identical |
+| `bcf_fgh100mhaamd.bin` | 1251 bytes, md5 `4e128ad574304d1aec778c5ba5611f8f` | byte-identical |
+| SPI controller | `brcm,bcm2835-spi`, `spi0.0` | same |
+| DT node | `mm610x@0` | `mm6108@0` |
+| Radio | managed, `country=SG` | AP, S1G 923.0 MHz / BW 2 MHz, mapped ch157, 22 dBm, SSID `BCM2711-57e7`, SAE + PMF, `wds=1` |
+| **SPI clock** | **10 MHz** (`00 98 96 80`) | **50 MHz** (`02 fa f0 80`) |
+| **`reset-gpios`** | pin 17 **flag 1** — RESET_N genuinely fires | pin 17 **flag 0** — RESET_N never fires |
+| **Chip selects** | **two** (gpio 8, gpio 7), from `dtparam=spi=on` | **one** (gpio 8) |
+| Pin pulls | `halow_pins`: 17 up, 5/23/24 down; no `spi0_pins` group, so MISO/MOSI/SCLK sit at the BCM2711 default (down) | `morse_reset` 17 up, `morse_irq` 5 up, `morse_wake` 23 up, `morse_busy` 24 down; `spi0_pins` 9/10/11 up |
+
+**Why the AP never hit any of the three defects** is in those rows. 50 MHz is the
+one clock at which the driver's delay scaling happens to produce a working value,
+so defect 3 stays invisible. `reset-gpios` flag 0 means RESET_N never fires, so
+the chip is never knocked out of SPI mode and defect 2 stays invisible. The
+station runs 10 MHz with RESET_N actually firing, which exposes both — and the
+series in `patches/upstream/` is what carries it through.
+
+The pin-pull and chip-select differences were each eliminated as causes during
+the A/B (see the sections below); they are listed here because they are real
+configuration differences, not because they matter to the fault.
+
+*Reading device-tree properties: values are big-endian. `od -An -tx1` prints the
+bytes in order and is the safe form. `hexdump -e '1/4 "%08x "'` and `%d` print
+host-endian, so every word comes out byte-reversed — `02 fa f0 80` (50000000)
+displays as `80f0fa02`. `od` is absent from the OpenMANET image and `xxd` from
+both; check the tool exists before believing an empty read.*
+
 ## 2026-08-23: IT WORKS — `wlan1` is up on stock Raspberry Pi OS
 
 ```
