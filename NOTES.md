@@ -2,6 +2,54 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-24, evening — station power save is an inbound black hole, not a 5% loss
+
+The open item read: *"The station/AP power-save mismatch (`enable_ps=2` against the
+AP's 0) as a contributor to the old 5% ping loss — never tested."* Now tested, and
+the answer is bigger than the question.
+
+The station rebooted on its own at 16:13 and came back with NetworkManager's
+default power save on — precisely the state this file warned about when the
+range-test logger was removed, since nothing re-asserts `power_save off` any more.
+In that state:
+
+| direction | power save ON | power save OFF |
+|---|---|---|
+| AP → station `10.41.0.208` | **0/5, 100% loss** | 30/30, 3.8–16.0 ms |
+| laptop → station | **0/5, 100% loss** | 10/10, 4.4–9.1 ms |
+| station → AP | 2/3, 33% loss, 54–160 ms | 10/10, 2.8–7.8 ms |
+
+Two independent sources on the same L2, a valid ARP entry on the AP,
+`icmp_echo_ignore_all=0`, `rp_filter=0`, no firewall rules — and not one inbound
+packet got through. This is not a contributor to a 5% loss: **with power save on
+the station is unreachable from the network side entirely**, while still able to
+talk outbound.
+
+**Unexplained, and recorded rather than smoothed over.** The HT-HC01P has the same
+`iw power_save on` and the same `enable_ps=2`, and behaves differently — 30/30 with
+no loss at 22.5–232.9 ms, twenty-five times the latency but no black hole. Same
+driver family, same module, same AP, different failure mode. Do not generalise
+either result to the other board.
+
+**Fixed persistently on the station.** `iw dev wlan1 set power_save off` is a
+runtime setting that NetworkManager undoes at the next reconnect, which is exactly
+how this recurred:
+
+```sh
+nmcli connection modify halow wifi.powersave 2        # 2 = disable
+nmcli connection modify halow ipv4.never-default yes
+nmcli connection up halow
+```
+
+The second line fixes a separate problem found at the same time. After the reboot
+the station's default route was `via 10.41.254.1 dev wlan1 metric 600`, ahead of
+Sun at 601, so the board's internet traffic was going to an AP that has no
+internet. With `never-default` the HaLow profile stops installing a default route;
+`ip route get 1.1.1.1` now returns `via 192.168.108.1 dev wlan0`.
+
+Verified after reactivation: 20/20 AP → station at 5.1 ms average, 10/10 in both
+other directions, all four nodes reachable at once.
+
 ## 2026-08-24, later — the HT-HC01P associates, and its BCF was Morse's evaluation board
 
 **Solved.** The board had been running `bcf_mf08551.bin`, which
@@ -196,10 +244,11 @@ Still open, in order:
    this was written as item 2.
 2. **Does the AP stall recur now that `openmanetd` is gone?** Unchanged — worth
    simply watching; recovery is `echo 1 > $P/reset`.
-3. **Power save.** The HC01P's ping is asymmetric by an order of magnitude —
-   12–36 ms towards the AP against 18–199 ms back — which looks like power save
-   on its receive side, and the station/AP `enable_ps` mismatch is still
-   untested. Force power save off before measuring anything.
+3. **Power save on the HT-HC01P.** Settled for the station (section above:
+   `wifi.powersave 2` on the `halow` profile), but the HC01P still runs with it on
+   and pays 22.5–232.9 ms against the station's 3.8–16.0 ms. Why it degrades to
+   latency there and to a total inbound black hole on the station is unexplained.
+   Force power save off before measuring anything on it.
 4. **Real range.** Unchanged: −41 dBm one floor up with ~50 dB of headroom.
 
 ## 2026-08-24, session close — where everything is now

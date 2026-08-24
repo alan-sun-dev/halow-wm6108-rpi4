@@ -2,6 +2,46 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-24 傍晚 —— station 的省電是入站黑洞，不是 5% 遺失
+
+未解清單原本寫的是：*「station 與 AP 的省電不匹配（`enable_ps=2` 對上 AP 的 0）作為舊
+的 5% ping 遺失成因之一 —— 從未測試。」* 現在測了，答案比問題大。
+
+station 在 16:13 自己重開了一次，回來時帶著 NetworkManager 預設開啟的省電 —— 正是本檔
+在移除測距記錄器時警告過的狀態，因為已經沒有東西會再去重申 `power_save off`。在那個
+狀態下：
+
+| 方向 | 省電 ON | 省電 OFF |
+|---|---|---|
+| AP → station `10.41.0.208` | **0/5，100% 遺失** | 30/30，3.8–16.0 ms |
+| 筆電 → station | **0/5，100% 遺失** | 10/10，4.4–9.1 ms |
+| station → AP | 2/3，33% 遺失，54–160 ms | 10/10，2.8–7.8 ms |
+
+同一個 L2 上兩個獨立來源、AP 上有正常的 ARP 項目、`icmp_echo_ignore_all=0`、
+`rp_filter=0`、沒有任何防火牆規則 —— 入站方向一個封包都沒進去。這不是「5% 遺失的成因
+之一」：**省電開著時，station 從網路側完全無法到達**，而它自己往外講話仍然正常。
+
+**未解，記下來而不是抹平。** HT-HC01P 的 `iw power_save` 同樣是 on、`enable_ps` 同樣是
+2，表現卻不同 —— 30/30 不掉封包，但延遲 22.5–232.9 ms，是 25 倍而不是黑洞。同一個驅動
+家族、同一顆模組、同一台 AP，兩種故障模式。不要把任何一邊的結果推論到另一塊板子。
+
+**在 station 上已改成持久設定。** `iw dev wlan1 set power_save off` 是執行期設定，
+NetworkManager 下次重連就會撤銷 —— 這正是它再度發生的原因：
+
+```sh
+nmcli connection modify halow wifi.powersave 2        # 2 = disable
+nmcli connection modify halow ipv4.never-default yes
+nmcli connection up halow
+```
+
+第二行修的是同時發現的另一個問題。重開之後 station 的預設路由是
+`via 10.41.254.1 dev wlan1 metric 600`，排在 Sun 的 601 前面，所以那塊板子的對外流量
+被送去一台沒有對外網路的 AP。設了 `never-default` 之後，HaLow 的 profile 不再安裝預設
+路由；`ip route get 1.1.1.1` 現在回傳 `via 192.168.108.1 dev wlan0`。
+
+重新啟用後驗證：AP → station 20/20、平均 5.1 ms，另外兩個方向各 10/10，四個節點同時
+可達。
+
 ## 2026-08-24 稍晚 —— HT-HC01P 關聯上了，而它的 BCF 是 Morse 的評估板
 
 **已解決。** 這塊板子一直載入 `bcf_mf08551.bin`，而 `/lib/wifi/morse.sh:135` 把這個
@@ -172,9 +212,10 @@ sudo ifconfig en5 -alias 10.42.0.100
    項時更大。
 2. **`openmanetd` 拿掉之後 AP 還會不會停擺？** 不變 —— 值得單純觀察，救援是
    `echo 1 > $P/reset`。
-3. **省電。** HC01P 的 ping 有一個數量級的不對稱 —— 往 AP 12–36 ms，回來 18–199 ms ——
-   看起來是它接收側的省電，而 station 與 AP 的 `enable_ps` 不一致也仍然沒測過。量任何東西
-   之前先強制關掉省電。
+3. **HT-HC01P 的省電。** station 那邊已經定案（見上面那節：`halow` profile 設
+   `wifi.powersave 2`），但 HC01P 仍然開著，代價是 22.5–232.9 ms，對比 station 的
+   3.8–16.0 ms。為什麼在它身上退化成延遲、在 station 身上退化成完全的入站黑洞，原因
+   不明。在它上面量任何東西之前先強制關掉省電。
 4. **真實距離。** 不變：上一層樓仍然 −41 dBm，還有約 50 dB 餘裕。
 
 ## 2026-08-24 收尾 —— 現在所有東西在哪
