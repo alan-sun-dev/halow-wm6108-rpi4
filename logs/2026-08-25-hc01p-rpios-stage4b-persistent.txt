@@ -1,0 +1,76 @@
+### HT-HC01P on Raspberry Pi OS - stage 4b: persistence across a reboot
+### captured 2026-08-24T17:30:54Z
+### Two things changed in this reboot: (1) the driver is now installed and
+### auto-loaded, (2) power save moved off the enable_ps modparam onto the
+### NetworkManager profile, the mechanism already proven on the other boards.
+
+=== install ===
+total 22592
+-rw-r--r-- 1 root root   142800 Aug 24 18:28 dot11ah.ko
+-rw-r--r-- 1 root root 22990328 Aug 24 18:28 morse.ko
+updates/dot11ah.ko: kernel/net/wireless/cfg80211.ko.xz kernel/net/rfkill/rfkill.ko.xz
+updates/morse.ko: updates/dot11ah.ko kernel/lib/crc7.ko.xz kernel/net/mac80211/mac80211.ko.xz kernel/lib/crypto/libarc4.ko.xz kernel/net/wireless/cfg80211.ko.xz kernel/net/rfkill/rfkill.ko.xz
+
+=== /etc/modprobe.d/morse.conf ===
+options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:91
+
+=== boot sequence, unattended ===
+[    7.763528] dot11ah: loading out-of-tree module taints kernel.
+[    7.768366] Morse Micro Dot11ah driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[    8.445803] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[    8.446128] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[    8.446215] Resetting Morse Chip
+[    8.601958] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[    8.613741] morse_spi spi0.0: Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170, crc32 0x389a48c4
+[    9.447223] morse_spi spi0.0: Country TW with channelization scheme 3 (IEEE802.11-REVmf) is not supported
+[    9.447258] morse_spi spi0.0: Failed to set regulatory to country TW, staying in SG
+
+=== module params in effect ===
+country          SG
+bcf              bcf_HC01_V2_H.bin
+macaddr_suffix   40:8e:91
+enable_ps        2
+spi_clock_speed  0
+
+=== interface (found by driver) ===
+wlan1  MAC 0c:bf:74:40:8e:91
+DEVICE         TYPE      STATE                   CONNECTION 
+wlan0          wifi      connected               sun        
+wlan1          wifi      connected               halow      
+p2p-dev-wlan0  wifi-p2p  disconnected            --         
+wlan1            UP             10.41.0.216/16 
+
+=== power save: modparam is back at the driver default, NM disables it ===
+enable_ps modparam : 2
+iw get power_save  : Power save: off
+NM profile         : disable
+
+=== supplicant ===
+bssid=3c:1a:cc:70:3f:ca
+pairwise_cipher=CCMP
+group_cipher=CCMP
+key_mgmt=SAE
+pmf=2
+mgmt_group_cipher=BIP
+wpa_state=COMPLETED
+ip_address=10.41.0.216
+
+=== SPI ===
+bytes 4816961  transfers 15031  errors 0  timedout 0
+
+=== from the Mac, over HaLow ===
+20 packets transmitted, 20 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 3.476/5.552/14.004/3.050 ms
+
+=== AP -> station ===
+20 packets transmitted, 20 packets received, 0% packet loss
+round-trip min/avg/max = 3.872/4.960/15.743 ms
+
+=== AP station dump ===
+	rx bytes:	14441
+	rx packets:	116
+	tx retries:	0
+	tx failed:	0
+	signal:  	0 dBm
+	signal avg:	0 dBm
+	connected time:	148 seconds

@@ -1,0 +1,38 @@
+### HT-HC01P stage 3a, part 2: is it the SAME MECHANISM as the Wio-WM6108?
+### captured 2026-08-24T18:10:04+01:00
+### instrumentation only (4 dev_info/print_hex_dump), on top of patch 1. No behaviour change.
+### PREDICTION written first: mode stays 0x4 through the flip; CMD63 answers c0 7f, not 01 ff.
+
+=== source state ===
+tag mm6108-2.0.1  commit 98e1936c04ef9a62212c1c64b970218ecf08d15d
+SPI_NO_CS occurrences:            0   <- patch 2 NOT applied
+SPI_MIN_DELAY_BYTES occurrences:  0   <- patch 3 NOT applied
+build: exit 0, 0 error/warning lines
+
+=== RESULT ===
+[ 1257.331266] Morse Micro Dot11ah driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 1257.370828] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 1257.370964] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[ 1257.370997] Resetting Morse Chip
+[ 1257.472074] morse_spi spi0.0: init: entry mode=0x4 cs_high_default=1 train=18
+[ 1257.472098] morse_spi spi0.0: init: CS deasserted for training, mode=0x4
+[ 1257.472119] init: training rx: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+[ 1257.472122] init: training rx: ff ff
+[ 1257.472125] morse_spi spi0.0: init: CS polarity restored, mode=0x4
+[ 1257.472135] cmd63 rx: ff ff ff ff ff ff ff ff c0 3f ff ff ff ff ff ff
+[ 1257.472150] cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+[ 1257.472163] cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+[ 1257.472171] morse_spi spi0.0: morse_spi_probe: failed to init SPI with CMD63 (ret:-71)
+[ 1257.472243] morse_spi_probe: probe failed (ret:-71)
+[ 1257.472247] morse_spi: probe of spi0.0 failed with error -71
+
+=== decode ===
+Expected aligned CMD63 response: 01 ff
+Observed:                        c0 7f   (and c0 3f on the first attempt)
+
+A byte frame taken 2 bits early gives  host_byte = last2(prev) ++ first6(cur):
+  prev=ff cur=01 -> 11 000000 = c0 ,  then 01 111111 = 7f   => "c0 7f" is an aligned 01
+  prev=ff cur=00 -> 11 000000 = c0 ,  then 00 111111 = 3f   => "c0 3f" is an aligned 00
+
+So the chip is answering with valid R1 bytes. The host frames them two bit times
+early, because the training burst went out with the chip selected.

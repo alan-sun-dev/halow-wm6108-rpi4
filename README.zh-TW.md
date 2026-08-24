@@ -101,6 +101,41 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 
 公開出來，是希望這些量測能讓下一個人少花一個禮拜。
 
+> ## 2026-08-25 更新 —— 第二塊板子，而且缺陷 2 是在原廠設定下重現的
+>
+> 同一組三支修正現在也跑在 **Heltec HT-HC01P** 上 —— Pi HAT 上的 MM6108**A2**，
+> 不同模組、不同載板，同一個 Raspberry Pi OS 6.6.51。SAE + PMF、DHCP、AP 端
+> MCS7 / 4 MHz、`errors 0`，而且冷開機後無人介入就自己起來。
+>
+> 在裝上修正過的驅動之前，刻意先用**只套 patch 1** 的 2.0.1 probe 了一次，看缺陷 2
+> 是不是真的那個關鍵。是：
+>
+> ```
+> init: entry mode=0x4 cs_high_default=1 train=18
+> init: CS deasserted for training, mode=0x4      <-- 應該是 0x0
+> init: CS polarity restored, mode=0x4
+> cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+> morse_spi spi0.0: failed to init SPI with CMD63 (ret:-71)
+> ```
+>
+> 跟 Wio-WM6108 上早就記錄過的 trace 逐欄相同 —— 但這次是在 **Heltec 自己的 device
+> tree、逐位元組相同**的情況下：`spi-max-frequency` 50 MHz、`reset-gpios` flag 0、
+> 單一 `cs-gpios`。那正是缺陷 3 不可能重現的參考設定，所以失敗只能來自缺陷 2。第一次
+> 重現是在 10 MHz + flag 1，三個缺陷同時在場。
+>
+> 兩次之間換掉的：模組、晶片版本（A1 → A2）、載板、chip select 數、device tree。
+> **沒有**換的是核心。所以這是「一個核心、兩種硬體」，不是兩個核心。
+>
+> 另外在那塊板子上也確認了缺陷 1 就是單純的編譯失敗：原始 2.0.1 在 6.6.51 上給出
+> `spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not
+> defined" [-Werror=cpp]`，沒有 `morse.ko`。它不是「只影響 mainline」的註腳。
+>
+> 移植文件：[`heltec-hc01p-linux-port-analysis.md`](heltec-hc01p-linux-port-analysis.md)、
+> [`heltec-hc01p-hardware-inventory.md`](heltec-hc01p-hardware-inventory.md)、
+> overlay 在 [`overlays/mm610x-spi-hc01p.dts`](overlays/mm610x-spi-hc01p.dts)，
+> 以及 NOTES.md 的 2026-08-25。
+
+
 ## 硬體
 
 | | |
@@ -262,7 +297,10 @@ NOTES.zh-TW.md                    完整移植紀錄，每個假設與結果
 issue9-reply.md                   貼到 morse_driver issue #9 的技術回覆
 patches/                          針對 morse_driver mm6108-2.0.1 的 spi.c patch
 overlays/mm610x-spi-sensecap.dts  Raspberry Pi OS 用的 device tree overlay
+overlays/mm610x-spi-hc01p.dts     Heltec HT-HC01P Pi HAT 的同類檔案
 overlays/openwrt/                 修正過的 overlay + 開機分割區套用腳本
+firmware/heltec-hc01p/            HT-HC01P 的 BCF，別處都找不到的那一份
+port/hc01p/                       HT-HC01P 移植用的首次開機佈署檔
 tools/                            量測用的使用者空間 SPI 探測工具
 ```
 

@@ -2,6 +2,228 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-25 — the HT-HC01P is ported to Raspberry Pi OS, and defect B reproduces on a second board
+
+The Heltec HT-HC01P (MM6108**A2** on a Pi HAT, SPI) now runs **Raspberry Pi OS
+bookworm 6.6.51 with morse_driver 2.0.1 plus this repo's three `patches/upstream/`
+fixes**, associated to the OpenMANET AP with SAE + PMF, DHCP, and a link the AP
+rates at MCS7. It is the **second independent hardware** on this stack — different
+module, different silicon revision, different carrier, same kernel and same three
+patches.
+
+The port swapped SD cards. Heltec's OpenWrt install is untouched on its own card.
+
+```
+hc01p   Raspberry Pi 4B Rev 1.4, serial 100000004dd92ccc
+        Raspberry Pi OS bookworm, kernel 6.6.51+rpt-rpi-v8
+        wlan0 192.168.108.13 on Sun     wlan1 10.41.0.216/16 HaLow
+        MAC 0c:bf:74:40:8e:91           SPI errors 0, timedout 0
+```
+
+### The experiment that was worth doing: defect B on a second board, in the vendor's own configuration
+
+Before installing the working driver, 2.0.1 was built with **patch 1 only** — no
+patch 2, no patch 3 — and probed once. It failed exactly as predicted:
+
+```
+Resetting Morse Chip / Done
+morse_spi spi0.0: morse_spi_probe: failed to init SPI with CMD63 (ret:-71)
+```
+
+Then the same binary plus four `dev_info`/`print_hex_dump` calls, to see whether
+it was the same *mechanism* and not merely the same error code:
+
+```
+init: entry mode=0x4 cs_high_default=1 train=18
+init: CS deasserted for training, mode=0x4      <-- expected 0x0
+init: CS polarity restored, mode=0x4
+cmd63 rx: ff ff ff ff ff ff ff ff c0 3f ff ff ff ff ff ff
+cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+```
+
+Field for field the same as the Wio-WM6108 trace already in `issue15-report.md`.
+`cs_high_default=1` is the load-bearing one: the core has **already** set
+`SPI_CS_HIGH` before the function runs, so the flip is a no-op in both directions
+and the training burst goes out with the chip selected.
+
+**What makes this run stronger than the first one:** the device tree here is
+Heltec's, byte for byte — `spi-max-frequency` 50 MHz, `reset-gpios` flag 0,
+one `cs-gpios`. That is the reference configuration in which defect 3 cannot
+reproduce and the old `reset-gpios` story does not apply, so the failure can only
+be defect B. On the SenseCAP M1 the overlay was 10 MHz with flag 1 and all three
+defects were in play at once. The variable is isolated now.
+
+Axes changed between the two reproductions: module (Wio-WM6108 / Heltec HT-HC01
+V2), silicon (MM6108**A1** / **A2**), carrier (SenseCAP M1 mPCIe / Heltec Pi HAT),
+chip-select count (two / one), device tree (this repo's / the vendor's). Not
+changed: the kernel, 6.6.51. So this is still *one kernel, two hardwares* — say it
+that way upstream.
+
+Analysis document §7 said L1 would fall if unpatched 2.0.1 probed cleanly on this
+HAT under 6.6. It did not. **L1 is measured, not reasoned.**
+
+### A decode worth keeping: the chip answers correctly, the host frames it wrong
+
+The three CMD63 attempts returned `c0 3f` once and `c0 7f` twice. A byte frame
+taken two bits early gives `host_byte = last2(prev) ++ first6(cur)`:
+
+```
+prev=ff cur=01  ->  11 000000 = c0 ,  01 111111 = 7f     "c0 7f" is an aligned 01
+prev=ff cur=00  ->  11 000000 = c0 ,  00 111111 = 3f     "c0 3f" is an aligned 00
+```
+
+Both are valid R1 bytes, and `00` is CMD63 *success*. The chip replied correctly
+on the first attempt and the host could not see it. Combined with the SPI
+controller reporting `errors 0 timedout 0` for the whole failed probe, this
+answers the "surely your wiring is bad" reading directly: nothing is wrong
+electrically, the byte grid is two bits off.
+
+### B1 confirmed on a second machine, as a build failure
+
+Before patch 1 was applied at all, pristine `mm6108-2.0.1` was built on this
+board's 6.6.51:
+
+```
+spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werror=cpp]
+make: *** [Makefile:199: all] Error 2
+```
+
+No `morse.ko`. With patch 1 the same command builds with zero errors and zero
+warnings. B1 is not a mainline-only footnote.
+
+### With all three patches: probe, firmware, BCF, association
+
+```
+Loaded firmware from morse/mm6108.bin,   size 468304, crc32 0xbe7b5c8f
+Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170,   crc32 0x389a48c4
+SW version: 2.0.1    HW version: 0x00000406      <- MM6108A2, matches V2 exactly
+```
+
+Same machine, same day, same device tree, same firmware, same BCF. The only
+variable between the failing and working runs is `spi.c`.
+
+Association was clean on the first attempt — no `CONN_FAILED`, no backoff:
+
+```
+SME: Trying to authenticate with 3c:1a:cc:70:3f:ca
+PMKSA-CACHE-ADDED / Associated with 3c:1a:cc:70:3f:ca
+WPA: Key negotiation completed [PTK=CCMP GTK=CCMP]     pmf=2, BIP, sae_group=19, sae_h2e=1
+dhcp4: new lease, address=10.41.0.216
+```
+
+`nmcli connection up` to `activated` in about 2.4 s.
+
+### U1 is settled, and the RF-symmetry gate is what settled it
+
+`bcf_HC01_V2_H.bin` — shipped for driver 1.15.3 — **works with firmware 2.0 and
+driver 2.0.1**. The specific risk flagged in the analysis (its `.board_config`
+sits at a fixed `0x8011fa80` while the driver places sections in a window sized by
+*firmware* TLVs) did not materialise.
+
+Only the AP-side check can establish that, because a wrong BCF passes every
+earlier gate on the receive side. From the AP:
+
+```
+Station 0c:bf:74:40:8e:91   signal -1 dBm   rx packets 73   tx retries 0   tx failed 0
+mmrc: MCS7 / 4 MHz / SGI, probability 100%, 49/49 attempts, 0 look-around packets
+```
+
+For scale, in the same dump at the same moment the HT-H7608 reads `tx retries 438
+/ tx failed 32` and sits at MCS0 1–2 MHz with 137 of 181 packets spent on
+look-around. That is what a marginal link looks like; this is not one.
+
+`-1 dBm` is in the clipping region — the gate asks for a *sane* RSSI, not a
+precise one, and the packet counts are what carry the argument.
+
+Pings, 0% loss in every direction: Mac→station 4.5 ms, AP→station 5.4 ms,
+station→AP 3.5 ms, station→station (to `10.41.0.208`) 9.3 ms.
+
+### Persistence, and the power-save mechanism moved off the module parameter
+
+Driver installed to `/lib/modules/6.6.51+rpt-rpi-v8/updates/`, `depmod -a`, and
+`/etc/modprobe.d/morse.conf`:
+
+```
+options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:91
+```
+
+**`enable_ps` is deliberately absent.** The driver itself logs *"enable_ps
+modparam must only be used for testing - use iw set power_save"*, so power save is
+disabled by the `halow` NetworkManager profile's `wifi.powersave=2` instead — the
+same mechanism already proven persistent on the other three boards. After a
+reboot:
+
+```
+enable_ps modparam : 2        <- the driver's own default, our override is gone
+iw get power_save  : off      <- so this can only come from NetworkManager
+NM profile         : disable
+```
+
+and behaviourally, not just by readback: **20/20 pings, avg 4.487 ms, mdev
+0.163 ms**. A receiver that is asleep part of the time cannot produce 0.163 ms of
+jitter. The same board under OpenWrt with power save on was 105.4 ms / mdev 66.2.
+
+Unattended boot sequence:
+
+```
+t = 7.77 s  dot11ah registered
+t = 8.45 s  morse registered, device tree read, Resetting Morse Chip
+t = 8.60 s  firmware loaded
+t = 8.61 s  BCF loaded
+```
+
+then NetworkManager associates and takes the lease with no intervention.
+(Heltec's OpenWrt loaded its BCF at 6.65 s; the difference is systemd, not the
+driver.)
+
+### Three choices that improved on the plan
+
+- **The NetworkManager profile is bound to the MAC, not to `interface-name`.**
+  The HaLow interface name is not stable on this board — `brcmfmac` races it for
+  `wlan0` — so the station board's `interface-name=wlan1` idiom is fragile here.
+  Binding to `0C:BF:74:40:8E:91` removes the dependency entirely, which only works
+  because of the next item.
+- **`macaddr_suffix=40:8e:91` is required, and its absence is a trap.** Without it
+  the driver invents a *random* MAC at every load — the first probe came up as
+  `c2:d2:3d:87:dd:cd`. That churns the AP's station table and the DHCP lease on
+  every boot. With it the module gets back its own `0c:bf:74:40:8e:91`, which is
+  also why DHCP returned the same `10.41.0.216` the OpenWrt install had, and why
+  the AP-side history from 2026-08-24 remains directly comparable.
+- **`ipv4.never-default yes` was set from the start** rather than after the HaLow
+  profile stole the default route, which is how the station board learned it.
+
+### Gotchas found on the way, none of them about SPI
+
+- **`morse_driver` has a git submodule.** `mmrc-submodule`
+  (`MorseMicro/mm_rate_control`, commit `da14255`). Without
+  `git submodule update --init --recursive` the build dies on
+  `mmrc-submodule/src/core/mmrc.h: No such file or directory`, which looks
+  alarming and has nothing to do with anything. The first clone attempt failed
+  transiently; the repo is public.
+- **`insmod` does not resolve dependencies.** Loading `morse.ko` by hand without
+  `modprobe mac80211 crc7` first produces fifty lines of
+  `Unknown symbol ieee80211_*`. Also looks like a defect and is not one.
+- **`Country TW ... is not supported / staying in SG` at every boot is correct
+  behaviour.** `cfg80211.ieee80211_regdom=TW` is on the kernel command line for
+  the *brcmfmac* interface, and cfg80211 offers it to every phy. The Morse regdb
+  has no `TW`, so the driver refuses and stays on `SG` — which is the setting we
+  want, since SG's 920–925 MHz block is what matches the Taiwan NCC allocation.
+  Noisy, not wrong.
+- **The board booted from a 128 GB SDXC card.** NOTES has carried "a 128 GB SDXC
+  card never booted the Pi" since the early days. That was a *SenseCAP M1*, and it
+  may not even have been this card, so this is not a refutation — but the claim is
+  no longer general and should not be repeated as one.
+- **Check the board's timezone before reading its logs against another host's.**
+  This one came up as `BST` while the AP and the laptop are on Taipei time, and a
+  7-hour skew briefly made one reboot look like two. Now set to `Asia/Taipei`.
+
+### Evidence
+
+`logs/2026-08-25-hc01p-rpios-stage{2-devicetree,3a-defectB-reproduced,3a-defectB-mechanism,3b-driver-up,4a-station-associated,4b-persistent}.txt`.
+Overlay: `overlays/mm610x-spi-hc01p.dts`. First-boot payload and the
+instrumentation diff: `port/hc01p/`.
+
 ## 2026-08-24, night — the HT-H7608's HaLow interface is in no firewall zone
 
 Reached over its Ethernet port for the first time since it was set up, by moving

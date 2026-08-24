@@ -17,6 +17,29 @@ which measurement. Nothing here is from a README or a forum post.
 
 **Nothing was ported in this round.** No change was made to the working machine.
 
+> ## Status 2026-08-25 — the port is done, stages 0 to 4
+>
+> The HT-HC01P runs Raspberry Pi OS bookworm 6.6.51 with morse_driver 2.0.1 plus
+> this repo's three `patches/upstream/` fixes: associated to the OpenMANET AP with
+> SAE + PMF, `10.41.0.216` by DHCP, MCS7 / 4 MHz at the AP, SPI `errors 0`, and it
+> comes up unattended from a cold start. Full account in NOTES.md, 2026-08-25.
+>
+> What this document predicted, and what happened:
+>
+> | | prediction | outcome |
+> |---|---|---|
+> | **L1** | defect B bites on 6.x | **measured.** Unpatched 2.0.1 fails at CMD63 `-71`, `mode=0x4` throughout, `c0 7f`. Same fingerprint as the Wio-WM6108, on Heltec's own device tree |
+> | **U1** | BCF/firmware pairing unknown | **settled, works.** RF symmetry confirmed from the AP |
+> | **U2** | SPI `mode` word unknown | **read: `0x4`**, i.e. `SPI_CS_HIGH`, already set before `morse_spi_initsequence()` runs |
+> | **B1** | build blocker | **confirmed on a second machine** as a build failure, then fixed by patch 1 |
+> | **B3** | GPIO 7 muxed as CS1 | **handled and verified:** pin 7 is `gpio_in`, GPIO-unclaimed; pin 8 is the only chip select |
+> | **U3** | power-save handshake untested | **still open.** Power save is disabled, deliberately, and the WAKE/BUSY handshake has still never been exercised on 2.0.1 |
+>
+> Two things this document did not anticipate, both in NOTES.md: `macaddr_suffix`
+> is mandatory or the driver invents a random MAC on every load, and
+> `morse_driver` carries a git submodule that must be initialised or the build
+> fails in a way that looks unrelated.
+
 ---
 
 ## 1. Verdict summary
@@ -46,7 +69,7 @@ which measurement. Nothing here is from a README or a forum post.
 
 | # | Finding | Reasoning |
 |---|---|---|
-| L1 | **Defect B (the 74-clock training sequence with CS deasserted) will bite on the target and does not bite today.** Pristine `morse_spi_initsequence()` flips `SPI_CS_HIGH` to deassert CS for the training burst. On a controller using GPIO chip selects — which this HAT is, `cs-gpios = <&gpio 8 1>` — `spi_setup()` on recent kernels forces `SPI_CS_HIGH` back on so gpiolib applies the inversion once, making the flip a no-op. This repo measured exactly that failure on raspberrypi/linux 6.6.51 (`ff 01 ff` → `ff c0 7f`, a two-bit offset on every response). The board in front of us runs 5.15.167 and works, and since `morse_hw_reset()` genuinely pulses RESET_N at every probe, the training must be succeeding there — so the difference is the kernel, not the board. | source + this repo's prior measurement |
+| L1 | **MEASURED 2026-08-25, no longer a likelihood — see the status block above.** **Defect B (the 74-clock training sequence with CS deasserted) will bite on the target and does not bite today.** Pristine `morse_spi_initsequence()` flips `SPI_CS_HIGH` to deassert CS for the training burst. On a controller using GPIO chip selects — which this HAT is, `cs-gpios = <&gpio 8 1>` — `spi_setup()` on recent kernels forces `SPI_CS_HIGH` back on so gpiolib applies the inversion once, making the flip a no-op. This repo measured exactly that failure on raspberrypi/linux 6.6.51 (`ff 01 ff` → `ff c0 7f`, a two-bit offset on every response). The board in front of us runs 5.15.167 and works, and since `morse_hw_reset()` genuinely pulses RESET_N at every probe, the training must be succeeding there — so the difference is the kernel, not the board. | source + this repo's prior measurement |
 | L2 | **This reconciles the "RESET_N" story better than the version in NOTES.md.** The evidence does not support "flag 0 means RESET_N never fires" (V7 — there is no gpiod call to invert). What it supports is: RESET_N *does* fire everywhere, and what differs is whether the training burst afterwards puts the chip back into SPI mode. On the SenseCAP M1 under 6.6.51 it did not, so the reset was fatal; here under 5.15 it does, so the reset is harmless. Same driver behaviour, different outcome. | see §5 |
 | L3 | **The Heltec overlay can be reused nearly verbatim on Raspberry Pi OS.** It targets `&spi0` and `&gpio` with standard bcm2711 groups, and the target kernel has the same `brcm,bcm2835-spi` driver and the same pin groups. | decompiled overlay; both are RPi 4B |
 | L4 | **Power save is the cause of the asymmetric ping** (12–36 ms towards the AP, 18–199 ms back). `iw` reports `Power save: on` and `enable_ps=2`. | live readback; not yet tested by toggling |
@@ -55,19 +78,19 @@ which measurement. Nothing here is from a README or a forum post.
 
 | # | Question | How to settle it |
 |---|---|---|
-| U1 | **Does `bcf_HC01_V2_H.bin` (shipped for 1.15.3) work with 2.0 firmware and driver 2.0.1?** Narrowed 2026-08-24 by opening the file (see `firmware/heltec-hc01p/README.md`): it is an ELF32 RISC-V object whose `.chips` section reads **`mm610x`** — it is tagged to the chip *family*, not to a driver or firmware release — and it carries a `.regdom_SG` section, so the regulatory domain this project uses is present. Nothing in it names 1.15.3. What remains is one specific risk: `.board_config` has a fixed load address `0x8011fa80`, while the driver copies sections into a window whose address and size come from **firmware** TLVs (`MORSE_FW_INFO_TLV_BCF_ADDR` / `_SIZE`, `firmware.c:110-128`). A 2.0 firmware advertising a different window would place it wrong. | Load it and check for **RF symmetry**: the AP must see the station at a sane RSSI, not just the station see the AP. That asymmetry is exactly the failure signature already characterised on this board, and every earlier gate passes on the receive side regardless. |
-| U2 | **What the SPI `mode` word actually is at runtime.** Not exposed in sysfs on this kernel, and no `spidev` is bound to read it. | Read it from the driver on the ported system (`dev_info` in probe), or via `spi->mode` in a debug build. |
+| U1 | **SETTLED 2026-08-25: yes.** Loaded by 2.0.1 against firmware 2.0 (`crc32 0x389a48c4`), and the AP sees the station at `-1 dBm` with `rx packets` climbing and `tx retries 0` — the transmitter works, which is the only thing that could have failed. The `.board_config` window concern below did not materialise. Original question: **Does `bcf_HC01_V2_H.bin` (shipped for 1.15.3) work with 2.0 firmware and driver 2.0.1?** Narrowed 2026-08-24 by opening the file (see `firmware/heltec-hc01p/README.md`): it is an ELF32 RISC-V object whose `.chips` section reads **`mm610x`** — it is tagged to the chip *family*, not to a driver or firmware release — and it carries a `.regdom_SG` section, so the regulatory domain this project uses is present. Nothing in it names 1.15.3. What remains is one specific risk: `.board_config` has a fixed load address `0x8011fa80`, while the driver copies sections into a window whose address and size come from **firmware** TLVs (`MORSE_FW_INFO_TLV_BCF_ADDR` / `_SIZE`, `firmware.c:110-128`). A 2.0 firmware advertising a different window would place it wrong. | Load it and check for **RF symmetry**: the AP must see the station at a sane RSSI, not just the station see the AP. That asymmetry is exactly the failure signature already characterised on this board, and every earlier gate passes on the receive side regardless. |
+| U2 | **ANSWERED 2026-08-25: `0x4`.** Read exactly as suggested, with a `dev_info` on the ported system: `init: entry mode=0x4 cs_high_default=1`. `SPI_CS_HIGH` is already set by the core before `morse_spi_initsequence()` runs, and stays set through both `spi_setup()` calls — which is defect B, observed directly on this HAT. | done; instrumentation kept at `port/hc01p/instrument-initsequence.patch` |
 | U3 | **Whether 2.0.1's power-save handshake works with this HAT's WAKE/BUSY wiring.** The HAT supplies both, and 1.15.3 uses them (IRQ 46 `async_wakeup_from_chip`, 4968 interrupts taken), but 2.0.1's PS code has not been exercised on this board. | Bring the link up with `enable_ps=0` first; enable PS only after STA mode is proven. |
-| U4 | **Which Raspberry Pi OS kernel to target.** This repo has measured 6.6.51 (2024-11-19 image) and 6.12.x, both failing *without* the three patches and 6.6.51 working *with* them — but on the Wio-WM6108, not on this HAT. | Use 6.6.51 for maximum overlap with work already done. |
+| U4 | **DECIDED AND USED: 6.6.51**, from the 2024-11-19 image, which ships matching `linux-headers` so nothing had to be copied from the station board. **Which Raspberry Pi OS kernel to target.** This repo has measured 6.6.51 (2024-11-19 image) and 6.12.x, both failing *without* the three patches and 6.6.51 working *with* them — but on the Wio-WM6108, not on this HAT. | Use 6.6.51 for maximum overlap with work already done. |
 | U5 | **Whether the `dtoverlay=mm_wlan` line matters.** The overlay file does not exist on the working image, so it is a no-op there — but it may exist in a Heltec source tree and do something the working board is getting from elsewhere. | Nothing on the working board depends on it; treat as absent unless a symptom appears. |
 
 ### BLOCKER — will stop the port unless handled
 
 | # | Blocker | Handling |
 |---|---|---|
-| B1 | **`morse_driver` 2.0.1 does not build on a kernel ≥ 6.1.21 that lacks `SPI_CONTROLLER_ENABLE_CS_GPIOD`** — the `#else` arm is a `#warning` and the Makefile passes `-Werror`. Raspberry Pi OS kernels do not define that macro. | Apply this repo's `patches/upstream/` patch 1. Already written and already carried in `patches/morse-driver-2.0.1-rpi-spi.patch`. |
+| B1 | **CONFIRMED ON THIS BOARD 2026-08-25 and handled.** Pristine 2.0.1 on this Pi's 6.6.51: `spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werror=cpp]`, `make ... Error 2`, no `morse.ko`. With patch 1 the same command builds with zero errors and zero warnings. **`morse_driver` 2.0.1 does not build on a kernel ≥ 6.1.21 that lacks `SPI_CONTROLLER_ENABLE_CS_GPIOD`** — the `#else` arm is a `#warning` and the Makefile passes `-Werror`. Raspberry Pi OS kernels do not define that macro. | Apply this repo's `patches/upstream/` patch 1. Already written and already carried in `patches/morse-driver-2.0.1-rpi-spi.patch`. |
 | B2 | **`bcf_HC01_V2_H.bin` exists only on the working board.** It is not in the official firmware release, not in Debian, and not downloadable from Morse. **Worse, confirmed 2026-08-24: Heltec's own download page for this product serves the wrong file.** `https://resource.heltec.cn/download/HT-HC01P/BCF/driver_1_15_3/bcf_HC0P.bin` is byte-identical to `bcf_mf08551.bin` (sha256 `57c50cb2…`, 1150 B) and its `.board_desc` reads `mf08551` — Morse's EKH01-03 evaluation board, i.e. exactly the file that produced the receive-only radio. Losing our copy means losing the transmitter, and the obvious place to re-obtain it hands back the broken one. | **Done 2026-08-24** — preserved at `firmware/heltec-hc01p/bcf_HC01_V2_H.bin` with provenance and structure notes in that directory's README. 1170 bytes, sha256 `5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f`, verified three ways on the day of the copy. Verify the hash after every further copy. |
-| B3 | **Enabling SPI on Raspberry Pi OS the ordinary way muxes GPIO 7 as a second chip select, and GPIO 7 is MM_BUSY.** `dtparam=spi=on` brings in the stock `spi0_cs_pins` with `brcm,pins = <8 7>`. | The port overlay must override `spi0_cs_pins` to `brcm,pins = <8>`, exactly as Heltec's does. |
+| B3 | **Enabling SPI on Raspberry Pi OS the ordinary way muxes GPIO 7 as a second chip select, and GPIO 7 is MM_BUSY.** `dtparam=spi=on` brings in the stock `spi0_cs_pins` with `brcm,pins = <8 7>`. | **Done and verified 2026-08-25** in `overlays/mm610x-spi-hc01p.dts`, which narrows both `spi0_cs_pins` to `<8>` and `cs-gpios` to a single entry (the base DTB declares `<&gpio 8 1>, <&gpio 7 1>`). Live check: pin 7 is `function gpio_in`, `GPIO UNCLAIMED`; pin 8 is `gpio_out` and the only `spi0 CS0`. The port overlay must override `spi0_cs_pins` to `brcm,pins = <8>`, exactly as Heltec's does. |
 
 ---
 
@@ -369,7 +392,7 @@ scan → SAE/PMF → DHCP → ping.
 2. Keep `heltec-hc01p-raw-evidence.txt` as the reference for what "working" looks like.
 3. Do not reflash the working SD card. Physically label it.
 
-### Stage 1 — base system
+### Stage 1 — base system  ✅ done 2026-08-25
 
 4. Raspberry Pi OS Lite arm64, **2024-11-19 image, kernel 6.6.51** (U4) — the one this repo
    has already characterised, so any failure can be compared against known results rather
@@ -377,9 +400,17 @@ scan → SAE/PMF → DHCP → ping.
 5. Boot it, confirm the Pi is healthy, `dtparam=spi=on` **not yet** — the overlay will bring
    SPI up with the right CS group.
 
+*Done as recorded.* Two notes for anyone repeating it: the 2024-11-19 image
+**already ships `linux-headers-6.6.51+rpt-rpi-v8` at the matching version**, so no
+build environment has to be transplanted — only `git`, `build-essential` and `bc`
+were added, and `apt` was checked first to be sure nothing upgraded the kernel.
+And the image's `raspberrypi-sys-mods` is too old for Imager's `custom.toml`, so
+first-boot provisioning went through `firstrun.sh` plus a `cmdline.txt` line; the
+payload is in `port/hc01p/`.
+
 *Gate: the Pi boots and is reachable. Nothing Morse-related yet.*
 
-### Stage 2 — device tree
+### Stage 2 — device tree  ✅ done 2026-08-25
 
 6. Write `overlays/mm610x-spi-hc01p.dts` from the decompiled Heltec overlay, keeping every
    value: `reg = <0>`, `spi-max-frequency = <50000000>`, `reset-gpios = <&gpio 5 0>`,
@@ -395,7 +426,7 @@ scan → SAE/PMF → DHCP → ping.
 *Gate: `/proc/device-tree/soc/spi@7e204000/mm6108@0/` exists with the same property bytes as
 recorded in the inventory, and `pinctrl` shows pin 8 `gpio_out` with pin 7 free.*
 
-### Stage 3 — driver and firmware
+### Stage 3 — driver and firmware  ✅ done 2026-08-25
 
 10. Clone `morse_driver` at tag `mm6108-2.0.1` and apply this repo's three patches
     (`patches/morse-driver-2.0.1-rpi-spi.patch`, or `patches/upstream/` individually).
@@ -411,6 +442,21 @@ recorded in the inventory, and `pinctrl` shows pin 8 `gpio_out` with pin 7 free.
     `options morse country=SG bcf=bcf_HC01_V2_H.bin enable_ps=0`
     — `enable_ps=0` deliberately, so power save cannot be confused with a link fault (U3).
 
+    *Revised in practice.* `enable_ps=0` was used for the bring-up runs, but the
+    driver logs *"enable_ps modparam must only be used for testing - use iw set
+    power_save"* every time it sees it, so the installed configuration drops it and
+    disables power save through the `halow` NetworkManager profile's
+    `wifi.powersave=2` instead — the mechanism already proven persistent on the
+    other three boards. Verified after a reboot: modparam back at the driver
+    default `2`, `iw get power_save` **off**, and 20 pings at avg 4.487 ms with
+    **mdev 0.163 ms**.
+
+    **`macaddr_suffix=40:8e:91` also belongs in this file and is not optional.**
+    Without it the driver invents a random MAC at every load, which churns the AP's
+    station table and the DHCP lease on every boot. With it the module gets back
+    its own `0c:bf:74:40:8e:91`. The installed line is:
+    `options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:91`
+
 *Gate: `modprobe morse` gives `Morse Micro SPI device found, chip ID=0x0406`, then
 `Loaded firmware from morse/mm6108.bin` and `Loaded BCF from morse/bcf_HC01_V2_H.bin`, and
 `/sys/class/spi_master/spi0/statistics/errors` stays 0.*
@@ -418,7 +464,7 @@ recorded in the inventory, and `pinctrl` shows pin 8 `gpio_out` with pin 7 free.
 If the chip ID line does not appear, or appears with a wrong ID, that is defect B — check
 before anything else, because it is the failure this hardware is most likely to hit on 6.6.
 
-### Stage 4 — STA mode
+### Stage 4 — STA mode  ✅ done 2026-08-25
 
 15. Find the interface by driver, never by name (V16):
     `for n in /sys/class/net/*; do [ "$(basename "$(readlink -f "$n/device/driver")")" = morse_spi ] && basename "$n"; done`
@@ -460,7 +506,13 @@ own experiment (U3, L4).
   actually runs but has not read — specifically OpenMANET's built-in copy.~~ **Checked
   2026-08-24: no such call exists.** The feed's 18 driver patches leave `morse_hw_reset()`
   untouched, and the AP's own log shows it resetting. V7 stands.
-- **L1** would fall if a 6.6-kernel build of unpatched 2.0.1 on this HAT probes cleanly. That
-  is a cheap experiment and worth doing deliberately at stage 3 before applying patch 2, on a
-  throwaway boot, since it would settle the mechanism for the upstream report as well.
-- **U1** would be settled either way by the RF-symmetry check at stage 4.
+- ~~**L1** would fall if a 6.6-kernel build of unpatched 2.0.1 on this HAT probes cleanly.~~
+  **Run 2026-08-25, and it did not probe cleanly.** Patch 1 only, patches 2 and 3 absent
+  (verified by grep count before building): `failed to init SPI with CMD63 (ret:-71)`, and with
+  instrumentation `mode=0x4` at all three points plus `c0 7f` where `01 ff` was expected. L1
+  stands and is now measured rather than reasoned. Note what did **not** change between the two
+  reproductions: the kernel. This is one kernel on two hardwares, not two kernels — the upstream
+  report should keep saying so.
+- ~~**U1** would be settled either way by the RF-symmetry check at stage 4.~~ **Settled 2026-08-25:
+  the AP sees the station at `-1 dBm`, `rx packets` climbing, `tx retries 0 / tx failed 0`, and
+  mmrc holds MCS7 at 100% over 49/49 attempts. The BCF is compatible.**

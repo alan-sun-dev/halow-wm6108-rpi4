@@ -1,0 +1,118 @@
+### HT-HC01P on Raspberry Pi OS - stage 4a: STA mode, all gates
+### captured 2026-08-24T17:18:51Z
+
+############ STATION SIDE (hc01p, 192.168.108.13) ############
+=== interface found BY DRIVER, not by name ===
+morse_spi netdev: wlan1  MAC 0c:bf:74:40:8e:91
+
+=== GATE 1: scan shows RSN/SAE, not [WEP] ===
+BSS 3c:1a:cc:70:3f:ca(on wlan1) -- associated
+	SSID: BCM2711-57e7
+	RSN:	 * Version: 1
+		 * Group cipher: CCMP
+		 * Pairwise ciphers: CCMP
+		 * Authentication suites: SAE
+		 * Capabilities: 16-PTKSA-RC 1-GTKSA-RC MFP-required MFP-capable (0x00cc)
+
+=== GATES 2-4: authenticate / associate / EAPOL, from the supplicant ===
+Aug 24 18:16:48 hc01p wpa_supplicant[532]: wlan1: SME: Trying to authenticate with 3c:1a:cc:70:3f:ca (SSID='BCM2711-57e7' freq=5765 MHz)
+Aug 24 18:16:48 hc01p wpa_supplicant[532]: wlan1: SME: Trying to authenticate with 3c:1a:cc:70:3f:ca (SSID='BCM2711-57e7' freq=5765 MHz)
+Aug 24 18:16:48 hc01p wpa_supplicant[532]: wlan1: PMKSA-CACHE-ADDED 3c:1a:cc:70:3f:ca 0
+Aug 24 18:16:48 hc01p wpa_supplicant[532]: wlan1: Trying to associate with 3c:1a:cc:70:3f:ca (SSID='BCM2711-57e7' freq=5765 MHz)
+Aug 24 18:16:48 hc01p wpa_supplicant[532]: wlan1: Associated with 3c:1a:cc:70:3f:ca
+Aug 24 18:16:49 hc01p wpa_supplicant[532]: wlan1: WPA: Key negotiation completed with 3c:1a:cc:70:3f:ca [PTK=CCMP GTK=CCMP]
+Aug 24 18:16:49 hc01p wpa_supplicant[532]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+
+=== supplicant final state ===
+bssid=3c:1a:cc:70:3f:ca
+ssid=BCM2711-57e7
+pairwise_cipher=CCMP
+group_cipher=CCMP
+key_mgmt=SAE
+pmf=2
+mgmt_group_cipher=BIP
+sae_group=19
+sae_h2e=1
+wpa_state=COMPLETED
+ip_address=10.41.0.216
+address=0c:bf:74:40:8e:91
+
+=== GATE 5: DHCP ===
+wlan1            UP             10.41.0.216/16 
+10.41.0.0/16 dev wlan1 proto kernel scope link src 10.41.0.216 metric 601 
+(never-default is set, so no default route via HaLow - the station board learned that the hard way)
+
+=== power save: OFF before any RSSI was read ===
+iw get power_save : Power save: off
+enable_ps param   : 0
+NM profile        : disable
+
+=== link ===
+Connected to 3c:1a:cc:70:3f:ca (on wlan1)
+	SSID: BCM2711-57e7
+	freq: 5765
+	RX: 286561 bytes (2534 packets)
+	TX: 7773 bytes (67 packets)
+	signal: 0 dBm
+	rx bitrate: 325.0 MBit/s VHT-MCS 7 80MHz short GI VHT-NSS 1
+	tx bitrate: 325.0 MBit/s VHT-MCS 7 80MHz short GI VHT-NSS 1
+
+	bss flags:	short-slot-time
+	dtim period:	2
+	beacon int:	100
+
+=== SPI counters ===
+bytes      5947061
+messages   17129
+transfers  17129
+errors     0
+timedout   0
+
+############ AP SIDE (10.41.254.1) - GATE 6, RF SYMMETRY ############
+=== station dump ===
+Station 9c:04:b6:ff:df:fe (on wlh0)
+	rx bytes:	11872
+	rx packets:	103
+	tx bytes:	6087
+	tx retries:	0
+	tx failed:	0
+	signal:  	0 dBm
+	signal avg:	0 dBm
+	connected time:	5043 seconds
+Station 0c:bf:74:2c:dd:05 (on wlh0)
+	rx bytes:	55917
+	rx packets:	464
+	tx bytes:	48360
+	tx retries:	438
+	tx failed:	32
+	signal:  	-68 dBm
+	signal avg:	-68 dBm
+	connected time:	4546 seconds
+Station 0c:bf:74:40:8e:91 (on wlh0)
+	rx bytes:	8656
+	rx packets:	70
+	tx bytes:	6728
+	tx retries:	0
+	tx failed:	0
+	signal:  	-1 dBm
+	signal avg:	-1 dBm
+	connected time:	124 seconds
+
+=== rate control for 0c:bf:74:40:8e:91 ===
+Peer: 0c:bf:74:40:8e:91
+Cycle: 1118
+--------------Rate------------- ---Probability-- ---------Last--------   ------Total------ ----MPDU-----
+SS MCS BW Guard Selection Index Evidence Average Retry Success Attempt   Success   Attempt Success  Fail 
+ 1   7  4   SGI      A       47        0     100     0       0       0        49        49       0     0
+ 1   6  4   SGI       B      41        0       0     0       0       0         0         0       0     0
+ 1   5  4   SGI        C     35        0       0     0       0       0         0         0       0     0
+ 1   0  4   SGI         D     5        0       0     0       0       0         0         0       0     0
+
+Number of packets sent: 49 including 0 look-around packets
+
+=== AP radio ===
+Full Channel Information
+	Operating Frequency: 922000 kHz
+	Operating BW: 4 MHz
+	Primary BW: 2 MHz
+	Primary Channel Index: 1

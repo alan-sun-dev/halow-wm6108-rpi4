@@ -1,0 +1,68 @@
+### HT-HC01P on Raspberry Pi OS - stage 3a: does defect B bite on this HAT?
+### captured 2026-08-24T18:02:19+01:00
+### PREDICTION, written before the run: probe fails at CMD63, no "Morse Micro SPI device found"
+
+=== host ===
+hc01p
+Raspberry Pi 4 Model B Rev 1.4
+Serial		: 100000004dd92ccc
+Linux hc01p 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
+
+=== source state ===
+tag:        mm6108-2.0.1
+commit:     98e1936c04ef9a62212c1c64b970218ecf08d15d
+submodule:   da1425580bd5caa1a8fc926596f366bdd8d841d2 mmrc-submodule (da14255)
+patches applied:
+ spi.c | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+patch 2 present (SPI_NO_CS):        0   <- 0 = not applied
+patch 3 present (SPI_MIN_DELAY_BYTES): 0   <- 0 = not applied
+
+=== B1: pristine 2.0.1 does not build on this kernel ===
+/home/alan/halow-test/morse_driver/spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werror=cpp]
+make[2]: *** [/usr/src/linux-headers-6.6.51+rpt-common-rpi/Makefile:1946: /home/alan/halow-test/morse_driver] Error 2
+make[1]: *** [/usr/src/linux-headers-6.6.51+rpt-common-rpi/Makefile:246: __sub-make] Error 2
+make: *** [Makefile:199: all] Error 2
+
+=== build with patch 1 only: clean ===
+error+warning lines: 0
+-rw-r--r-- 1 alan alan   142800 Aug 24 18:00 dot11ah/dot11ah.ko
+-rw-r--r-- 1 alan alan 22987584 Aug 24 18:00 morse.ko
+
+=== firmware in place ===
+db3a23cb9a756243e1081df32bc66195f0e46918140f644f356de8fc90675a75  /lib/firmware/morse/mm6108.bin
+5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f  /lib/firmware/morse/bcf_HC01_V2_H.bin
+
+=== module parameters ===
+country          SG
+bcf              bcf_HC01_V2_H.bin
+enable_ps        0
+spi_clock_speed  0
+
+=== device tree in effect (vendor reference values, unmodified) ===
+spi-max-frequency  02faf080
+reset-gpios        000000070000000500000000
+spi-irq-gpios      000000070000001900000000
+power-gpios        000000070000000300000000000000070000000700000000
+cs-gpios           000000070000000800000001
+
+=== RESULT: dmesg ===
+[  784.643447] Morse Micro Dot11ah driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[  784.682472] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[  784.682609] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[  784.682644] Resetting Morse Chip
+[  784.782730] morse_spi spi0.0: morse_spi_probe: failed to init SPI with CMD63 (ret:-71)
+[  784.782764] morse_spi_probe: probe failed (ret:-71)
+[  784.782768] morse_spi: probe of spi0.0 failed with error -71
+
+=== SPI bus counters: the bus itself is clean ===
+bytes      138
+messages   7
+transfers  7
+errors     0
+timedout   0
+
+=== no driver bound, no morse phy, no IRQ taken ===
+ls: cannot access '/sys/bus/spi/devices/spi0.0/driver': No such file or directory
+ieee80211 phys: phy0
+morse IRQ: none

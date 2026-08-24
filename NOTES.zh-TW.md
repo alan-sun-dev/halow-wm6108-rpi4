@@ -2,6 +2,207 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-25 —— HT-HC01P 移植到 Raspberry Pi OS，缺陷 B 在第二塊板子上重現
+
+Heltec HT-HC01P（Pi HAT 上的 MM6108**A2**，SPI）現在跑的是 **Raspberry Pi OS
+bookworm 6.6.51 + morse_driver 2.0.1 加本 repo 的三支 `patches/upstream/` 修正**，
+以 SAE + PMF 關聯上 OpenMANET AP，拿到 DHCP，AP 端把這條鏈路評為 MCS7。這是這套
+stack 的**第二塊獨立硬體** —— 不同模組、不同晶片版本、不同載板，同一個核心、同一組
+修正。
+
+移植是換 SD 卡完成的。Heltec 的 OpenWrt 安裝完整留在它自己那張卡上，沒有動過。
+
+```
+hc01p   Raspberry Pi 4B Rev 1.4，序號 100000004dd92ccc
+        Raspberry Pi OS bookworm，核心 6.6.51+rpt-rpi-v8
+        wlan0 192.168.108.13 (Sun)     wlan1 10.41.0.216/16 (HaLow)
+        MAC 0c:bf:74:40:8e:91          SPI errors 0, timedout 0
+```
+
+### 值得做的那個實驗：缺陷 B 在第二塊板子、而且是在原廠設定下重現
+
+在裝上能用的驅動之前，先用**只套 patch 1**的 2.0.1（不套 patch 2、不套 patch 3）
+probe 了一次。結果跟事前寫下的預測完全一致：
+
+```
+Resetting Morse Chip / Done
+morse_spi spi0.0: morse_spi_probe: failed to init SPI with CMD63 (ret:-71)
+```
+
+接著用同一份程式加四個 `dev_info`／`print_hex_dump`，確認這是**同一個機制**而不只是
+同一個錯誤碼：
+
+```
+init: entry mode=0x4 cs_high_default=1 train=18
+init: CS deasserted for training, mode=0x4      <-- 應該是 0x0
+init: CS polarity restored, mode=0x4
+cmd63 rx: ff ff ff ff ff ff ff ff c0 3f ff ff ff ff ff ff
+cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+```
+
+跟 `issue15-report.md` 裡 Wio-WM6108 那份 trace 逐欄相同。`cs_high_default=1` 是關鍵
+那一格：核心在函式執行**之前**就已經設好 `SPI_CS_HIGH`，所以那個翻轉在兩個方向上都
+是空操作，training burst 是帶著晶片被選中送出去的。
+
+**這次比第一次更有說服力的地方**：這裡的 device tree 是 Heltec 的，逐位元組相同 ——
+`spi-max-frequency` 50 MHz、`reset-gpios` flag 0、單一 `cs-gpios`。那正是缺陷 3 不會
+重現、舊的 `reset-gpios` 說法也不適用的那組參考設定，所以失敗只可能來自缺陷 B。在
+SenseCAP M1 上那支 overlay 是 10 MHz + flag 1，三個缺陷同時在場。現在變因隔離乾淨了。
+
+兩次重現之間換掉的軸：模組（Wio-WM6108／Heltec HT-HC01 V2）、晶片（MM6108**A1**／
+**A2**）、載板（SenseCAP M1 mPCIe／Heltec Pi HAT）、chip select 數（二／一）、device
+tree（本 repo 的／原廠的）。**沒有**換的是核心，兩次都是 6.6.51。所以這仍然是「一個
+核心、兩種硬體」，對上游就要這樣講。
+
+分析文件 §7 寫「若未修正的 2.0.1 在這片 HAT 的 6.6 上 probe 成功，L1 就被推翻」。它
+沒有成功。**L1 從推論升格為實測。**
+
+### 一個值得留著的解碼：晶片答對了，是主機把框抓錯
+
+三次 CMD63 嘗試回來一次 `c0 3f`、兩次 `c0 7f`。位元組邊界抓早兩個 bit 的話，
+`主機位元組 = 前一位元組的末 2 bit ++ 本位元組的前 6 bit`：
+
+```
+prev=ff cur=01  ->  11 000000 = c0 ,  01 111111 = 7f     「c0 7f」還原成 01
+prev=ff cur=00  ->  11 000000 = c0 ,  00 111111 = 3f     「c0 3f」還原成 00
+```
+
+兩個都是合法的 R1，而 `00` 正是 CMD63 的**成功**回應 —— 晶片第一次就答對了，主機看
+不見。再加上整個失敗的 probe 期間 SPI 控制器回報 `errors 0 timedout 0`，這正面回答了
+「該不會是你接線有問題」這種讀法：電氣上什麼問題都沒有，是位元組框差了兩個 bit。
+
+### B1 在第二台機器上確認，而且是編譯失敗
+
+在套 patch 1 之前，先用原始的 `mm6108-2.0.1` 在這塊板子的 6.6.51 上編一次：
+
+```
+spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werror=cpp]
+make: *** [Makefile:199: all] Error 2
+```
+
+沒有 `morse.ko`。套上 patch 1 之後同一道指令零 error 零 warning。B1 不是「只影響
+mainline」的註腳。
+
+### 三支 patch 全套之後：probe、firmware、BCF、關聯
+
+```
+Loaded firmware from morse/mm6108.bin,   size 468304, crc32 0xbe7b5c8f
+Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170,   crc32 0x389a48c4
+SW version: 2.0.1    HW version: 0x00000406      <- MM6108A2，跟 V2 完全相符
+```
+
+同一台機器、同一天、同一個 device tree、同一顆 firmware、同一個 BCF。失敗與成功之間
+唯一的變因是 `spi.c`。
+
+關聯第一次就成功，沒有 `CONN_FAILED`、沒有 backoff：
+
+```
+SME: Trying to authenticate with 3c:1a:cc:70:3f:ca
+PMKSA-CACHE-ADDED / Associated with 3c:1a:cc:70:3f:ca
+WPA: Key negotiation completed [PTK=CCMP GTK=CCMP]     pmf=2, BIP, sae_group=19, sae_h2e=1
+dhcp4: new lease, address=10.41.0.216
+```
+
+從 `nmcli connection up` 到 `activated` 約 2.4 秒。
+
+### U1 結案，而且是靠 RF 對稱性那一關結掉的
+
+`bcf_HC01_V2_H.bin`（為驅動 1.15.3 出的）**可以配 firmware 2.0 和驅動 2.0.1**。分析
+文件點名的那個風險 —— 它的 `.board_config` 固定在 `0x8011fa80`，而驅動是照 **firmware**
+TLV 決定的視窗放置各區段 —— 沒有發生。
+
+只有 AP 端的檢查能確立這件事，因為錯的 BCF 在接收側會通過前面每一關。AP 端：
+
+```
+Station 0c:bf:74:40:8e:91   signal -1 dBm   rx packets 73   tx retries 0   tx failed 0
+mmrc: MCS7 / 4 MHz / SGI，機率 100%，49/49，0 個 look-around 封包
+```
+
+作為對照，同一份 dump、同一時刻的 HT-H7608 是 `tx retries 438 / tx failed 32`，卡在
+MCS0 的 1–2 MHz，181 個封包裡 137 個花在 look-around。那才是勉強的鏈路長什麼樣；這條
+不是。
+
+`-1 dBm` 落在削頂區 —— 這一關要的是**合理**的 RSSI 而不是精確的，真正扛住論證的是封包
+計數。
+
+Ping 全部 0% 遺失：Mac→station 4.5 ms、AP→station 5.4 ms、station→AP 3.5 ms、
+station→station（到 `10.41.0.208`）9.3 ms。
+
+### 持久化，以及把省電機制搬離模組參數
+
+驅動安裝到 `/lib/modules/6.6.51+rpt-rpi-v8/updates/`，跑過 `depmod -a`，
+`/etc/modprobe.d/morse.conf`：
+
+```
+options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:91
+```
+
+**`enable_ps` 刻意不寫。** 驅動自己會印 *"enable_ps modparam must only be used for
+testing - use iw set power_save"*，所以省電改由 `halow` NetworkManager profile 的
+`wifi.powersave=2` 關掉 —— 就是另外三塊板子已經驗過會持久的那個機制。重開機之後：
+
+```
+enable_ps 模組參數 : 2        <- 驅動自己的預設值，我們的覆寫已經拿掉
+iw get power_save  : off      <- 所以這只可能來自 NetworkManager
+NM profile         : disable
+```
+
+而且是行為上的驗證，不只是讀回設定值：**20/20 ping，平均 4.487 ms，mdev 0.163 ms**。
+一個有一半時間在睡的接收器做不出 0.163 ms 的抖動。同一塊板子在 OpenWrt 下開著省電時
+是 105.4 ms／mdev 66.2。
+
+無人介入的開機序列：
+
+```
+t = 7.77 s  dot11ah 註冊
+t = 8.45 s  morse 註冊、讀 device tree、Resetting Morse Chip
+t = 8.60 s  firmware 載入
+t = 8.61 s  BCF 載入
+```
+
+之後 NetworkManager 自行關聯並取得租約。（Heltec 的 OpenWrt 是 6.65 s 載入 BCF；差別
+在 systemd，不在驅動。）
+
+### 三個比原計畫更好的做法
+
+- **NetworkManager profile 綁在 MAC 上，不綁 `interface-name`。** HaLow 介面名稱在這
+  塊板子上不穩定 —— `brcmfmac` 會跟它搶 `wlan0` —— 所以站台那塊板子
+  `interface-name=wlan1` 的寫法在這裡是脆弱的。綁 `0C:BF:74:40:8E:91` 就完全不依賴名
+  稱，而這只有在下一項成立時才可行。
+- **`macaddr_suffix=40:8e:91` 是必要的，缺了它是個陷阱。** 沒有它驅動每次載入都會自己
+  生一個**隨機** MAC —— 第一次 probe 出來是 `c2:d2:3d:87:dd:cd`。那會讓 AP 的 station
+  表和 DHCP 租約每次開機都翻新。加上它模組就拿回自己的 `0c:bf:74:40:8e:91`，這也是為
+  什麼 DHCP 給回了 OpenWrt 安裝時的同一個 `10.41.0.216`，以及為什麼 2026-08-24 那批
+  AP 端數據仍然可以直接對照。
+- **`ipv4.never-default yes` 一開始就設**，而不是等 HaLow profile 偷走預設路由之後才
+  補 —— 站台那塊板子就是踩過才知道的。
+
+### 過程中的坑，沒有一個跟 SPI 有關
+
+- **`morse_driver` 有 git submodule。** `mmrc-submodule`
+  （`MorseMicro/mm_rate_control`，commit `da14255`）。沒有跑
+  `git submodule update --init --recursive` 的話編譯會死在
+  `mmrc-submodule/src/core/mmrc.h: No such file or directory`，看起來很嚇人但跟任何事
+  都無關。第一次 clone 是暫時性失敗，那個 repo 是公開的。
+- **`insmod` 不解相依。** 手動載入 `morse.ko` 而沒有先 `modprobe mac80211 crc7`，會噴
+  五十行 `Unknown symbol ieee80211_*`。同樣很像缺陷，同樣不是。
+- **每次開機出現的 `Country TW ... is not supported / staying in SG` 是正確行為。**
+  核心命令列上的 `cfg80211.ieee80211_regdom=TW` 是為了**brcmfmac** 那張網卡設的，而
+  cfg80211 會把它送給每一個 phy。Morse 的法規資料庫沒有 `TW`，所以驅動拒絕並留在
+  `SG` —— 那正是我們要的設定，因為 SG 的 920–925 MHz 區塊才對得上台灣 NCC 的配置。
+  吵，但沒有錯。
+- **這塊板子是從一張 128 GB SDXC 卡開機的。** NOTES 從早期就記著「128 GB SDXC 從來沒
+  能讓 Pi 開機」。那次是在 *SenseCAP M1* 上，而且不確定是不是同一張卡，所以這不構成反
+  證 —— 但那條敘述已經不是通則，不該再當通則引用。
+- **拿板子的 log 跟別台對時間之前，先確認它的時區。** 這台開起來是 `BST`，而 AP 和筆電
+  都在台北時間，7 小時的偏差一度讓一次重開機看起來像兩次。現已設為 `Asia/Taipei`。
+
+### 證據
+
+`logs/2026-08-25-hc01p-rpios-stage{2-devicetree,3a-defectB-reproduced,3a-defectB-mechanism,3b-driver-up,4a-station-associated,4b-persistent}.txt`。
+Overlay：`overlays/mm610x-spi-hc01p.dts`。首次開機的佈署檔與儀器 diff：`port/hc01p/`。
+
 ## 2026-08-24 深夜 —— HT-H7608 的 HaLow 介面不屬於任何防火牆區域
 
 自從設定以來第一次真正進到這台，做法是把 `en5` 移過去並加上 `10.42.0.100/24`。我的

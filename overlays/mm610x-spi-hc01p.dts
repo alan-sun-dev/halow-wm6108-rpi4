@@ -1,0 +1,120 @@
+/*
+ * Heltec HT-HC01P Pi HAT (Morse Micro MM6108A2, SPI) on Raspberry Pi OS.
+ *
+ * This is Heltec's own mm610x-spi.dtbo plus their morse-ps.dtbo, merged into
+ * one file and re-expressed for a stock Raspberry Pi OS kernel.  Every value in
+ * the mm6108@0 node is carried over unchanged from the working OpenWrt board --
+ * see heltec-hc01p-hardware-inventory.md section 3, which records the live
+ * property bytes this overlay has to reproduce.
+ *
+ * Pin map (all of it measured on the working board, not from a datasheet):
+ *   MISO GPIO9  MOSI GPIO10  CLK GPIO11  CS GPIO8   (spi0.0)
+ *   RESET_N GPIO5   SPI_INT GPIO25   WAKE GPIO3   BUSY GPIO7
+ *   JTAG reset GPIO4
+ *
+ * Three things here are load-bearing:
+ *
+ * 1. spi0_cs_pins is narrowed to <8>.  The stock Raspberry Pi group is <8 7>,
+ *    and GPIO 7 is MM_BUSY on this HAT -- muxing it as a second chip select
+ *    loses the power-save handshake line.  cs-gpios is narrowed to match:
+ *    the base DTB declares <&gpio 8 1>, <&gpio 7 1>.
+ *
+ * 2. spi-max-frequency stays at 50 MHz.  That is not a performance choice and
+ *    it is not "aggressive": the driver computes its inter-transaction delay as
+ *    40000ns / (clk_period * 8), which lands on the correct 250 bytes only at
+ *    50 MHz.  Lowering the clock is what breaks this driver, not what makes it
+ *    safe -- see patches/upstream/0003 and NOTES.md.  Do not "start
+ *    conservative at 10 MHz".
+ *
+ * 3. RESET_N is parked as a floating input, no bias.  morse_hw_reset() drives
+ *    GPIO 5 low for 20 ms and then makes it an input again rather than driving
+ *    it high ("setting gpio as float to avoid forcing 3.3V High"), so the
+ *    release level comes from the HAT's own pull-up.  The working board boots
+ *    with bias-disable here and the pin reads high, so that is what is
+ *    reproduced.  Note this differs from the SenseCAP overlay in this repo,
+ *    which has to force a pull-up because its reset line is GPIO 17, and
+ *    BCM2711 defaults GPIO 9-27 to pull-down.
+ *
+ * The DT reset-gpios flag is 0, as on every implementation.  It is parsed and
+ * discarded -- morse_driver 2.0.1 contains no gpiod_ call anywhere, so the flag
+ * never reaches a descriptor and setting it to 1 would change nothing.  It is
+ * kept at 0 purely to match the working board byte for byte.
+ *
+ * Heltec attach their pin parking to &leds, which is why the pinmux owner of
+ * pins 5 and 7 reads as "leds" on that board.  Here it hangs off spi0's own
+ * pinctrl-0 instead, so the whole HAT is described by one overlay and nothing
+ * depends on an unrelated node being probed.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	fragment@0 {
+		target = <&spi0>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi0_pins &spi0_cs_pins &halow_ctrl_pins>;
+			cs-gpios = <&gpio 8 1>;		/* was <8 1>, <7 1>: GPIO 7 is MM_BUSY */
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			mm6108@0 {
+				compatible = "morse,mm610x-spi";
+				reg = <0>;
+				spi-max-frequency = <50000000>;
+				reset-gpios = <&gpio 5 0>;			/* MM_RESET, active low in hardware */
+				spi-irq-gpios = <&gpio 25 0>;			/* level-low */
+				power-gpios = <&gpio 3 0>, <&gpio 7 0>;		/* WAKE, BUSY -- not a power rail */
+				status = "okay";
+			};
+		};
+	};
+
+	/* spidev on either chip select would fight the driver for the bus. */
+	fragment@1 {
+		target = <&spidev0>;
+		__overlay__ { status = "disabled"; };
+	};
+
+	fragment@2 {
+		target = <&spidev1>;
+		__overlay__ { status = "disabled"; };
+	};
+
+	fragment@3 {
+		target = <&gpio>;
+		__overlay__ {
+			/* Pull-ups on the SPI lines, as Heltec's overlay sets. The
+			 * stock groups carry no brcm,pull at all. */
+			spi0_pins {
+				brcm,pull = <2 2 2>;
+			};
+
+			spi0_cs_pins {
+				brcm,pins = <8>;
+				brcm,function = <1>;	/* gpio_out */
+				brcm,pull = <2>;	/* up */
+			};
+
+			halow_ctrl_pins: halow_ctrl_pins {
+				brcm,pins = <5 7>;
+				brcm,function = <0 0>;	/* both inputs */
+				brcm,pull = <0 1>;	/* 5: none (float), 7: down */
+			};
+
+			/* morse-ps.dtbo holds the HAT's JTAG reset asserted. Done
+			 * here as a hog rather than a pinconf output-low, which is
+			 * the same driven level without the redundant pull. */
+			halow_jtag_hog {
+				gpio-hog;
+				gpios = <4 0>;
+				output-low;
+				line-name = "halow-jtag-reset";
+			};
+		};
+	};
+};

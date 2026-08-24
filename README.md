@@ -108,6 +108,47 @@ SPI from a Raspberry Pi 4.
 >
 > Four follow-up comments on issue #9 carry the measurements; per-test dmesg + environment snapshots are in [`logs/`](logs/). The narrative below is the earlier writeup that led here.
 
+> ## Update 2026-08-25 — a second board, and defect 2 reproduced on the vendor's own configuration
+>
+> The same three patches now run a **Heltec HT-HC01P** — MM6108**A2** on a Pi HAT,
+> a different module on a different carrier — under the same Raspberry Pi OS
+> 6.6.51. SAE + PMF, DHCP, MCS7 / 4 MHz at the AP, `errors 0`, and it comes up
+> unattended from a cold start.
+>
+> Before installing the fixed driver, 2.0.1 was built with **patch 1 only** and
+> probed once, deliberately, to see whether defect 2 is really the load-bearing
+> one. It is:
+>
+> ```
+> init: entry mode=0x4 cs_high_default=1 train=18
+> init: CS deasserted for training, mode=0x4      <-- expected 0x0
+> init: CS polarity restored, mode=0x4
+> cmd63 rx: ff ff ff ff ff ff ff ff c0 7f ff ff ff ff ff ff
+> morse_spi spi0.0: failed to init SPI with CMD63 (ret:-71)
+> ```
+>
+> Field for field the trace already recorded on the Wio-WM6108 — but this time on
+> **Heltec's own device tree, byte for byte**: `spi-max-frequency` 50 MHz,
+> `reset-gpios` flag 0, a single `cs-gpios`. That is the reference configuration
+> in which defect 3 cannot reproduce, so the failure can only be defect 2. The
+> first reproduction ran at 10 MHz with flag 1, where all three defects were in
+> play at once.
+>
+> Changed between the two: module, silicon revision (A1 → A2), carrier,
+> chip-select count, device tree. **Not** changed: the kernel. This is one kernel
+> on two hardwares, not two kernels.
+>
+> Also confirmed there as a plain build failure: pristine 2.0.1 on 6.6.51 gives
+> `spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not
+> defined" [-Werror=cpp]` and no `morse.ko`. Defect 1 is not a mainline-only
+> footnote.
+>
+> Port documents: [`heltec-hc01p-linux-port-analysis.md`](heltec-hc01p-linux-port-analysis.md),
+> [`heltec-hc01p-hardware-inventory.md`](heltec-hc01p-hardware-inventory.md),
+> the overlay at [`overlays/mm610x-spi-hc01p.dts`](overlays/mm610x-spi-hc01p.dts),
+> and NOTES.md for 2026-08-25.
+
+
 **Status: working.** `wlan1` comes up on stock Raspberry Pi OS, bound to `spi0.0`, with zero
 SPI read or write failures. Three driver defects had to be fixed; the clean series is in
 [`patches/upstream/`](patches/upstream/) and all three are described above and in
@@ -286,7 +327,10 @@ NOTES.md                          full bring-up log, every hypothesis and result
 issue9-reply.md                   the write-up posted to morse_driver issue #9
 patches/                          spi.c patches against morse_driver mm6108-2.0.1
 overlays/mm610x-spi-sensecap.dts  device tree overlay for Raspberry Pi OS
+overlays/mm610x-spi-hc01p.dts     ditto for the Heltec HT-HC01P Pi HAT
 overlays/openwrt/                 corrected overlay + boot-partition patch script
+firmware/heltec-hc01p/            the HT-HC01P's BCF, which exists nowhere else
+port/hc01p/                       first-boot payload for the HT-HC01P port
 tools/                            userspace SPI probes used for the measurements
 ```
 

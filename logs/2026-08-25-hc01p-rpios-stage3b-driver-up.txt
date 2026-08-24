@@ -1,0 +1,61 @@
+### HT-HC01P on Raspberry Pi OS - stage 3b: driver + firmware, all three patches
+### captured 2026-08-24T18:13:57+01:00
+
+=== host ===
+hc01p
+Raspberry Pi 4 Model B Rev 1.4
+Serial		: 100000004dd92ccc
+6.6.51+rpt-rpi-v8
+
+=== source state ===
+tag mm6108-2.0.1  commit 98e1936c04ef9a62212c1c64b970218ecf08d15d
+submodule  da1425580bd5caa1a8fc926596f366bdd8d841d2 mmrc-submodule (da14255)
+patch 1 (#warning gone):       0
+patch 2 (SPI_NO_CS):           4
+patch 3 (SPI_MIN_DELAY_BYTES): 6
+ spi.c | 70 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 62 insertions(+), 8 deletions(-)
+build: exit 0, 0 error/warning lines
+
+=== GATE: probe ===
+[ 1468.740122] Morse Micro Dot11ah driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 1468.779788] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[ 1468.779935] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[ 1468.779968] Resetting Morse Chip
+[ 1468.881416] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[ 1468.881491] morse_spi spi0.0: Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170, crc32 0x389a48c4
+[ 1469.558508] morse_spi spi0.0: Driver loaded with kernel module parameters
+[ 1469.558535] morse_spi spi0.0:     enable_1mhz_probes                      : Y
+[ 1469.558571] morse_spi spi0.0:     duty_cycle_probe_retry_threshold        : 2500
+[ 1469.558585] morse_spi spi0.0:     enable_ibss_probe_filtering             : Y
+
+=== chip identification ===
+MM vendor-specific information
+    SW version: 2.0.1
+    HW version: 0x00000406
+    Rate control: MMRC
+wlan1: VIF [0]:
+  0x406 = MM6108A2 (hw.h: MM6108XX_ID 0x6 | rev 4 << 8 | CHIP_TYPE_SILICON 0x0)
+
+=== binding, phy, netdev (found by driver, not by name) ===
+../../../../../../../bus/spi/drivers/morse_spi
+phys: phy0
+phy3
+morse_spi netdev: wlan1
+ 55:        130          0          0          0  pinctrl-bcm2835  25 Level     Morse SPI IRQ
+
+=== SPI counters after firmware + BCF transfer ===
+bytes      799414
+messages   958
+transfers  958
+errors     0
+timedout   0
+
+=== 3a vs 3b, one variable (the patch set) ===
+                     3a: patch 1 only          3b: patches 1+2+3
+init mode            0x4 throughout            (SPI_NO_CS path taken)
+CMD63 response       c0 7f / c0 3f (2 bits off) parsed, probe continues
+probe                -71 EPROTO                success
+firmware             not reached               468304 B crc32 0xbe7b5c8f
+BCF                  not reached               1170 B crc32 0x389a48c4
+SPI errors           0                         0

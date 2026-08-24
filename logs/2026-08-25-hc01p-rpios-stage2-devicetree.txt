@@ -1,0 +1,84 @@
+### HT-HC01P on Raspberry Pi OS - stage 2 (device tree) evidence
+### captured 2026-08-24T17:50:53+01:00 from the Mac over Sun
+
+=== identity ===
+hc01p
+Raspberry Pi 4 Model B Rev 1.4
+Serial		: 100000004dd92ccc
+Linux hc01p 6.6.51+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.6.51-1+rpt3 (2024-10-08) aarch64 GNU/Linux
+154.11 575.69
+
+=== config.txt overlay lines ===
+11:dtparam=audio=on
+26:dtoverlay=vc4-kms-v3d
+49:dtoverlay=dwc2,dr_mode=host
+54:dtoverlay=mm610x-spi-hc01p
+
+=== cmdline.txt ===
+console=serial0,115200 console=tty1 root=PARTUUID=10aaf1b5-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=TW
+
+=== overlay blob ===
+6bd89c6cf2dbaf1dde7bfa755335c977593f6b114f979ead902d83e86619a9e1  /boot/firmware/overlays/mm610x-spi-hc01p.dtbo
+
+=== mm6108@0 property bytes (compare: hardware-inventory 3.2) ===
+compatible         6d6f7273652c6d6d363130782d73706900
+reg                00000000
+spi-max-frequency  02faf080
+reset-gpios        000000070000000500000000
+spi-irq-gpios      000000070000001900000000
+power-gpios        000000070000000300000000000000070000000700000000
+status             6f6b617900
+
+=== spi controller node (compare: inventory 3.3) ===
+compatible         6272636d2c62636d323833352d73706900
+cs-gpios           000000070000000800000001
+status             6f6b617900
+spidev@0 status    disabled
+spidev@1 status    disabled
+/dev/spidev*:      
+ls: cannot access '/dev/spidev*': No such file or directory
+
+=== spi device ===
+spi0.0
+spi:mm610x-spi
+ls: cannot access '/sys/bus/spi/devices/spi0.0/driver': No such file or directory
+
+=== spi statistics ===
+bytes        0
+messages     0
+transfers    0
+errors       0
+timedout     0
+
+=== pin functions ===
+pin 4 (gpio4) 0:? function gpio_out in lo; irq 0 (none)
+pin 5 (gpio5) 0:? function gpio_in in hi; irq 0 (none)
+pin 7 (gpio7) 0:? function gpio_in in lo; irq 0 (none)
+pin 8 (gpio8) 0:? function gpio_out in hi; irq 0 (none)
+pin 9 (gpio9) 0:? function alt0 in hi; irq 0 (none)
+pin 10 (gpio10) 0:? function alt0 in hi; irq 0 (none)
+pin 11 (gpio11) 0:? function alt0 in lo; irq 0 (none)
+pin 25 (gpio25) 0:? function gpio_in in lo; irq 0 (none)
+
+=== pinmux ownership ===
+pin 4 (gpio4): (MUX UNCLAIMED) pinctrl-bcm2711:516
+pin 5 (gpio5): fe204000.spi (GPIO UNCLAIMED) function gpio_in group gpio5
+pin 7 (gpio7): fe204000.spi (GPIO UNCLAIMED) function gpio_in group gpio7
+pin 8 (gpio8): fe204000.spi pinctrl-bcm2711:520 function gpio_out group gpio8
+pin 9 (gpio9): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio9
+pin 10 (gpio10): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio10
+pin 11 (gpio11): fe204000.spi (GPIO UNCLAIMED) function alt0 group gpio11
+pin 25 (gpio25): (MUX UNCLAIMED) (GPIO UNCLAIMED)
+
+=== gpio claims ===
+ gpio-516 (GPIO4               |halow-jtag-reset    ) out lo 
+ gpio-517 (GPIO5               )
+ gpio-519 (GPIO7               )
+ gpio-520 (GPIO8               |spi0 CS0            ) out hi ACTIVE LOW
+ gpio-537 (GPIO25              )
+
+=== modules (expect no morse/dot11ah) ===
+(none)
+
+=== phys ===
+phy0
