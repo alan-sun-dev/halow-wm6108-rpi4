@@ -2,6 +2,152 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-24 稍晚 —— HT-HC01P 關聯上了，而它的 BCF 是 Morse 的評估板
+
+**已解決。** 這塊板子一直載入 `bcf_mf08551.bin`，而 `/lib/wifi/morse.sh:135` 把這個
+檔案對應到 `morse,ekh01-03` / `morse,ekh03v3` —— **Morse 的 EKH01-03 評估板**。這塊板
+的 `board_name` 是 `Heltec,Pi4-HT-HC01P-64bit`，而那段 case 敘述裡**沒有任何 Heltec
+條目**；它的 `*)` 預設分支只在裝置路徑含 `usb` 時才設值，所以 SPI 板直接落空，沒有任何
+東西會修正這個值。它被硬寫在出廠映像裡，`/etc/config/wireless` 和 `/etc/modules.d/morse`
+兩處都是。Heltec 自己的 `bcf_HC01_V2_H.bin` 就放在 `/lib/firmware/morse/`，從來沒被用過。
+
+```sh
+uci set wireless.radio0.bcf='bcf_HC01_V2_H.bin'
+uci commit wireless && wifi
+```
+
+**五秒內關聯**，第一次認證嘗試就成功，SAE、PMF、四向交握、DHCP 一次到位：
+
+```
+send auth to 3c:1a:cc:70:3f:ca (try 1/3)
+wlan0: authenticated
+RX AssocResp from 3c:1a:cc:70:3f:ca (capab=0x11 status=0 aid=3)
+WPA: Key negotiation completed with 3c:1a:cc:70:3f:ca [PTK=CCMP GTK=CCMP]
+CTRL-EVENT-CONNECTED
+DHCPACK(br-lan) 10.41.0.216 0c:bf:74:40:8e:91 HT-HC01P-8E91
+```
+
+AP 現在讀它是 **−5 dBm**，而在此之前它什麼都收不到。IP 層雙向都通，包括跨到站台
+`10.41.0.208`。跟 HT-H7608 不同，這塊板子不是只能當無線層的對照組。原設定備份在
+`/etc/config/wireless.pre-bcf-20260824`；新 BCF 是 1170 B / crc32 `0x389a48c4`，舊的是
+1150 B / `0xf1cf6f9f`。
+
+**這是第六個出貨時帶著 Morse 參考板設定的實作**，跟下面 50 MHz 時脈和 flag 0 的 reset
+腳位是同一個故事 —— 差別在於這次繼承來的檔案直接讓模組失去發射能力。繼承參考設定的代價
+並不總是看不見的。
+
+### 症狀是單向鏈路，而要看出來得靠成對窗口
+
+載錯 BCF 時，這個 station 收得完美，發射則像打進真空。三組成對的 40 秒控制／測試窗口，
+控制組用 `disable_network 0` 讓 supplicant 真正靜音：
+
+| 窗口 | HC01P `TX Total` | HC01P `TX ACK valid` | AP `RX total` | AP `RX pass FCS` | AP `RX sig field err` |
+|---|---|---|---|---|---|
+| control 1 | +0 | 0 | +53 | +52 | +12 |
+| test 1 | +114 | **0** | +26 | +26 | +9 |
+| control 2 | +0 | 0 | +24 | +24 | +3 |
+| test 2 | +114 | **0** | +43 | +42 | +24 |
+| control 3 | +0 | 0 | +25 | +25 | +9 |
+| test 3 | +113 | **0** | +32 | +32 | +6 |
+
+`DCF granted` 跟著 `TX Total` 走，每個窗口只有 2 個 `TX Revoked`，所以那些 frame 確實
+發射出去了，MAC 並沒有被擋。但一個 ACK 都沒回來，而 AP 的接收計數器完全分不出測試組和
+控制組。
+
+**只做一個窗口會得到錯誤答案。** 第一次的單一量測看起來像是 AP 收得到但解不開 —— signal
+field error 控制組 +4 對測試組 +12。三組成對窗口把它推翻了：12 / 3 / 9 對 9 / 24 / 6，
+完全重疊。這是本檔案裡同一個陷阱的第十次。
+
+### 過程中四個錯誤的判斷
+
+- **「它從來不嘗試認證」。** 它一直都在試，每 10–60 秒一輪：
+  `SME: Trying to authenticate … send auth (try 1/3, 2/3, 3/3) … authentication
+  timed out`，然後 `CONN_FAILED`、`CTRL-EVENT-SSID-TEMP-DISABLED`，退避
+  10 → 20 → 30 秒。hostapd 沒有它 MAC 的紀錄是因為 frame 沒到，不是因為沒發。先前未解
+  清單裡的說法，來自只看了 AP 那一側。
+- **「1.15.3 解不開 RSN 元素」。** 見下面 `rsn_beacon_mode` 段落的更正。HT-H7608 跑同一版
+  1.15.3，整場都以 `auth_alg=sae` 掛在這台 AP 上。
+- **「頻道錯了」。** 沒有錯。`morse_cli` 的 `Primary Channel Index` 數的是
+  **operating channel 內部的 1 MHz 槽** —— 922.0 為中心的 4 MHz 裡是 920.5 / 921.5 /
+  922.5 / 923.5 —— 所以 index 1 是 921.5，即 s1g channel 39。beacon 的 HT Operation 元素
+  宣告映射後的 5 GHz channel 153，在 SG 表裡就是同一個 921.5，station 用 `chan=39` 認證
+  是對的。
+- **「uci 的 `channel` 和 `s1g_chanbw` 會限制 station 的掃描」。** 不會。
+  `morse_setup_sta()` 從來不呼叫 `morse_cli channel`，只有 AP、mesh、adhoc 和 monitor
+  路徑會。HT-H7608 的 `channel=42` 同樣從來沒被套用。
+
+### 另一個真實的缺陷：radio 閒置在 1 MHz，而 primary 是 2 MHz
+
+在沒有認證的期間，驅動把 radio 停在 **921.5 的 1 MHz**，儘管 AP 的 primary 頻寬是
+2 MHz。在那個狀態下它偵測得到 AP 卻解不開：
+
+| 30 秒窗口 | `RX total` | `RX pass FCS` | `RX signal field error` |
+|---|---|---|---|
+| 停在 1 MHz / 921.5 | **+0** | +0 | **+199** |
+| 鏡射 AP 之後 | **+289** | +289 | **+3** |
+
+30 秒 199 次無法解碼的偵測是 6.6/s，對上 AP 的 9.8 beacons/s；30 秒解出 289 個是 9.6/s，
+正是 beacon 速率。鏡射用的是
+
+```sh
+morse_cli -i wlan0 channel -c 922000 -o 4 -p 2 -n 1
+```
+
+supplicant 一開始認證就會把它蓋掉 —— 而且蓋成正確的 922.0 / 4 MHz —— 所以這件事從來沒有
+擋住關聯。它是 `scan_results` 時不時回傳空白的原因，也是為什麼從外部觸發
+`iw dev wlan0 scan` 就能把 cache 填滿，而 supplicant 自己的掃描看起來什麼都沒找到。
+
+### HaLow 介面名稱在開機之間不穩定
+
+為了確認 BCF 能不能撐過重開機而做的那次重開，產生了這個看起來完全像電台掛掉的畫面：
+
+```
+$ iw dev wlan0 link
+Device "wlan0" does not exist.
+```
+
+而 AP 在同一時刻回報同一個 MAC 已關聯、連線時間 194 秒。那次開機 HaLow 的 netdev 起來
+時叫 **`wlan1`** —— log 裡是 `brcmfmac … phy1-ap0: renamed from wlan0` —— 因為 Broadcom
+的 5 GHz 介面搶到了 `wlan0`。supplicant 的控制 socket 也跟著搬家。要讀出來，不要假設：
+
+```sh
+ls /var/run/wpa_supplicant_s1g/
+```
+
+### BCF 撐得過重開機
+
+`uci commit` 連 `/etc/modules.d/morse` 一起改寫，所以 kmodloader 第一次嘗試就載入正確
+檔案：**t = 6.65 秒**出現 `Loaded BCF from morse/bcf_HC01_V2_H.bin`，**t = 11.9 秒**完成
+關聯，`10.41.0.216` 回來，−9 dBm，4 MHz，三個方向都 0% loss。修正前的那次開機是 6.64 秒
+先載 `bcf_default.bin`，十一分鐘後才變成 `bcf_mf08551.bin`，那條路徑也一併消失了。
+
+### 現在所有東西在哪
+
+`en5` 接在 HT-HC01P 上，Mac 側是 `10.42.0.100/24`。**一次只能接一台的限制結束了** ——
+HC01P 現在有 HaLow 位址，所以把 `en5` 接回 AP 之後，四個節點可以同時到達。換線前要先移除
+alias，macOS 給了它 `/8` 的網路遮罩，否則會把 `10.41.0.0/16` 整段吃掉：
+
+```sh
+sudo ifconfig en5 -alias 10.42.0.100
+```
+
+第四個節點目前的狀態：**HT-HC01P**，`br-lan` 上 `10.42.0.1`，HaLow `10.41.0.216`，
+驅動 1.15.3，`bcf_HC01_V2_H.bin`，**MM6108A2** 矽晶，以 SAE 加 PMF 關聯到
+`BCM2711-57e7`。它的 `boardtype` 和 `country_code` 兩個 OTP bank 都沒有燒寫，所以晶片
+無法自己挑 BCF。
+
+未解，依序：
+
+1. **HT-HC01P 的 `ttyd` 沒有認證**，而且和乙太網路埠與 5 GHz AP 橋接在一起，防火牆的 lan
+   zone 是 `input ACCEPT`。它現在還多了一條能用的 HaLow 鏈路，暴露面比當初把這條寫成第 2
+   項時更大。
+2. **`openmanetd` 拿掉之後 AP 還會不會停擺？** 不變 —— 值得單純觀察，救援是
+   `echo 1 > $P/reset`。
+3. **省電。** HC01P 的 ping 有一個數量級的不對稱 —— 往 AP 12–36 ms，回來 18–199 ms ——
+   看起來是它接收側的省電，而 station 與 AP 的 `enable_ps` 不一致也仍然沒測過。量任何東西
+   之前先強制關掉省電。
+4. **真實距離。** 不變：上一層樓仍然 −41 dBm，還有約 50 dB 餘裕。
+
 ## 2026-08-24 收尾 —— 現在所有東西在哪
 
 session 結束時實際連上去確認的，不是憑記憶寫的。
@@ -282,6 +428,12 @@ cs-gpios = <&gpio 8 1>;
 同一份文件的屬性表對 `reset-gpios` 只寫「GPIO descriptor connected to the MM6108
 RESET line」，**對極性隻字未提**。
 
+**2026-08-24 更新：還有第六個，而且不只是 device tree。** HT-HC01P 同樣出貨帶著 Morse
+的參考**板級設定檔** —— `bcf_mf08551.bin`，也就是 EKH01-03 EVK 的 BCF —— 而 Heltec 自己
+的 `bcf_HC01_V2_H.bin` 就擺在旁邊的 `/lib/firmware/morse/` 裡沒人用。這一個不是看不見的：
+模組收得到 −56 dBm，而它發出去的東西沒有一個到得了 AP。完整經過在本檔案最上面的
+2026-08-24 段落。
+
 ### 這份移植指南沒有寫的東西
 
 對全部 22 頁抽出的文字做關鍵字統計，同一次帶正對照（`Morse` 115 次、`SPI` 21 次，
@@ -422,14 +574,18 @@ uci commit wireless && wifi reload
 已套用並在 AP 開機參數傾印中確認（`rsn_beacon_mode : 2`），也在空中確認 —— 本 repo 的
 station 現在會在 beacon 裡看到 RSN 元素，而不是只在 probe response 裡。
 
-**仍未解決。** 改完之後三分鐘內 HT-HC01P 依然沒有關聯，hostapd 依然沒有它 MAC 的任何
-紀錄（正對照：log 裡有 46 行 hostapd 訊息）。是它的 supplicant 需要踢一下，還是 1.15.3
-即使 RSN IE **在** beacon 裡也用不了，目前不知道 —— 要查得碰得到那台，而當時碰不到。
+**2026-08-24 解決，而且上面那個標題講得比證據多。** 設 `rsn_beacon_mode=2` 是有效的。
+HT-HC01P 之後讀到的是 `[WPA2-SAE-CCMP][SAE-H2E][ESS]` 而不是 `[WEP]`，beacon 的 RSN 元素
+在那塊板子上也解得乾乾淨淨 —— group 與 pairwise 都是 CCMP、AKM `00-0f-ac-08`（SAE）、
+RSN capabilities `0x00cc`，MFPC 和 MFPR 都有設。它只是不是擋住那塊板子的原因。擋住它的是
+BCF，見本檔案最上面那一段。
 
-**還有一個矛盾，記下來而不是抹平：** 另一台 Heltec（HT-H7608，同樣 1.15.3）在同一天
-稍早**確實**關聯上了同一台 AP，用的是 `auth_alg=0` 加上 RSN 四向交握 —— 那是快取
-PMKSA 或 WPA2-PSK 的形狀。這跟「1.15.3 無法關聯這台 AP」對不起來。當時那台碰不到，
-無法查證。**不要**用 HC01P 這個結果去推論整個 1.15.3。
+**那個矛盾其實不是矛盾。** HT-H7608，同樣 1.15.3，在整個 2026-08-24 這一場裡都以
+`auth_alg=sae` 和完成的四向交握掛在這台 AP 上。所以 `[WEP]` 那個觀察是真的，
+`rsn_beacon_mode=2` 也確實解決它，但**1.15.3 是否非要它不可，仍然沒有被確立** —— H7608
+從來沒有被直接掃描過，而引發原本那條註記的 `auth_alg=0` 只是單獨一行 log，從未再現。能說
+的比標題窄：這台 AP 的 S1G beacon 預設省略 RSN IE，1.15.3 的 station 把它讀成 `[WEP]`，
+而 `rsn_beacon_mode=2` 把那個元素放到它看得到的地方。
 
 ## SPI 時脈才是吞吐量的天花板，而 4 MHz 要等它拉高之後才划算
 

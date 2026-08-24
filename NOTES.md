@@ -2,6 +2,175 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-24, later — the HT-HC01P associates, and its BCF was Morse's evaluation board
+
+**Solved.** The board had been running `bcf_mf08551.bin`, which
+`/lib/wifi/morse.sh:135` maps to `morse,ekh01-03` / `morse,ekh03v3` — **Morse's
+EKH01-03 evaluation board**. This board reports `board_name`
+`Heltec,Pi4-HT-HC01P-64bit`, and that case statement contains **no Heltec entry
+at all**; its `*)` default sets a BCF only when the device path contains `usb`,
+so an SPI board falls straight through and nothing ever corrects the value. It is
+hardcoded in the shipped image, in both `/etc/config/wireless` and
+`/etc/modules.d/morse`. Heltec's own `bcf_HC01_V2_H.bin` ships in
+`/lib/firmware/morse/` and was never used.
+
+```sh
+uci set wireless.radio0.bcf='bcf_HC01_V2_H.bin'
+uci commit wireless && wifi
+```
+
+Associated **within five seconds**, on the first authentication attempt, with
+SAE, PMF, a 4-way handshake and DHCP:
+
+```
+send auth to 3c:1a:cc:70:3f:ca (try 1/3)
+wlan0: authenticated
+RX AssocResp from 3c:1a:cc:70:3f:ca (capab=0x11 status=0 aid=3)
+WPA: Key negotiation completed with 3c:1a:cc:70:3f:ca [PTK=CCMP GTK=CCMP]
+CTRL-EVENT-CONNECTED
+DHCPACK(br-lan) 10.41.0.216 0c:bf:74:40:8e:91 HT-HC01P-8E91
+```
+
+The AP reads it at **−5 dBm** where it had been receiving nothing at all, and the
+IP layer works in both directions including station-to-station to `10.41.0.208`.
+Unlike the HT-H7608, this board is not a radio-layer-only control. Original
+configuration saved at `/etc/config/wireless.pre-bcf-20260824`; the new BCF is
+1170 B / crc32 `0x389a48c4` against the old 1150 B / `0xf1cf6f9f`.
+
+**This is a sixth implementation shipping Morse's reference-board
+configuration**, and the same story as the 50 MHz clock and the flag-0 reset line
+below — except that here the inherited file cost the module its transmitter
+outright. Inheriting the reference is not always invisible.
+
+### The symptom was a one-way link, and paired windows were needed to see it
+
+With the wrong BCF the station received perfectly and transmitted into a void.
+Three paired 40 s control/test windows, the supplicant gated with
+`disable_network 0` so the control was genuinely silent:
+
+| window | HC01P `TX Total` | HC01P `TX ACK valid` | AP `RX total` | AP `RX pass FCS` | AP `RX sig field err` |
+|---|---|---|---|---|---|
+| control 1 | +0 | 0 | +53 | +52 | +12 |
+| test 1 | +114 | **0** | +26 | +26 | +9 |
+| control 2 | +0 | 0 | +24 | +24 | +3 |
+| test 2 | +114 | **0** | +43 | +42 | +24 |
+| control 3 | +0 | 0 | +25 | +25 | +9 |
+| test 3 | +113 | **0** | +32 | +32 | +6 |
+
+`DCF granted` tracked `TX Total` and `TX Revoked` was 2 per window, so the frames
+really were being transmitted and the MAC was not blocked. Not one ACK ever came
+back, and the AP's receive counters do not separate test from control at all.
+
+**One window would have given the wrong answer.** The first single measurement
+looked like the AP was seeing the frames and failing to decode them — signal
+field errors +4 in control against +12 in test. Three paired rounds destroyed
+that: 12 / 3 / 9 against 9 / 24 / 6, fully overlapping. Tenth instance of the
+same trap in this file.
+
+### Four things that were wrong on the way
+
+- **"It never attempts authentication."** It always did, every 10–60 s:
+  `SME: Trying to authenticate … send auth (try 1/3, 2/3, 3/3) … authentication
+  timed out`, then `CONN_FAILED` and `CTRL-EVENT-SSID-TEMP-DISABLED` backing off
+  10 → 20 → 30 s. hostapd logged nothing from its MAC because the frames never
+  arrived, not because none were sent. The claim in the previous open list came
+  from only ever looking at the AP side.
+- **"1.15.3 cannot parse the RSN element."** Corrected in the `rsn_beacon_mode`
+  section below. The HT-H7608 runs the same 1.15.3 and sat associated to this AP
+  with `auth_alg=sae` throughout this session.
+- **"The channel is wrong."** It was not. `morse_cli`'s `Primary Channel Index`
+  counts **1 MHz slots inside the operating channel** — 920.5 / 921.5 / 922.5 /
+  923.5 within the 4 MHz centred on 922.0 — so index 1 is 921.5, s1g channel 39.
+  The beacon's HT Operation element advertises mapped 5 GHz channel 153, the same
+  921.5 in the SG table, and the station authenticating on `chan=39` was right.
+- **"uci `channel` and `s1g_chanbw` constrain a station's scan."** They do not.
+  `morse_setup_sta()` never calls `morse_cli channel`; only the AP, mesh, adhoc
+  and monitor paths do. The HT-H7608's `channel=42` was never applied either.
+
+### A separate real defect: the radio idles at 1 MHz against a 2 MHz primary
+
+While not authenticating, the driver parks the radio at **1 MHz on 921.5** even
+though the AP's primary bandwidth is 2 MHz. In that state it detects the AP and
+cannot decode it:
+
+| 30 s window | `RX total` | `RX pass FCS` | `RX signal field error` |
+|---|---|---|---|
+| parked at 1 MHz / 921.5 | **+0** | +0 | **+199** |
+| after mirroring the AP | **+289** | +289 | **+3** |
+
+199 undecodable detections in 30 s is 6.6/s against the AP's 9.8 beacons/s; 289
+decoded is 9.6/s, the beacon rate. The mirror was
+
+```sh
+morse_cli -i wlan0 channel -c 922000 -o 4 -p 2 -n 1
+```
+
+The supplicant overwrites it the moment it authenticates — which it does
+correctly, at 922.0 and 4 MHz — so this never blocked association. It is why
+`scan_results` kept coming back empty at random, and why an externally triggered
+`iw dev wlan0 scan` would fill the cache when the supplicant's own scan appeared
+to have found nothing.
+
+### The HaLow interface name is not stable across boots
+
+A reboot to confirm the BCF persists produced this, which reads exactly like a
+dead radio:
+
+```
+$ iw dev wlan0 link
+Device "wlan0" does not exist.
+```
+
+while the AP simultaneously reported that same MAC associated with 194 seconds of
+connected time. The HaLow netdev had come up as **`wlan1`** that boot —
+`brcmfmac … phy1-ap0: renamed from wlan0` — because the Broadcom 5 GHz interface
+won the race for `wlan0`. The supplicant control socket moves with it. Read the
+name, never assume it:
+
+```sh
+ls /var/run/wpa_supplicant_s1g/
+```
+
+### The BCF survives a reboot
+
+`uci commit` rewrites `/etc/modules.d/morse` as well, so kmodloader loads the
+right file on its first attempt: `Loaded BCF from morse/bcf_HC01_V2_H.bin` at
+**t = 6.65 s**, associated at **t = 11.9 s**, `10.41.0.216` back, −9 dBm, 4 MHz,
+0% loss in all three directions. The boot before the fix had loaded
+`bcf_default.bin` at 6.64 s and only reached `bcf_mf08551.bin` eleven minutes
+later, so that path is gone too.
+
+### Where everything is now
+
+`en5` is cabled to the HT-HC01P with the Mac side at `10.42.0.100/24`. **The
+one-cable-at-a-time constraint is over** — the HC01P now has a HaLow address, so
+with `en5` back on the AP all four nodes are reachable at once. Remove the alias
+first; macOS gave it a `/8` netmask, which would otherwise swallow
+`10.41.0.0/16`:
+
+```sh
+sudo ifconfig en5 -alias 10.42.0.100
+```
+
+Fourth node as it now stands: **HT-HC01P**, `10.42.0.1` on `br-lan`, HaLow
+`10.41.0.216`, driver 1.15.3, `bcf_HC01_V2_H.bin`, **MM6108A2** silicon,
+associated to `BCM2711-57e7` with SAE and PMF. Its `boardtype` and
+`country_code` OTP banks are both unset, so the chip cannot select its own BCF.
+
+Still open, in order:
+
+1. **`ttyd` on the HT-HC01P has no authentication**, and it is bridged with the
+   Ethernet port and the 5 GHz AP with the firewall's lan zone at `input ACCEPT`.
+   It now also carries a working HaLow link, so the exposure is larger than when
+   this was written as item 2.
+2. **Does the AP stall recur now that `openmanetd` is gone?** Unchanged — worth
+   simply watching; recovery is `echo 1 > $P/reset`.
+3. **Power save.** The HC01P's ping is asymmetric by an order of magnitude —
+   12–36 ms towards the AP against 18–199 ms back — which looks like power save
+   on its receive side, and the station/AP `enable_ps` mismatch is still
+   untested. Force power save off before measuring anything.
+4. **Real range.** Unchanged: −41 dBm one floor up with ~50 dB of headroom.
+
 ## 2026-08-24, session close — where everything is now
 
 Verified live at the end of the session, not recalled.
@@ -338,6 +507,13 @@ The property table in the same document describes `reset-gpios` only as "GPIO
 descriptor connected to the MM6108 RESET line" and **says nothing about
 polarity**.
 
+**Update 2026-08-24: there is a sixth, and it is not only the device tree.** The
+HT-HC01P also ships Morse's reference *board configuration file* —
+`bcf_mf08551.bin`, the EKH01-03 EVK's BCF — while Heltec's own
+`bcf_HC01_V2_H.bin` sits unused beside it in `/lib/firmware/morse/`. That one was
+not invisible: the module received at −56 dBm and nothing it transmitted ever
+reached the AP. Full account in the 2026-08-24 section at the top of this file.
+
 ### What the porting guide does not say
 
 Keyword counts over the extracted text of all 22 pages, taken with positive
@@ -496,18 +672,22 @@ Confirmed applied in the AP's boot-time parameter dump (`rsn_beacon_mode : 2`)
 and confirmed on air — this repo's station now sees the RSN element in the beacon
 rather than only in probe responses.
 
-**Still unresolved.** The HT-HC01P did not associate in the three minutes after
-the change and hostapd still logged nothing from its MAC (positive control: 46
-hostapd lines present). Whether its supplicant needed a kick, or 1.15.3 cannot
-use the RSN IE even when it *is* in the beacon, is unknown — diagnosing it needs
-access to that board, which was unavailable at the time.
+**Resolved 2026-08-24, and the heading above claims more than the evidence
+supports.** Setting `rsn_beacon_mode=2` did work. The HT-HC01P afterwards reads
+`[WPA2-SAE-CCMP][SAE-H2E][ESS]` rather than `[WEP]`, and the beacon's RSN element
+parses cleanly on that board — group and pairwise CCMP, AKM `00-0f-ac-08` (SAE),
+RSN capabilities `0x00cc` with MFPC and MFPR both set. It was simply not what was
+blocking the board. Its BCF was; see the section at the top of this file.
 
-**And an inconsistency, recorded rather than smoothed over:** the *other* Heltec
-(HT-H7608, same 1.15.3) associated to this same AP earlier the same day, with
-`auth_alg=0` followed by an RSN 4-way handshake — the shape of a cached PMKSA or
-of WPA2-PSK. That does not fit "1.15.3 cannot associate with this AP". It was not
-reachable for checking. Do not generalise the HC01P result to 1.15.3 on this
-evidence.
+**The inconsistency was not one.** The HT-H7608, same 1.15.3, sat associated to
+this AP with `auth_alg=sae` and a completed 4-way throughout the 2026-08-24
+session. So the `[WEP]` observation is real and `rsn_beacon_mode=2` fixes it, but
+**whether 1.15.3 strictly requires it is still not established** — the H7608 was
+never scanned directly, and the `auth_alg=0` line that prompted the original note
+was a single log entry that was never reproduced. What can be said is narrower
+than the heading: this AP's S1G beacons omit the RSN IE by default, a 1.15.3
+station reads that as `[WEP]`, and `rsn_beacon_mode=2` puts the element where it
+can see it.
 
 ## The SPI clock was the throughput ceiling, and 4 MHz only pays once it is raised
 
