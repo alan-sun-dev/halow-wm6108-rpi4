@@ -249,8 +249,23 @@ http://10.42.0.1:7681/token  ->  {"token": ""}   HTTP 200
 
 This was recorded as an HT-HC01P problem. It is not — the HT-H7608 ships the same
 unauthenticated web root shell, and additionally exposes 80, 443 and 53. On both
-boards it is bridged with the Ethernet port and the board's own AP. Still the
-oldest open item in this file.
+boards it is bridged with the Ethernet port and the board's own AP.
+
+**Decision, 2026-08-24: leave `ttyd` as shipped, and stop carrying this as an open
+item.** It is Heltec's factory default on both boards, not a misconfiguration
+anyone here introduced, and these boards sit on an isolated bench segment rather
+than a routed or shared network. Revisit only if one is ever put on a shared
+switch or given a route off the bench — the same condition that already applies to
+their DHCP servers.
+
+One thing that is *not* left open, because today's firewall work happens to cover
+it: **the HT-H7608's `ttyd` is not reachable from the HaLow segment.** The `halow`
+zone added above is `input REJECT` with only ICMP and TCP 22 allowed, so 7681, 80,
+443 and 53 remain confined to `br-lan` — its Ethernet port and its own 2.4 GHz AP,
+exactly as before the board was cabled. The HT-HC01P is different: its HaLow
+network sits in a zone that accepts input, which is why it can be reached over
+HaLow at all, so its `ttyd` is very likely exposed there. Not checked, because the
+decision above makes it moot.
 
 ## 2026-08-24, evening — station power save is an inbound black hole, not a 5% loss
 
@@ -488,10 +503,10 @@ associated to `BCM2711-57e7` with SAE and PMF. Its `boardtype` and
 
 Still open, in order:
 
-1. **`ttyd` on the HT-HC01P has no authentication**, and it is bridged with the
-   Ethernet port and the 5 GHz AP with the firewall's lan zone at `input ACCEPT`.
-   It now also carries a working HaLow link, so the exposure is larger than when
-   this was written as item 2.
+1. ~~**`ttyd` has no authentication**~~ — **closed as a decision, not a fix,
+   2026-08-24.** It is the vendor default on both Heltec boards and they are on an
+   isolated bench segment; see the section above. Reopen if either board is put on
+   a shared switch or routed network.
 2. **Does the AP stall recur now that `openmanetd` is gone?** Unchanged — worth
    simply watching; recovery is `echo 1 > $P/reset`.
 3. **Power save on the HT-HC01P.** Settled for the station (section above:
