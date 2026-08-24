@@ -2,6 +2,114 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-24 深夜 —— HT-H7608 的 HaLow 介面不屬於任何防火牆區域
+
+自從設定以來第一次真正進到這台，做法是把 `en5` 移過去並加上 `10.42.0.100/24`。我的
+SSH 金鑰不在這塊板子上，改用 `expect` 以 `root` 做密碼登入，密碼是 Heltec 的原廠預設值
+（不寫在本檔）。無線電的
+設定完全沒動；唯一的寫入是下面那個防火牆區域。
+
+### 記錄寫著「它的 IP 層從不回應，而且那是正常的」。那不正常
+
+那是一個設定缺漏，長這樣：
+
+```
+wlan0   UP   10.41.0.197/16        <- 位址在，介面也是 UP
+
+nft, chain input:
+        type filter hook input priority filter; policy drop;
+        iifname "br-lan" jump input_lan          <- 唯一的放行路徑
+
+firewall.@zone[0] name=lan  network=lan       input=ACCEPT
+firewall.@zone[1] name=wan  network=wan wan6  input=REJECT
+
+halow 出現在任何 zone 的次數 : 0
+input chain 裡提到 wlan0 的規則 : 0
+```
+
+`network.halow` 既不在 lan 也不在 wan，所以從 `wlan0` 進來的封包直接落到
+`policy drop`。這解釋了每一項觀察：ARP 通（第二層，根本不經過 input chain）、DHCP
+client 通（出站），而 ICMP **和每一個 TCP 埠**都被靜默丟棄。這次是用 TCP 驗證的，不只
+ping —— 22、23、80、443、7681、8080 從同一個 L2 上的 AP 測全部失敗。
+
+所以「用它的 RSSI 和關聯事件，絕不要用它的 ping」這個建議依然正確，但理由要換：不是這塊
+板子沒有可用的 IP 堆疊，是沒有人把它的 HaLow 網路放進任何區域。
+
+**已修，但還沒端到端證實。** 我建了一個專屬區域，而不是把 `halow` 丟進 `lan` —— 因為
+那裡的 `input=ACCEPT` 會把這塊板子**無認證的 ttyd**（見下）、LuCI 和 dnsmasq 一起開放
+到整個 HaLow 網段：
+
+```sh
+# zone: name=halow network=halow input=REJECT output=ACCEPT forward=REJECT
+# rule: Allow-Ping-halow  src=halow proto=icmp icmp_type=echo-request
+# rule: Allow-SSH-halow   src=halow proto=tcp  dest_port=22
+```
+
+產生的規則是
+
+```
+iifname "wlan0" jump input_halow
+chain input_halow {
+        icmp type echo-request counter accept   # Allow-Ping-halow
+        tcp dport 22           counter accept   # Allow-SSH-halow
+        jump reject_from_halow
+}
+```
+
+原設定備份在 `/etc/config/firewall.pre-halowzone-20260824`。日後要放寬成完全開放：
+`uci set firewall.@zone[2].input='ACCEPT'`。
+
+**規則是對的，而計數器仍然是零**，因為還來不及有任何封包穿過它，鏈路就斷了。所以這裡
+寫的是「正確但未證實」，不是「修好了」。
+
+### 鏈路嚴重劣化，而時間點指向那條網路線
+
+```
+TX Total 75880   TX ACK valid 26547 (35%)   TX ACK timeout 41237 (54%)
+RX total 501823  RX pass FCS 501224         RX signal field error 50642 (10%)
+signal −69 ~ −76 dBm
+```
+
+它發出去的東西超過一半拿不到 ACK。對照同一台 AP 同一時刻：station 讀 0 dBm、
+HT-HC01P −14 ~ −22 dBm。
+
+失敗特徵和今天早上的 HT-HC01P 一模一樣 —— `SME: Trying to authenticate … send auth
+(try 1/3, 2/3, 3/3) … timed out`、`CONN_FAILED`、`TEMP-DISABLED` 退避 10 → 20 → 30
+秒 —— **但這不是 BCF 問題**：這塊板子本來就在用 `bcf_HC01_V2_H.bin`。三分鐘內取樣
+十二次，`COMPLETED` 出現零次。
+
+讓那條線成為嫌疑犯的是順序：它先前撐了 **44522 秒**（十二小時以上不斷），然後變成
+2001 秒 → 189 秒 → 10 秒 → 完全連不上，而起點正是網路線被接上去的時候。在回頭查軟體
+之前，先檢查天線和板子的位置。
+
+### 硬體與作業系統，實機確認
+
+```
+OpenWrt 23.05.5, 2.8.5-20251023, kernel 5.15.167, mips
+radio0  mac80211  platform/10300000.wmac                    2.4 GHz AP HT-H7608-DD05, ch1 HT20, psk2
+radio1  morse     platform/10130000.mmc/mmc_host/mmc0/...   SDIO
+        bcf=bcf_HC01_V2_H.bin  country=SG  channel=42  mode=sta  encryption=sae  max_inactivity=30
+br-lan  10.42.0.1/24, ports eth0.1, switch0 vlan1 ports "0 2 6t"
+network.halow  proto=dhcp, device wlan0     network.wan proto=dhcp（未使用）
+開放埠  22 dropbear / 80 / 443 LuCI / 53 dnsmasq / 7681 ttyd
+```
+
+`radio1.channel='42'` 和 HT-HC01P 一樣是惰性的，因為 `morse_setup_sta()` 從不呼叫
+`morse_cli channel`。
+
+**它和 HT-HC01P 用同一個 BCF 檔案** `bcf_HC01_V2_H.bin`。兩者都搭 HT-HC01 V2 模組，
+一個走 SDIO、一個走 SPI。所以保全在 `firmware/heltec-hc01p/` 的那份涵蓋兩塊板子。
+
+### 無認證的 `ttyd` 是兩塊 Heltec 板子都有，不是只有一塊
+
+```
+http://10.42.0.1:7681/token  ->  {"token": ""}   HTTP 200
+```
+
+這件事先前被記成 HT-HC01P 的問題。不是 —— HT-H7608 出貨同樣帶著無認證的 web root
+shell，而且還多開了 80、443 和 53。兩塊板子上它都和乙太網路埠以及板子自己的 AP 橋接在
+一起。這仍然是本檔案裡最久的未解項目。
+
 ## 2026-08-24 傍晚 —— station 的省電是入站黑洞，不是 5% 遺失
 
 未解清單原本寫的是：*「station 與 AP 的省電不匹配（`enable_ps=2` 對上 AP 的 0）作為舊

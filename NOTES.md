@@ -2,6 +2,121 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-24, night — the HT-H7608's HaLow interface is in no firewall zone
+
+Reached over its Ethernet port for the first time since it was set up, by moving
+`en5` to it and adding `10.42.0.100/24`. My SSH key is not on this board; password
+auth via `expect` was used as `root` with the vendor default password (kept out of
+this file; it is Heltec's documented default). Nothing about the radio was
+changed; the one write is the firewall zone described below.
+
+### The record said its IP layer never answers, "and that is normal". It is not normal
+
+It is a configuration gap, and this is what it looks like:
+
+```
+wlan0   UP   10.41.0.197/16        <- the address is there, the interface is up
+
+nft, chain input:
+        type filter hook input priority filter; policy drop;
+        iifname "br-lan" jump input_lan          <- the only accept path
+
+firewall.@zone[0] name=lan  network=lan       input=ACCEPT
+firewall.@zone[1] name=wan  network=wan wan6  input=REJECT
+
+`halow` appearing in any zone: 0 matches
+rules mentioning wlan0 in the input chain: 0
+```
+
+`network.halow` is in neither zone, so inbound traffic on `wlan0` falls through to
+`policy drop`. That accounts for every observation: ARP works (layer 2, never
+reaches the input chain), the DHCP client works (outbound), and ICMP **and every
+TCP port** are dropped in silence. Verified with TCP, not only with ping — 22, 23,
+80, 443, 7681 and 8080 all fail from the AP, which is on the same L2.
+
+So "use its RSSI and association events, never its ping" stays good advice, but the
+reason changes: it is not that the board has no working IP stack, it is that nobody
+put its HaLow network in a zone.
+
+**Fixed, but not yet proven end to end.** A dedicated zone was added rather than
+putting `halow` into `lan`, because `input=ACCEPT` there would expose this board's
+**unauthenticated ttyd** (below), LuCI and dnsmasq to the whole HaLow segment:
+
+```sh
+# zone: name=halow network=halow input=REJECT output=ACCEPT forward=REJECT
+# rule: Allow-Ping-halow  src=halow proto=icmp icmp_type=echo-request
+# rule: Allow-SSH-halow   src=halow proto=tcp  dest_port=22
+```
+
+which produces
+
+```
+iifname "wlan0" jump input_halow
+chain input_halow {
+        icmp type echo-request counter accept   # Allow-Ping-halow
+        tcp dport 22           counter accept   # Allow-SSH-halow
+        jump reject_from_halow
+}
+```
+
+Original saved at `/etc/config/firewall.pre-halowzone-20260824`. To widen it to
+full access later: `uci set firewall.@zone[2].input='ACCEPT'`.
+
+**The rules are right and the counters are still zero**, because the link went down
+before anything could be tested through them. Not "fixed" — "correct, unproven".
+
+### The link has degraded badly, and the timing points at the cable
+
+```
+TX Total 75880   TX ACK valid 26547 (35%)   TX ACK timeout 41237 (54%)
+RX total 501823  RX pass FCS 501224         RX signal field error 50642 (10%)
+signal −69 to −76 dBm
+```
+
+Over half of what it transmits gets no ACK. For scale, on the same AP at the same
+moment: the station reads 0 dBm and the HT-HC01P −14 to −22 dBm.
+
+The failure signature is identical to the HT-HC01P's this morning — `SME: Trying to
+authenticate … send auth (try 1/3, 2/3, 3/3) … timed out`, `CONN_FAILED`,
+`TEMP-DISABLED` backing off 10 → 20 → 30 s — but **this is not a BCF problem**: this
+board already runs `bcf_HC01_V2_H.bin`. Twelve sampling points over three minutes
+found `COMPLETED` zero times.
+
+What makes the cable the suspect is the sequence: it held **44522 s** — more than
+twelve hours unbroken — and then went 2001 s → 189 s → 10 s → nothing, starting when
+the Ethernet cable was connected to it. Worth checking the antenna and the board's
+position before looking at software again.
+
+### Hardware and OS, confirmed live
+
+```
+OpenWrt 23.05.5, 2.8.5-20251023, kernel 5.15.167, mips
+radio0  mac80211  platform/10300000.wmac                    2.4 GHz AP HT-H7608-DD05, ch1 HT20, psk2
+radio1  morse     platform/10130000.mmc/mmc_host/mmc0/...   SDIO
+        bcf=bcf_HC01_V2_H.bin  country=SG  channel=42  mode=sta  encryption=sae  max_inactivity=30
+br-lan  10.42.0.1/24, ports eth0.1, switch0 vlan1 ports "0 2 6t"
+network.halow  proto=dhcp, device wlan0     network.wan proto=dhcp (unused)
+open ports  22 dropbear / 80 / 443 LuCI / 53 dnsmasq / 7681 ttyd
+```
+
+`radio1.channel='42'` is inert for the same reason it is on the HT-HC01P —
+`morse_setup_sta()` never calls `morse_cli channel`.
+
+**It uses the same BCF file as the HT-HC01P**, `bcf_HC01_V2_H.bin`. Both carry the
+HT-HC01 V2 module; one is SDIO and one is SPI. So the copy preserved in
+`firmware/heltec-hc01p/` covers both boards.
+
+### `ttyd` with no authentication is on both Heltec boards, not one
+
+```
+http://10.42.0.1:7681/token  ->  {"token": ""}   HTTP 200
+```
+
+This was recorded as an HT-HC01P problem. It is not — the HT-H7608 ships the same
+unauthenticated web root shell, and additionally exposes 80, 443 and 53. On both
+boards it is bridged with the Ethernet port and the board's own AP. Still the
+oldest open item in this file.
+
 ## 2026-08-24, evening — station power save is an inbound black hole, not a 5% loss
 
 The open item read: *"The station/AP power-save mismatch (`enable_ps=2` against the
