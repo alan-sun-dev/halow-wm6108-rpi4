@@ -200,6 +200,28 @@ iface，不要直接複製上面的行。
 `1`，那就只可能來自 uci。兩塊板子的備份都在
 `/etc/config/wireless.pre-powersave-20260824`。
 
+**接著在三塊板子上都做了完整重開機驗證。** `wifi reload` 不等於開機，所以每一項宣稱都用
+硬的方式重測一次，從最便宜、最安全的板子開始：
+
+| 板子 | 重開方式 | 開機後 | 鏈路 |
+|---|---|---|---|
+| station `55:04` | `systemctl reboot` | `power_save off`、`wifi.powersave disable`、`never-default yes`、預設路由只走 `wlan0` | 20 秒起來，0 dBm，MCS7，20/20 @ 5.8 ms |
+| HT-HC01P | `reboot` | `power_save off`、`uci powersave 0`、`COMPLETED` | 10.41.0.216 回來，MCS7，4.9 ms |
+| HT-H7608 | `reboot` | `power_save off`、`uci powersave 0`、**`fw4` 的 input chain 帶著 `wlan0` 的 jump 和 `input_halow` 兩條放行規則** | 10.41.0.197 回來，−67 dBm，MCS7，兩個來源各 10/10 @ 8.5 ms |
+
+HT-H7608 是關鍵的那一台。它的乙太網路線已經移回 AP，所以 **HaLow 是它唯一的進入路徑**
+—— 整個重開機過程和上面每一項檢查，都是走在 `halow` zone 存在的目的所在的那條鏈路上。
+這也回答了加入該 zone 時留下的一個問題：`wifi reload` 之後 input chain 一度沒有 `wlan0`
+的規則，看起來像是這個 zone 撐不過去。它撐得過 —— fw4 是在介面起來時才綁定 zone，開機
+和 reload 都一樣。
+
+一個副產品：那塊板子的速率控制器在網路線被拔掉之後一直停在 MCS1 / 0.585 Mbps，重開之後
+回到 **MCS7 / 14.648 Mbps**。MMRC 需要成功的傳輸樣本才會往上爬，而 ping 的流量太稀薄
+餵不飽它；重開只是把估計值重置了。在把低 MCS 讀成故障之前，值得知道這件事。
+
+以及同一天內第四次看到介面名稱不穩定：HT-HC01P 這次起來是 `wlan1`、HT-H7608 是 `wlan0`，
+跟上一次開機剛好相反。讀出名稱，絕不要假設。
+
 一個附帶值得記的現象：HT-HC01P 的 HaLow 介面在這次 reload 之後變回 **`wlan0`**，先前是
 `wlan1` —— 就是今早記錄的那個不穩定。用 `ls /var/run/wpa_supplicant_s1g/` 讀出名稱，
 絕不要假設。

@@ -218,6 +218,32 @@ rebuilds it, so any runtime `iw set power_save off` is wiped. Reading `off` *aft
 a reload, when the script's own default is `1`, can only come from uci. Backups at
 `/etc/config/wireless.pre-powersave-20260824` on both boards.
 
+**And then across a full reboot, on all three boards.** A `wifi reload` is not a
+boot, so each claim was retested the hard way, cheapest and safest board first:
+
+| board | rebooted via | after boot | link |
+|---|---|---|---|
+| station `55:04` | `systemctl reboot` | `power_save off`, `wifi.powersave disable`, `never-default yes`, default route only via `wlan0` | up at 20 s, 0 dBm, MCS7, 20/20 at 5.8 ms |
+| HT-HC01P | `reboot` | `power_save off`, `uci powersave 0`, `COMPLETED` | 10.41.0.216 back, MCS7, 4.9 ms |
+| HT-H7608 | `reboot` | `power_save off`, `uci powersave 0`, **`fw4` input chain carries the `wlan0` jump and both `input_halow` accept rules** | 10.41.0.197 back, −67 dBm, MCS7, 10/10 at 8.5 ms from two sources |
+
+The HT-H7608 is the one that mattered. Its Ethernet had already been moved back to
+the AP, so **HaLow was its only path in** — the whole reboot, and every check above,
+went over the link the `halow` zone exists to permit. It also answers a question
+left open when the zone was added: after a `wifi reload` the input chain briefly had
+no `wlan0` rule, which looked like the zone might not survive. It does — fw4 binds
+the zone when the interface comes up, at boot as well as at reload.
+
+A by-product: that board's rate control had been sitting at MCS1 / 0.585 Mbps after
+the cable was unplugged, and came back at **MCS7 / 14.648 Mbps** after the reboot.
+MMRC needs successful transmissions to climb and ping traffic is too thin to feed
+it; the reboot simply reset the estimate. Worth knowing before reading a low MCS as
+a fault.
+
+And a fourth sighting of the interface-name instability in one day: the HT-HC01P
+came up `wlan1` and the HT-H7608 `wlan0`, the opposite of the boot before. Read the
+name, never assume it.
+
 A by-product worth noting: the HT-HC01P's HaLow interface came back as **`wlan0`**
 after this reload, having been `wlan1` before it — the same instability recorded
 this morning. Read the name from `ls /var/run/wpa_supplicant_s1g/`, never assume it.
