@@ -55,7 +55,7 @@ which measurement. Nothing here is from a README or a forum post.
 
 | # | Question | How to settle it |
 |---|---|---|
-| U1 | **Does `bcf_HC01_V2_H.bin` (shipped for 1.15.3) work with 2.0 firmware and driver 2.0.1?** The BCF is an ELF whose sections the driver copies to an address the *firmware* advertises through TLV metadata (`firmware.c:96-128, 410-455`), so a version skew between BCF and firmware is a real possibility rather than a formality. | Load it and check for RF symmetry: the AP must see the station at a sane RSSI, not just the station see the AP. That asymmetry is precisely the failure signature already characterised on this board. |
+| U1 | **Does `bcf_HC01_V2_H.bin` (shipped for 1.15.3) work with 2.0 firmware and driver 2.0.1?** Narrowed 2026-08-24 by opening the file (see `firmware/heltec-hc01p/README.md`): it is an ELF32 RISC-V object whose `.chips` section reads **`mm610x`** — it is tagged to the chip *family*, not to a driver or firmware release — and it carries a `.regdom_SG` section, so the regulatory domain this project uses is present. Nothing in it names 1.15.3. What remains is one specific risk: `.board_config` has a fixed load address `0x8011fa80`, while the driver copies sections into a window whose address and size come from **firmware** TLVs (`MORSE_FW_INFO_TLV_BCF_ADDR` / `_SIZE`, `firmware.c:110-128`). A 2.0 firmware advertising a different window would place it wrong. | Load it and check for **RF symmetry**: the AP must see the station at a sane RSSI, not just the station see the AP. That asymmetry is exactly the failure signature already characterised on this board, and every earlier gate passes on the receive side regardless. |
 | U2 | **What the SPI `mode` word actually is at runtime.** Not exposed in sysfs on this kernel, and no `spidev` is bound to read it. | Read it from the driver on the ported system (`dev_info` in probe), or via `spi->mode` in a debug build. |
 | U3 | **Whether 2.0.1's power-save handshake works with this HAT's WAKE/BUSY wiring.** The HAT supplies both, and 1.15.3 uses them (IRQ 46 `async_wakeup_from_chip`, 4968 interrupts taken), but 2.0.1's PS code has not been exercised on this board. | Bring the link up with `enable_ps=0` first; enable PS only after STA mode is proven. |
 | U4 | **Which Raspberry Pi OS kernel to target.** This repo has measured 6.6.51 (2024-11-19 image) and 6.12.x, both failing *without* the three patches and 6.6.51 working *with* them — but on the Wio-WM6108, not on this HAT. | Use 6.6.51 for maximum overlap with work already done. |
@@ -66,7 +66,7 @@ which measurement. Nothing here is from a README or a forum post.
 | # | Blocker | Handling |
 |---|---|---|
 | B1 | **`morse_driver` 2.0.1 does not build on a kernel ≥ 6.1.21 that lacks `SPI_CONTROLLER_ENABLE_CS_GPIOD`** — the `#else` arm is a `#warning` and the Makefile passes `-Werror`. Raspberry Pi OS kernels do not define that macro. | Apply this repo's `patches/upstream/` patch 1. Already written and already carried in `patches/morse-driver-2.0.1-rpi-spi.patch`. |
-| B2 | **`bcf_HC01_V2_H.bin` exists only on the working board.** It is not in the official firmware release, not in Debian, and not downloadable from Morse. Losing it means losing the transmitter — this is the exact file whose absence produced a receive-only radio on this board. | Copy it off **before** anything else and keep a hashed backup: 1170 bytes, sha256 `5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f`. Verify the hash after every copy. |
+| B2 | **`bcf_HC01_V2_H.bin` exists only on the working board.** It is not in the official firmware release, not in Debian, and not downloadable from Morse. Losing it means losing the transmitter — this is the exact file whose absence produced a receive-only radio on this board. | **Done 2026-08-24** — preserved at `firmware/heltec-hc01p/bcf_HC01_V2_H.bin` with provenance and structure notes in that directory's README. 1170 bytes, sha256 `5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f`, verified three ways on the day of the copy. Verify the hash after every further copy. |
 | B3 | **Enabling SPI on Raspberry Pi OS the ordinary way muxes GPIO 7 as a second chip select, and GPIO 7 is MM_BUSY.** `dtparam=spi=on` brings in the stock `spi0_cs_pins` with `brcm,pins = <8 7>`. | The port overlay must override `spi0_cs_pins` to `brcm,pins = <8>`, exactly as Heltec's does. |
 
 ---
@@ -333,9 +333,11 @@ scan → SAE/PMF → DHCP → ping.
 
 ### Stage 0 — preserve what cannot be recovered
 
-1. Copy `bcf_HC01_V2_H.bin` off the board and verify it:
-   `sha256 5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f`, 1170 bytes.
-   Keep a copy in this repo. **This is the single irreplaceable artefact (B2).**
+1. ~~Copy `bcf_HC01_V2_H.bin` off the board and verify it.~~ **Done 2026-08-24.** It is at
+   `firmware/heltec-hc01p/bcf_HC01_V2_H.bin`, 1170 bytes,
+   `sha256 5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f`, checked
+   against the inventory value, against a fresh `sha256sum` on the board, and against the
+   local copy. **This is the single irreplaceable artefact (B2).**
 2. Keep `heltec-hc01p-raw-evidence.txt` as the reference for what "working" looks like.
 3. Do not reflash the working SD card. Physically label it.
 
