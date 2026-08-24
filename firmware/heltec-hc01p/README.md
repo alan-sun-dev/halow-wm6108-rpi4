@@ -3,7 +3,9 @@
 ## Why this directory exists
 
 `bcf_HC01_V2_H.bin` is the board configuration file for the Heltec HT-HC01P HAT
-(Morse Micro MM6108A2). **It is not distributed anywhere else that we have found.**
+(Morse Micro MM6108A2). **It is not distributed anywhere else that we have found**,
+and the place you would most reasonably look serves a different file that does not
+work — see "Do not use Heltec's download page" below.
 `morse-firmware` at tag `mm6108-2.0.1` ships BCFs under
 `bcf/{azurewave,morsemicro,netprisma,quectel}` and has no Heltec directory at all.
 The only copy is the one inside Heltec's own OpenWrt image, where it sits at
@@ -72,9 +74,44 @@ address and size come from **firmware** metadata TLVs (`MORSE_FW_INFO_TLV_BCF_AD
 the 1.15.3 firmware this BCF was built against, the load will land wrong. See
 `heltec-hc01p-linux-port-analysis.md`, item U1, for how that gets tested.
 
+## Do not use Heltec's download page for this file
+
+Heltec publish a BCF for this product at
+<https://resource.heltec.cn/download/HT-HC01P/BCF/driver_1_15_3/bcf_HC0P.bin>.
+**It is the wrong file.** Checked 2026-08-24:
+
+```
+Heltec download   bcf_HC0P.bin        1150 B  57c50cb2c1d51187667677b392684285c616ddbf3fe262c3aeece342f446773e
+                                      Last-Modified: Tue, 10 Jun 2025 23:41:15 GMT
+this directory    bcf_HC01_V2_H.bin   1170 B  5744fa288d79cd2a8ad8e146bec9aff8d06a6f87c160a0a44358ceb6cd53ba9f
+```
+
+That download is **byte-identical to `bcf_mf08551.bin`**, the file already sitting
+in Heltec's own image as the shipped default, and the files say so themselves:
+
+```
+bcf_HC0P.bin        .board_desc = "mf08551"     .build_ver = "a49f6ff 17ee8d5"
+bcf_HC01_V2_H.bin   .board_desc = "HC01_V2_H"   .build_ver = "a49f6ff 17ee8d5 _Modified"
+```
+
+`mf08551` is Morse's **EKH01-03 evaluation board**. It is the BCF that left this
+HAT receiving the AP at −56 dBm while transmitting nothing that ever arrived.
+Renaming it `bcf_HC0P.bin` does not make it a HT-HC01P board config.
+
+It is also not newer, which is the first thing you would check: its `Last-Modified`
+is 2025-06-10, thirteen days *older* than the 2025-06-23 files in the shipped
+image.
+
+**So the vendor download cannot replace this directory, and this file cannot be
+swapped for a link to it.** Anyone following Heltec's published route to a BCF for
+the HT-HC01P gets a radio with no working transmitter.
+
 ## Licensing
 
 This is a vendor binary redistributed from Heltec's published firmware image. It is not
-covered by this repository's licence, no licence text accompanies it in the source
-image, and it is included here only so that a board that already has it does not lose
-it. If Heltec or Morse Micro object, it comes out.
+covered by this repository's licence and no licence text accompanies it in the source
+image. It is included because there is no other public source of a working HT-HC01P
+board config: the vendor's own download page serves an evaluation-board file under a
+HT-HC01P name, and the working file exists only inside already-shipped images. If
+Heltec or Morse Micro publish the correct file, this copy should be replaced by a link
+to it. If they object to it being here, it comes out.

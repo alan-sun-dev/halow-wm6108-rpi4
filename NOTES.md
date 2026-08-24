@@ -42,6 +42,37 @@ configuration**, and the same story as the 50 MHz clock and the flag-0 reset lin
 below — except that here the inherited file cost the module its transmitter
 outright. Inheriting the reference is not always invisible.
 
+### And the vendor's download page serves the broken file too
+
+Found 2026-08-24, after the fix. Heltec publish a BCF for this product at
+<https://resource.heltec.cn/download/HT-HC01P/BCF/driver_1_15_3/bcf_HC0P.bin>.
+It is **byte-identical to `bcf_mf08551.bin`** — the evaluation-board file that had
+just been established as the cause:
+
+```
+Heltec download   bcf_HC0P.bin        1150 B  sha256 57c50cb2…  Last-Modified 2025-06-10
+in-image default  bcf_mf08551.bin     1150 B  sha256 57c50cb2…  (identical)
+the working one   bcf_HC01_V2_H.bin   1170 B  sha256 5744fa28…  in-image only
+```
+
+The files identify themselves, so this is not an inference from the hash alone:
+
+```
+bcf_HC0P.bin        .board_desc = "mf08551"     .build_ver = "a49f6ff 17ee8d5"
+bcf_HC01_V2_H.bin   .board_desc = "HC01_V2_H"   .build_ver = "a49f6ff 17ee8d5 _Modified"
+```
+
+`mf08551` is Morse's EKH01-03 evaluation board. Renaming it `bcf_HC0P.bin` and
+filing it under `HT-HC01P/BCF/` does not change what it is. It is also **not
+newer** than the shipped image — 2025-06-10 against 2025-06-23 — which is the
+first thing worth checking when a vendor page looks like an upgrade.
+
+So the reference-configuration story is one step worse than "the image ships the
+wrong default": **the vendor's published route to obtaining a BCF for this product
+hands out the same wrong file**, and the working one exists only inside images
+already in the field. That is why `firmware/heltec-hc01p/` in this repo carries the
+binary rather than a link.
+
 ### The symptom was a one-way link, and paired windows were needed to see it
 
 With the wrong BCF the station received perfectly and transmitted into a void.
