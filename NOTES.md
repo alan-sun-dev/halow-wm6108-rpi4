@@ -62,8 +62,19 @@ chain input_halow {
 Original saved at `/etc/config/firewall.pre-halowzone-20260824`. To widen it to
 full access later: `uci set firewall.@zone[2].input='ACCEPT'`.
 
-**The rules are right and the counters are still zero**, because the link went down
-before anything could be tested through them. Not "fixed" — "correct, unproven".
+**Proven end to end later the same night**, once the link was repaired (below):
+
+```
+iifname "wlan0" jump input_halow
+        icmp type echo-request counter packets 1 accept
+        tcp dport 22           counter packets 1 accept
+station -> 10.41.0.197 : TCP22-OPEN
+```
+
+The ICMP counter reads 1 rather than 20 because fw4's input chain accepts
+`ct state established` before reaching the zone chain — the first packet of the
+flow hits the rule and the rest take the fast path. The TCP counter moving off
+zero is the decisive part: before the fix a SYN never reached the board at all.
 
 ### The link has degraded badly, and the timing points at the cable
 
@@ -82,10 +93,134 @@ authenticate … send auth (try 1/3, 2/3, 3/3) … timed out`, `CONN_FAILED`,
 board already runs `bcf_HC01_V2_H.bin`. Twelve sampling points over three minutes
 found `COMPLETED` zero times.
 
-What makes the cable the suspect is the sequence: it held **44522 s** — more than
-twelve hours unbroken — and then went 2001 s → 189 s → 10 s → nothing, starting when
-the Ethernet cable was connected to it. Worth checking the antenna and the board's
-position before looking at software again.
+What made the cable look like the suspect was the sequence: it held **44522 s** —
+more than twelve hours unbroken — and then went 2001 s → 189 s → 10 s → nothing,
+starting when the Ethernet cable was connected. That was the wrong suspect.
+
+### The antenna was for the wrong band, and that was the whole thing
+
+**It is marked 868 MHz.** That is the EU SRD band. This link runs at 922 MHz, which
+is where Taiwan's NCC allocation sits — 920–925 MHz — and the driver has **no `TW`
+regdomain at all** (53 country codes in `/usr/share/morse-regdb/channels.csv`, `TW`
+is not among them), which is why everything here runs `country=SG`: SG's
+920–925 MHz / 4 MHz / 22 dBm block fits the Taiwan allocation exactly. Note that the
+same SG table *also* carries an 866–868 MHz group at 2.77% duty cycle — the band
+that antenna was designed for, and one Taiwan does not allocate for this.
+
+54 MHz away, 6.2%, on an antenna type whose usable bandwidth is typically 2–5%.
+
+Swapping it, with the board also repositioned in the same step:
+
+| | 868 MHz antenna | after swap | after repositioning | power save off |
+|---|---|---|---|---|
+| its view of the AP | −85 dBm | −69 dBm | −69 dBm | — |
+| AP's view of it | −75 (avg −71) | −75 (avg −71) | −69 (avg −62) | **−64 (avg −64)** |
+| `wpa_state` | SCANNING, 0 of 12 samples | **COMPLETED** | COMPLETED | COMPLETED |
+| `RX total` | 34 in 553 s | 276 in 124 s | — | — |
+| `RX signal field error` | **4410** | **10** | **+0 per 45 s** | — |
+| `TX ACK valid` | 1 of 790 | 51 of 173 | — | — |
+| tx bitrate | — | 6.5 Mbit/s MCS0 | 260 Mbit/s MCS5 | **325 Mbit/s MCS7** |
+| expected throughput | — | 0.292 Mbps | 11.718 Mbps | **14.648 Mbps** |
+| ping from the station | never answered | 1/20, 241 ms | 27/30, avg 383 ms | **30/30, avg 10.3 ms** |
+
+The signal-field-error column is the one that settles it: 4410 undecodable
+detections against 34 decoded frames, then 10, then none at all. A receiver that
+cannot decode is what an antenna 54 MHz off resonance produces.
+
+**Caveat, stated because it matters:** the antenna swap and the repositioning
+happened in the same power-down, so their individual contributions cannot be
+separated from these numbers. Both were changed for the better; which mattered more
+is not established.
+
+### A correction to what was written this morning about the 1 MHz parking
+
+Earlier tonight the board sat at `921500 kHz, 1 MHz` in **all three** of
+`morse_cli channel -a`'s blocks — Full, DTIM and Current — and never adopted the
+AP's 4 MHz. That looked like a worse form of the idle-parking defect recorded this
+morning for the HT-HC01P. **It was not a defect at all.** The moment the antenna was
+changed, the same board came up at `922000 kHz, 4 MHz, primary 2 MHz` without any
+intervention.
+
+So parking at 1 MHz is a **symptom, not a cause**: a station that cannot decode the
+AP's beacons has nothing to derive the operating parameters from, so it stays at the
+default. The HT-HC01P entry stands as written — there the radio *did* switch during
+authentication — but the general claim "the driver never switches" would have been
+wrong.
+
+### Power save is worth 13× on this board too
+
+Measured after the link was healthy, so the two effects are separated:
+
+```
+power save on    30/30, 0% loss, RTT min 34.7 / avg 133.5 / max 224.7 ms, mdev 59.7
+power save off   30/30, 0% loss, RTT min  7.7 / avg  10.3 / max  21.1 ms, mdev  3.5
+```
+
+Average latency 133.5 → 10.3 ms, jitter 59.7 → 3.5. Not the black hole the station
+showed with its own power save on, but the same direction. `iw dev wlan0 set
+power_save off` is **runtime only** and does not survive a reboot or `wifi reload`.
+
+### The persistent setting on OpenWrt, and why it is not `enable_ps`
+
+Checked in `morse.sh` rather than assumed, because the `channel` option turned out
+to be inert earlier the same day. **These are two independent mechanisms and only
+one of them is the right lever.**
+
+`powersave` is a per-interface uci option, registered at line 213
+(`config_add_boolean wds powersave enable`) and applied inside
+`morse_iface_bringup()`'s **`sta)` branch**:
+
+```sh
+# lines 653-663
+if grep -i '325b' /sys/kernel/debug/usb/devices ; then
+        set_default powersave 0     # Morse USB MM8108 workaround, APP-3745
+else
+        set_default powersave 1     # <- this default is where "power save on" comes from
+fi
+[ "$powersave" -gt 0 ] && powersave="on" || powersave="off"
+iw dev "$ifname" set power_save "$powersave"
+```
+
+So the default that has been costing an order of magnitude on every board is that
+`set_default powersave 1`, not the driver's `enable_ps`. It runs on every interface
+bring-up — boot, `wifi reload`, reconnect — which is exactly what persistence needs.
+Unlike `channel`, which `morse_setup_sta()` never applies, this one has a real call
+in the STA path.
+
+`enable_ps` is a different thing: a module parameter listed in `MM_MOD_BOOL`
+(line 17). It is settable from uci in principle, but it takes 0/1 while the live
+value is **2** — the driver's own default, not something uci set — and changing it
+means reloading the module. Morse themselves only reach for it as a USB workaround
+(line 145, `#APP-4066`, `MOD_PARAMS="$MOD_PARAMS enable_ps=0"`). Leave it alone.
+
+Applied and verified on both Heltec boards:
+
+```sh
+uci set wireless.default_radio1.powersave='0'   # HT-H7608  (Morse is radio1 there)
+uci set wireless.default_radio0.powersave='0'   # HT-HC01P  (Morse is radio0 there)
+uci commit wireless && wifi reload
+```
+
+The radio index is **not** the same on the two boards — check `uci show wireless`
+for the `mode='sta'` iface rather than copying the line.
+
+| board | mechanism | power save on | power save off |
+|---|---|---|---|
+| station `55:04` (RPi OS) | NetworkManager `wifi.powersave 2` | **100% inbound loss** | 30/30, avg 4.8 ms |
+| HT-HC01P (OpenWrt) | uci `default_radio0.powersave 0` | 20/20, avg 105.4 ms, mdev 66.2 | 20/20, avg **8.4 ms**, mdev 2.7 |
+| HT-H7608 (OpenWrt) | uci `default_radio1.powersave 0` | 30/30, avg 133.5 ms, mdev 59.7 | 30/30, avg **10.3 ms**, mdev 3.5 |
+
+Three hosts, three different configuration systems, one root cause. The station's
+case is the severe one — there it is not latency, it is unreachability.
+
+**How persistence was proven, not assumed:** `wifi reload` tears the vif down and
+rebuilds it, so any runtime `iw set power_save off` is wiped. Reading `off` *after*
+a reload, when the script's own default is `1`, can only come from uci. Backups at
+`/etc/config/wireless.pre-powersave-20260824` on both boards.
+
+A by-product worth noting: the HT-HC01P's HaLow interface came back as **`wlan0`**
+after this reload, having been `wlan1` before it — the same instability recorded
+this morning. Read the name from `ls /var/run/wpa_supplicant_s1g/`, never assume it.
 
 ### Hardware and OS, confirmed live
 

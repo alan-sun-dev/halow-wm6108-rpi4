@@ -59,8 +59,18 @@ chain input_halow {
 原設定備份在 `/etc/config/firewall.pre-halowzone-20260824`。日後要放寬成完全開放：
 `uci set firewall.@zone[2].input='ACCEPT'`。
 
-**規則是對的，而計數器仍然是零**，因為還來不及有任何封包穿過它，鏈路就斷了。所以這裡
-寫的是「正確但未證實」，不是「修好了」。
+**同一晚稍後端到端證實了**，在鏈路修好之後（見下）：
+
+```
+iifname "wlan0" jump input_halow
+        icmp type echo-request counter packets 1 accept
+        tcp dport 22           counter packets 1 accept
+station -> 10.41.0.197 : TCP22-OPEN
+```
+
+ICMP 計數器是 1 而不是 20，因為 fw4 的 input chain 在抵達區域 chain 之前就會放行
+`ct state established` —— 該連線的第一個封包命中規則，其餘走快速路徑。真正決定性的是
+TCP 計數器離開零：修好之前，SYN 根本到不了這塊板子。
 
 ### 鏈路嚴重劣化，而時間點指向那條網路線
 
@@ -78,9 +88,121 @@ HT-HC01P −14 ~ −22 dBm。
 秒 —— **但這不是 BCF 問題**：這塊板子本來就在用 `bcf_HC01_V2_H.bin`。三分鐘內取樣
 十二次，`COMPLETED` 出現零次。
 
-讓那條線成為嫌疑犯的是順序：它先前撐了 **44522 秒**（十二小時以上不斷），然後變成
-2001 秒 → 189 秒 → 10 秒 → 完全連不上，而起點正是網路線被接上去的時候。在回頭查軟體
-之前，先檢查天線和板子的位置。
+讓那條線看起來像嫌疑犯的是順序：它先前撐了 **44522 秒**（十二小時以上不斷），然後變成
+2001 秒 → 189 秒 → 10 秒 → 完全連不上，起點正是網路線被接上去的時候。那個嫌疑犯是錯的。
+
+### 天線是別的頻段的，而那就是全部原因
+
+**它標示 868 MHz。** 那是歐規 SRD 頻段。這條鏈路跑在 922 MHz，也就是台灣 NCC 的分配
+所在 —— **920–925 MHz** —— 而驅動**根本沒有 `TW` regdomain**（`/usr/share/morse-regdb/channels.csv`
+收錄 53 個國家碼，沒有 `TW`）。這正是這裡所有板子都設 `country=SG` 的理由：SG 的
+920–925 MHz / 4 MHz / 22 dBm 區塊與台灣的分配完全吻合。附帶一提，同一張 SG 表裡**也**
+有一組 866–868 MHz、duty cycle 只有 2.77% 的通道 —— 那正是那支天線被設計的頻段，而台灣
+沒有把它分配給這個用途。
+
+差 54 MHz、6.2%，而這類天線的可用頻寬通常只有 2–5%。
+
+換掉它（同一次斷電裡也調整了板子位置）：
+
+| | 868 MHz 天線 | 換天線後 | 調整位置後 | 關閉省電 |
+|---|---|---|---|---|
+| 它看 AP | −85 dBm | −69 dBm | −69 dBm | — |
+| AP 看它 | −75（avg −71）| −75（avg −71）| −69（avg −62）| **−64（avg −64）** |
+| `wpa_state` | SCANNING，12 次取樣 0 次 | **COMPLETED** | COMPLETED | COMPLETED |
+| `RX total` | 553 秒 34 個 | 124 秒 276 個 | — | — |
+| `RX signal field error` | **4410** | **10** | **每 45 秒 +0** | — |
+| `TX ACK valid` | 790 之中 1 | 173 之中 51 | — | — |
+| tx bitrate | — | 6.5 Mbit/s MCS0 | 260 Mbit/s MCS5 | **325 Mbit/s MCS7** |
+| expected throughput | — | 0.292 Mbps | 11.718 Mbps | **14.648 Mbps** |
+| 從 station ping | 從未回應 | 1/20，241 ms | 27/30，avg 383 ms | **30/30，avg 10.3 ms** |
+
+signal field error 那一列是定案的關鍵：4410 個解不開的偵測對上 34 個解得開的 frame，
+然後變成 10，最後完全沒有。接收機解不開東西，正是天線偏離共振點 54 MHz 會造成的結果。
+
+**要註明的但書：** 換天線和調位置發生在同一次斷電裡，所以無法從這些數字分離兩者各自的
+貢獻。兩者都改對了，但哪一個影響較大並未確立。
+
+### 對今早那段「停在 1 MHz」的更正
+
+今晚稍早這塊板子在 `morse_cli channel -a` 的**三個欄位**（Full、DTIM、Current）全部停在
+`921500 kHz, 1 MHz`，從來沒有採用 AP 的 4 MHz。那看起來像是今早在 HT-HC01P 上記錄的
+idle 停駐缺陷的更嚴重版本。**那根本不是缺陷。** 天線一換，同一塊板子立刻以
+`922000 kHz, 4 MHz, primary 2 MHz` 起來，沒有任何額外操作。
+
+所以停在 1 MHz 是**症狀而不是原因**：解不開 AP beacon 的 station 沒有依據去推導操作
+參數，於是留在預設值。HT-HC01P 那一節維持原樣（在那裡 radio **確實**會在認證時切換），
+但「這個驅動從不切換」這個一般化說法會是錯的。
+
+### 省電在這塊板子上也值 13 倍
+
+在鏈路健康之後才量，所以兩個效應是分開的：
+
+```
+省電 on    30/30，0% 遺失，RTT min 34.7 / avg 133.5 / max 224.7 ms, mdev 59.7
+省電 off   30/30，0% 遺失，RTT min  7.7 / avg  10.3 / max  21.1 ms, mdev  3.5
+```
+
+平均延遲 133.5 → 10.3 ms，抖動 59.7 → 3.5。不像 station 那樣是黑洞，但方向相同。
+`iw dev wlan0 set power_save off` 是**執行期設定**，重開機或 `wifi reload` 就沒了。
+
+### OpenWrt 上的持久設定，以及為什麼不是 `enable_ps`
+
+在 `morse.sh` 裡查證過才寫，不是假設 —— 因為同一天稍早才發現 `channel` 選項是惰性的。
+**這是兩個獨立機制，只有其中一個是對的槓桿。**
+
+`powersave` 是每介面的 uci 選項，在第 213 行註冊
+（`config_add_boolean wds powersave enable`），在 `morse_iface_bringup()` 的
+**`sta)` 分支**裡套用：
+
+```sh
+# 653-663 行
+if grep -i '325b' /sys/kernel/debug/usb/devices ; then
+        set_default powersave 0     # Morse USB MM8108 的 workaround，APP-3745
+else
+        set_default powersave 1     # <- 「省電開著」就是從這個預設值來的
+fi
+[ "$powersave" -gt 0 ] && powersave="on" || powersave="off"
+iw dev "$ifname" set power_save "$powersave"
+```
+
+所以讓每一塊板子都付出一個數量級代價的，是這行 `set_default powersave 1`，不是驅動的
+`enable_ps`。它在**每次介面起來時都會執行** —— 開機、`wifi reload`、重連 —— 這正是
+持久化需要的。和 `morse_setup_sta()` 從不套用的 `channel` 不同，這一個在 STA 路徑上有
+實際的呼叫。
+
+`enable_ps` 是另一回事：它是列在 `MM_MOD_BOOL`（第 17 行）的模組參數。原則上可以由 uci
+設定，但它只吃 0/1，而目前的實際值是 **2** —— 那是驅動自己的預設、不是 uci 設的 ——
+而且改它需要重載模組。Morse 自己也只把它當成 USB 的 workaround 在用（第 145 行，
+`#APP-4066`，`MOD_PARAMS="$MOD_PARAMS enable_ps=0"`）。不要動它。
+
+兩塊 Heltec 板子都已套用並驗證：
+
+```sh
+uci set wireless.default_radio1.powersave='0'   # HT-H7608  （那台的 Morse 是 radio1）
+uci set wireless.default_radio0.powersave='0'   # HT-HC01P  （這台的 Morse 是 radio0）
+uci commit wireless && wifi reload
+```
+
+兩塊板子的 radio 編號**不一樣** —— 用 `uci show wireless` 找 `mode='sta'` 的那個
+iface，不要直接複製上面的行。
+
+| 板子 | 機制 | 省電 on | 省電 off |
+|---|---|---|---|
+| station `55:04`（RPi OS）| NetworkManager `wifi.powersave 2` | **入站 100% 遺失** | 30/30，avg 4.8 ms |
+| HT-HC01P（OpenWrt）| uci `default_radio0.powersave 0` | 20/20，avg 105.4 ms，mdev 66.2 | 20/20，avg **8.4 ms**，mdev 2.7 |
+| HT-H7608（OpenWrt）| uci `default_radio1.powersave 0` | 30/30，avg 133.5 ms，mdev 59.7 | 30/30，avg **10.3 ms**，mdev 3.5 |
+
+三種主機、三套不同的設定系統、同一個根本原因。station 那台是嚴重的那一個 —— 在它身上
+不是延遲，是不可達。
+
+**持久性是怎麼證明的，而不是假設的：** `wifi reload` 會把 vif 拆掉重建，所以任何執行期
+的 `iw set power_save off` 都會被清除。在 reload **之後**讀到 `off`，而腳本自己的預設是
+`1`，那就只可能來自 uci。兩塊板子的備份都在
+`/etc/config/wireless.pre-powersave-20260824`。
+
+一個附帶值得記的現象：HT-HC01P 的 HaLow 介面在這次 reload 之後變回 **`wlan0`**，先前是
+`wlan1` —— 就是今早記錄的那個不穩定。用 `ls /var/run/wpa_supplicant_s1g/` 讀出名稱，
+絕不要假設。
 
 ### 硬體與作業系統，實機確認
 
