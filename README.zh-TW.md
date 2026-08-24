@@ -48,8 +48,11 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 >
 > **已在本 repo 自己的 overlay 下、以冷開機驗證。** 上述各次成功的執行，掛的都是蓋在
 > 原廠檔名上的實驗版 overlay，而它把 `reset-gpios` 設成 flag 0 —— 那是 OpenMANET 的
-> 設定，在該設定下 RESET_N 從來不會觸發。2026-08-23 換回原廠 overlay 重跑：
-> `reset-gpios` flag 1，RESET_N 真的會觸發；`dtparam=spi=on` 帶進兩組 chip select；
+> 設定。（原本認為該設定會讓 RESET_N 不觸發，**2026-08-24 更正**：`morse_driver`
+> 2.0.1 全樹沒有任何 `gpiod_` 呼叫，flag 被丟棄，兩種設定下 RESET_N 都會觸發。
+> OpenMANET 真正倚賴的是一份 Morse 自己寫的核心 patch，見 NOTES.zh-TW.md
+> 「為什麼 OpenMANET 不需要這個修正」。）2026-08-23 換回原廠 overlay 重跑：
+> `reset-gpios` flag 1；`dtparam=spi=on` 帶進兩組 chip select；
 > 模組在開機時自動載入；除了 `country=` 與 `bcf=` 之外不帶任何參數 —— `phy1` 綁在
 > `spi0.0`、`wlan1` 起來、`errors 0`、`timedout 0`、零失敗行。同一次開機也在完全相同
 > 的 device tree 下載入未修正的建置，重現了原始失敗（`c0 7f`、CMD63 `-71`），所以這個

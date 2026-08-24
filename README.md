@@ -56,9 +56,13 @@ SPI from a Raspberry Pi 4.
 >
 > **Verified under this repo's own overlay, on a cold boot.** The runs above were
 > made with an experiment overlay installed over the stock filename, which sets
-> `reset-gpios` flag 0 — OpenMANET's setting, under which RESET_N never fires.
-> Re-run 2026-08-23 with the stock overlay in place: `reset-gpios` flag 1 so
-> RESET_N genuinely fires, two chip selects from `dtparam=spi=on`, module
+> `reset-gpios` flag 0 — OpenMANET's setting. (That flag was believed to stop
+> RESET_N from firing; **corrected 2026-08-24** — `morse_driver` 2.0.1 has no
+> `gpiod_` call at all, so the flag is discarded and RESET_N fires either way.
+> What OpenMANET actually has is a Morse-authored kernel patch. See NOTES.md,
+> "Why OpenMANET never needed the fix".)
+> Re-run 2026-08-23 with the stock overlay in place: `reset-gpios` flag 1,
+> two chip selects from `dtparam=spi=on`, module
 > auto-loaded at boot, no parameters beyond `country=` and `bcf=` — `phy1` on
 > `spi0.0`, `wlan1` up, `errors 0`, `timedout 0`, zero failure lines. The same
 > boot reproduced the original failure under the identical device tree by loading

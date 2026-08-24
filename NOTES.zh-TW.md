@@ -237,7 +237,10 @@ station 但關聯不上。
 驅動 1.15.3），而且第一次讀了 Morse 官方的 Linux 移植指南。它的 EKH01 參考 overlay
 寫的是 `spi-max-frequency = <50000000>` 和 `reset-gpios = <&gpio 5 0>` —— 50 MHz
 加 flag 0。**所有檢視過的實作都從官方參考繼承了這兩個設定**，而它們正好讓缺陷 3
-（壞掉的延遲換算只有在 50 MHz 才會算出可用值）和缺陷 2（flag 0 讓 RESET_N 從不觸發）
+（壞掉的延遲換算只有在 50 MHz 才會算出可用值）隱形。這裡原本還寫著 flag 0 會讓
+RESET_N 不觸發、因而藏住缺陷 2 —— **那是錯的，2026-08-24 更正**：驅動根本不讀那個
+flag，真正藏住缺陷 2 的是 Morse 為 OpenWrt 提供的一份核心 patch，見「為什麼
+OpenMANET 不需要這個修正」。缺陷 2
 都看不見。同一份文件裡，chip select、deassert、74 個 clock、初始化序列、交易間延遲、
 CMD53/CMD63、疑難排解 —— 出現次數全部是 **0**，而且是帶正對照統計的。完整表格見下面
 「五個實作、一份參考設定」。
@@ -276,8 +279,10 @@ Wi-Fi 搆不到而 HaLow 搆得到，於是頻外通道反過來扛起了它自�
 
 **AP 發射器停擺可以不用重開機救回來。** `wifi reload` ✗ → debugfs `restart` ✗ →
 debugfs **`reset` ✓**。前兩次之後記在這裡的「只有重開機救得回來」是錯的。完整重載韌體
-（`restart`）不夠，要走 bus reset。可能的原因是這台 AP 的 `reset-gpios` flag 是 0，
-RESET_N 從來不會觸發，只有 bus reset 那條路徑碰得到晶片。第三次跟第二次一樣，前面什麼
+（`restart`）不夠，要走 bus reset。2026-08-24 查明原因：**這台 AP 的驅動是編進核心
+的**，所以 `wifi reload` 卸載不掉它、永遠不會重跑 probe —— `Resetting Morse Chip` 在
+47907 秒的 uptime 裡只出現一次，在開機時。只有 bus reset 那條路徑碰得到晶片。（原本
+把它歸因於 `reset-gpios` flag 0，該解釋已撤回。）第三次跟第二次一樣，前面什麼
 都沒發生。細節見下面「AP 的發射器會停擺」。
 
 **兩個值得帶著走的診斷更正。** Heltec 的 *ping* 不能當對照組 —— 鏈路健康時它也是不通
@@ -374,14 +379,16 @@ ping 零遺失、累計 88.9 MB 的 SPI 流量且 `errors 0`。見
 | DT 節點名 | `mm610x@0` | `mm6108@0` |
 | 射頻 | managed，`country=SG` | AP，S1G 923.0 MHz / BW 2 MHz，對映 ch157，22 dBm，SSID `BCM2711-57e7`，SAE + PMF，`wds=1` |
 | **SPI 時脈** | **10 MHz**（`00 98 96 80`）| **50 MHz**（`02 fa f0 80`）|
-| **`reset-gpios`** | pin 17 **flag 1** —— RESET_N 真的會觸發 | pin 17 **flag 0** —— RESET_N 從來不觸發 |
+| **`reset-gpios`** | pin 17 flag 1 | pin 17 flag 0 —— **兩邊的 flag 都是惰性的**：2.0.1 沒有任何 `gpiod_` 呼叫，RESET_N 兩邊都會觸發 |
 | **chip select 數** | **兩組**（gpio 8、gpio 7），來自 `dtparam=spi=on` | **一組**（gpio 8）|
 | 腳位提升／下拉 | `halow_pins`：17 上拉，5/23/24 下拉；沒有 `spi0_pins` 群組，所以 MISO/MOSI/SCLK 維持 BCM2711 預設（下拉）| `morse_reset` 17 上拉、`morse_irq` 5 上拉、`morse_wake` 23 上拉、`morse_busy` 24 下拉；`spi0_pins` 9/10/11 上拉 |
 
-**AP 為什麼從來沒踩到那三個缺陷**，答案就在那幾列裡。50 MHz 是驅動的延遲換算剛好會
-產生可用值的唯一時脈，所以缺陷 3 隱形；`reset-gpios` flag 0 讓 RESET_N 永遠不觸發，
-晶片不會被踢出 SPI 模式，所以缺陷 2 隱形。Station 是 10 MHz 且 RESET_N 真的會拉，
-兩個缺陷都會現形 —— 而 `patches/upstream/` 那組修正就是撐住它的東西。
+**AP 為什麼從來沒踩到那三個缺陷。** 一半在那幾列裡，一半不在。50 MHz 是驅動的延遲
+換算剛好會產生可用值的唯一時脈，所以缺陷 3 隱形，而 station 的 10 MHz 讓它現形。缺陷 2
+**不是**這張表任何一列能解釋的：藏住它的是 OpenMANET 帶著、而 Raspberry Pi OS 沒有的
+一份核心 patch，見「為什麼 OpenMANET 不需要這個修正」。上面那列的 `reset-gpios` 差異
+什麼都沒解釋，因為驅動根本不讀那個 flag。`patches/upstream/` 那組修正是撐住 station
+通過這兩個缺陷的東西。
 
 腳位拉電阻與 chip select 數的差異，在 A/B 過程中都已個別排除為成因（見下方各節）；
 列在這裡是因為它們是真實存在的組態差異，不是因為它們和故障有關。
@@ -422,8 +429,13 @@ cs-gpios = <&gpio 8 1>;
 
 所以本 repo 一再在各家廠商身上看到的模式，不是巧合。**大家都是從官方參考繼承來的**，
 而那兩個設定正好藏住了三個缺陷中的兩個：50 MHz 是驅動那個壞掉的延遲換算唯一會算出可用
-值的時脈（缺陷 3），而 `reset-gpios` flag 0 讓 `gpiod_set_value(reset, 1)` 把腳位拉
-**高**，RESET_N 從來不觸發，晶片也就永遠不會被踢出 SPI 模式（缺陷 2）。
+值的時脈（缺陷 3）。
+
+**2026-08-24 更正。** 這一段原本還聲稱 `reset-gpios` flag 0 也藏住了缺陷 2，理由是
+`gpiod_set_value(reset, 1)` 把腳位拉高、RESET_N 從不觸發。那是錯的：`morse_driver`
+2.0.1 全樹沒有任何 `gpiod_` 呼叫，flag 被解析後就丟棄，RESET_N 到處都會觸發。藏住
+缺陷 2 的是 device tree 看不見的東西 —— 一份核心 patch。細節見「為什麼 OpenMANET
+不需要這個修正」。
 
 同一份文件的屬性表對 `reset-gpios` 只寫「GPIO descriptor connected to the MM6108
 RESET line」，**對極性隻字未提**。
@@ -1409,9 +1421,81 @@ Morse 只放在 OpenWrt 的 `find_data_ack` 修改（掃描到 accept token 才�
 
 ### 為什麼 OpenMANET 不需要這個修正
 
-因為它從來不 reset 晶片。它的 `reset-gpios` flag 是 0（`GPIO_ACTIVE_HIGH`），所以
-`morse_hw_reset()` 的 `gpiod_set_value(reset, 1)` 是把腳位拉**高** —— RESET_N 根本
-沒有真的觸發。在這塊板子上實測（模組電源在 GPIO18，我們控制得到）：
+**2026-08-24 重寫。** 原本站在這裡的解釋是錯的，取代它的說法證據更硬，而且對上游論點
+更有利。錯的只有「OpenMANET 為什麼逃過一劫」這一段；下面的實測與 `patches/upstream/`
+裡的修正都不受影響。
+
+**它有 reset 晶片。** 它自己的開機 log：
+
+```
+[   10.066857] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[   10.074667] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[   10.083313] Resetting Morse Chip
+[   10.894587] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+```
+
+`Resetting Morse Chip` 是 `morse_hw_reset()` 裡的 `pr_info()`，印在 `gpio_request()`
+成功之後、腳位被拉低之前。這台 AP 跑的**就是本 repo 讀的那一版驅動 2.0.1**，而且和
+station 一樣在每次 probe 都打 RESET_N 脈衝。
+
+**`reset-gpios` 那個 flag 是惰性的。** `morse_driver` 2.0.1 全樹沒有任何 `gpiod_`
+呼叫 —— `git grep gpiod_` 零命中。`of.c` 用 `of_get_named_gpio()` 讀腳位，那個函式只
+回傳編號、丟掉 flags；`hw.c` 的 `morse_hw_reset()` 用舊式整數 API，而
+`gpio_direction_output()` 就是 `gpiod_direction_output_raw()`，按定義繞過極性反轉。
+把 flag 從 0 改成 1 不可能改變驅動的行為。這正是為什麼「單獨測 `reset-gpios` flag 0
+毫無效果」—— 下面記為需要解釋的怪事 —— 其實就是正確結果。
+
+**OpenMANET 真正有的是一份核心 patch，而且是 Morse Micro 自己寫的。**
+`OpenMANET/firmware` 的
+`target/linux/bcm27xx/patches-6.6/991-0007-spi-support-control-cs-pin-on-init.patch`
+（`MorseMicro/openwrt` 裡有同一份，檔名 `999-001-morse-spi_driver_gpio_descriptor.patch`），
+作者 Sagar Bussa <sagar.bussa@morsemicro.com>，2025-03-13。它在核心的 SPI core 加了
+一個旗標：
+
+```diff
+--- a/include/linux/spi/spi.h
++#define SPI_CONTROLLER_ENABLE_CS_GPIOD BIT(9)
+
+--- a/drivers/spi/spi.c          /* spi_setup() */
+   if (ctlr->use_gpio_descriptors && ctlr->cs_gpiods &&
+-      ctlr->cs_gpiods[spi->chip_select] && !(spi->mode & SPI_CS_HIGH)) {
++      ctlr->cs_gpiods[spi->chip_select] && !(spi->mode & SPI_CS_HIGH) &&
++      !(ctlr->flags & SPI_CONTROLLER_ENABLE_CS_GPIOD)) {
+           spi->mode |= SPI_CS_HIGH;
+
+--- a/drivers/spi/spi.c          /* spi_set_cs() */
+-      gpiod_set_value_cansleep(spi_get_csgpiod(spi, 0), activate);
++      gpiod_set_value_cansleep(spi_get_csgpiod(spi, 0),
++          (spi->controller->flags & SPI_CONTROLLER_ENABLE_CS_GPIOD) ? enable : activate);
+```
+
+它的 commit message 把用途講得很白：*「The Morse Micro driver requires control of the
+chip select line during initialisation, to correctly sequence the line to enter SPI
+mode. This patch adds a bit which instructs the bus to not force the chip select high
+in during spi_setup.」*
+
+核心有這份 patch 時，`morse_spi_initsequence()` 的 `SPI_CS_HIGH` 翻轉才真的會解除
+CS，74 個訓練時脈才落得正確，晶片在每次 reset 之後都回得到 SPI 模式。沒有這份 patch
+時，`spi_setup()` 會對 `cs-gpios` 裝置把 `SPI_CS_HIGH` 強制加回去，翻轉變成空操作，
+訓練訊號在晶片被選中的狀態下送出去。**這就是 AP 與 station 之間的全部差別** —— 同樣的
+SenseCAP M1 硬體、同樣的 MM6108A1、同樣的驅動 2.0.1、同樣的 `cs-gpios = <&gpio 8 1>`、
+probe 時同樣會 reset。只有核心樹不同。
+
+**第三方的獨立佐證。** `OpenMANET/packages` 帶著
+`morse-micro/mm6108-driver/patches/021-spi-demote-cs-gpiod-warning-to-runtime.patch`，
+它的檔頭寫著：*「`SPI_CONTROLLER_ENABLE_CS_GPIOD` 不是主線核心的旗標；它是由一份
+Morse Micro 對 `include/linux/spi/spi.h` 的 patch 加上去的，而只有 bcm27xx 目標帶著
+那份 patch……驅動的 `#warning` 退路在核心的 `-Werror` 下是致命的……沒有它，CS 可能
+在 `spi_setup` 期間被強制拉高。」* 有人在 ramips 目標上踩到了缺陷 1，用和本 repo 一樣
+的方式修掉，並在同一段文字裡描述了缺陷 2 的機制。
+
+**這讓上游論點變強而不是變弱。** Morse Micro 自己對缺陷 2 的解法是修補核心的 SPI
+core；本 repo 的解法是在驅動內用 `SPI_NO_CS`，不需要動核心，因此在原廠 Raspberry Pi
+OS 核心上就能用。上面記為「一個本 repo 構成反例的廠商說法」的那句 *「patching the
+kernel is practically required」*，現在背後有一份具名、有作者、Morse 自己寫的 patch。
+反例依然成立，而且更銳利了。
+
+**下面這組實測不受影響。** 在這塊板子上量的（模組電源在 GPIO18，我們控制得到）：
 
 | | 回應 |
 |---|---|
@@ -1420,8 +1504,8 @@ Morse 只放在 OpenWrt 的 `find_data_ack` 修改（掃描到 accept token 才�
 | 之後補訓練 | `ff c0 7f` —— 救不回來（中間已有一次 CS 拉低的命令） |
 
 第 1→2 步是最乾淨的：同一次上電、只多了一個 reset 脈衝，狀態就從對齊變偏移。
-**RESET_N 會把晶片踢出 SPI 模式。** 所以 OpenMANET 一直留在上電時的模式，壞掉的訓練
-無所謂；本倉庫的 overlay 用 flag 1，reset 真的觸發，壞掉的訓練就補不回來。
+**RESET_N 會把晶片踢出 SPI 模式**，而只有訓練訊號能把它放回去。這就是為什麼壞掉的
+訓練在未修補的核心上是致命的、在修補過的核心上完全看不出來 —— reset 兩邊都會發生。
 
 **但要註明：上電後的狀態不是百分之百確定的** —— 五次冷上電裡有一次上電就已經偏移。
 原因不明。晶片**通常**上電就在 SPI 模式，不是必然。
@@ -1429,12 +1513,13 @@ Morse 只放在 OpenWrt 的 `find_data_ack` 修改（掃描到 accept token 才�
 這也解釋了兩句我們很早就搜到、當時看不懂的社群回覆 —— *「實體斷電重來就好了，軟體
 重開機不行」*、*「我們大部分佈署都用一個 reset script 在開機時 toggle reset 線」*。
 實體斷電讓晶片重新進入 SPI 模式；軟體重開機不行，因為模組沒斷電，仍停在上一次
-RESET_N 脈衝留下的狀態。它同時解釋了為什麼單獨測 `reset-gpios` flag 0 毫無效果：那時
-晶片早就被先前幾次開機的 reset 踢出 SPI 模式了，而那次測試從未斷過電。
+RESET_N 脈衝留下的狀態。至於為什麼單獨測 `reset-gpios` flag 0 毫無效果：驅動根本不讀
+那個 flag，所以沒有東西可以改變。本檔案原本為那個結果給出的一長串解釋，就此撤回。
 
 **有了修正，上面這些都不重要。** 驅動會在 reset 之後立刻用正確方式送訓練，所以不管
-晶片上電時是什麼狀態、被 reset 過幾次，都會進到 SPI 模式。OpenMANET 是**繞過**了這個
-問題，不是處理了它 —— 修正把原本靠運氣的事變成確定的。
+晶片上電時是什麼狀態、被 reset 過幾次、核心有沒有帶 Morse 那份 SPI core patch，都會
+進到 SPI 模式。OpenMANET 的做法是**要求一個修補過的核心**；這個修正讓驅動在任何核心
+上都是對的。
 
 **一則方法論註記。** 這個測試的早期版本在重新供電後只等 1.5 秒，結果得到一幅完全不同
 的圖像 —— 全部偏移，連先前驗證過能成功的序列也偏移。模組需要超過 1.5 秒才會接受任何
@@ -1505,10 +1590,11 @@ A/B 找到的四個差異，用兩次 overlay 改動全部關掉了，失敗指�
 | `reset-gpios` flag 1 | 改成 `<&gpio 17 0>`，和 OpenMANET 一致 | 確認生效；**偏移不變** |
 | `spi-max-frequency` | —— | RUN 4 已消除 |
 
-`reset-gpios` 這一項值得留個墓誌銘。那個 flag 是 `GPIO_ACTIVE_LOW`，而
-`morse_hw_reset()` 用 `gpiod_set_value(reset, 1)` 宣告 reset —— flag 1 會把腳位拉
-**低**、RESET_N 真的觸發；flag 0 則拉**高**，意思是 **OpenMANET 上驅動的 reset 脈衝
-很可能從來沒有真的發生過**。而今晚修好 `tools/mmcspi.py` 的 `reset_module()`、讓
+`reset-gpios` 這一項值得留個墓誌銘。當時的推論是：flag 是 `GPIO_ACTIVE_LOW`，而
+`morse_hw_reset()` 用 `gpiod_set_value(reset, 1)` 宣告 reset，所以 flag 1 拉低、
+flag 0 拉高，意思是 OpenMANET 上的 reset 脈衝很可能從來沒發生過。**2026-08-24 更正：
+那個推論的前提是錯的** —— `morse_hw_reset()` 用的是舊式整數 API 而不是
+`gpiod_set_value()`，flag 從頭到尾沒被讀過，OpenMANET 上的 reset 每次開機都確實發生。而今晚修好 `tools/mmcspi.py` 的 `reset_module()`、讓
 reset 真的發生之後，CMD0 的尾巴從 `ff c0 7f` 變成了 `1f c0 7f` —— 所以「reset 脈衝
 本身把晶片推進偏移狀態」是個有根據的假設。現在它死了。
 

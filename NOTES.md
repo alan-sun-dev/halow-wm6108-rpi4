@@ -276,8 +276,11 @@ official Linux Porting Guide was read for the first time. Its EKH01 reference
 overlay specifies `spi-max-frequency = <50000000>` and `reset-gpios = <&gpio 5
 0>` — 50 MHz and flag 0. **Every implementation examined inherits those two
 settings from the official reference**, and they are exactly what makes defect 3
-invisible (the broken delay model only lands on a working value at 50 MHz) and
-defect 2 invisible (flag 0 means RESET_N never fires). The same document contains
+invisible (the broken delay model only lands on a working value at 50 MHz). It
+was recorded here that flag 0 also hid defect 2 by stopping RESET_N from firing;
+**that was wrong, corrected 2026-08-24** — the flag is never read by the driver,
+and what actually hides defect 2 is a kernel patch Morse ships for OpenWrt. See
+"Why OpenMANET never needed the fix". The same document contains
 **zero** mentions of chip select, deassert, 74 clocks, initialisation sequence,
 inter-transaction delays, CMD53/CMD63 or troubleshooting — counts taken with
 positive controls. Full table in "Five implementations, one reference
@@ -328,9 +331,12 @@ ways that agree to 0.1 dB. Detail in "Reading the link", below.
 **The AP transmitter stall is recoverable without rebooting.** `wifi reload` ✗ →
 debugfs `restart` ✗ → debugfs **`reset` ✓**. The claim recorded here after the
 first two occurrences — that only a reboot recovers it — is wrong. A full
-firmware reload (`restart`) is not enough; the bus reset is. Likely because this
-AP's `reset-gpios` flag is 0, so RESET_N never fires and nothing short of the bus
-reset path reaches the chip. The third occurrence, like the second, followed
+firmware reload (`restart`) is not enough; the bus reset is. The reason,
+established 2026-08-24: **the driver is built into the OpenMANET kernel**, so
+`wifi reload` cannot unload it and never re-runs probe — `Resetting Morse Chip`
+appears exactly once in 47907 s of uptime, at boot. Nothing short of the bus
+reset path reaches the chip. (An earlier note blamed `reset-gpios` flag 0; that
+explanation is withdrawn.) The third occurrence, like the second, followed
 nothing. Detail in "The AP's transmitter stalls", below.
 
 **Two diagnostic corrections worth carrying forward.** The Heltec's *ping* is not
@@ -444,16 +450,18 @@ investigation was about.
 | DT node | `mm610x@0` | `mm6108@0` |
 | Radio | managed, `country=SG` | AP, S1G 923.0 MHz / BW 2 MHz, mapped ch157, 22 dBm, SSID `BCM2711-57e7`, SAE + PMF, `wds=1` |
 | **SPI clock** | **10 MHz** (`00 98 96 80`) | **50 MHz** (`02 fa f0 80`) |
-| **`reset-gpios`** | pin 17 **flag 1** — RESET_N genuinely fires | pin 17 **flag 0** — RESET_N never fires |
+| **`reset-gpios`** | pin 17 flag 1 | pin 17 flag 0 — **and the flag is inert either way**: 2.0.1 has no `gpiod_` call, so RESET_N fires on both |
 | **Chip selects** | **two** (gpio 8, gpio 7), from `dtparam=spi=on` | **one** (gpio 8) |
 | Pin pulls | `halow_pins`: 17 up, 5/23/24 down; no `spi0_pins` group, so MISO/MOSI/SCLK sit at the BCM2711 default (down) | `morse_reset` 17 up, `morse_irq` 5 up, `morse_wake` 23 up, `morse_busy` 24 down; `spi0_pins` 9/10/11 up |
 
-**Why the AP never hit any of the three defects** is in those rows. 50 MHz is the
-one clock at which the driver's delay scaling happens to produce a working value,
-so defect 3 stays invisible. `reset-gpios` flag 0 means RESET_N never fires, so
-the chip is never knocked out of SPI mode and defect 2 stays invisible. The
-station runs 10 MHz with RESET_N actually firing, which exposes both — and the
-series in `patches/upstream/` is what carries it through.
+**Why the AP never hit any of the three defects.** Half of it is in those rows and
+half is not. 50 MHz is the one clock at which the driver's delay scaling happens
+to produce a working value, so defect 3 stays invisible, and the station's 10 MHz
+exposes it. Defect 2 is **not** explained by any row of this table: it is hidden
+by a kernel patch that OpenMANET carries and Raspberry Pi OS does not — see "Why
+OpenMANET never needed the fix". The `reset-gpios` difference in the row above
+explains nothing, because the driver never reads the flag. The series in
+`patches/upstream/` is what carries the station through both.
 
 The pin-pull and chip-select differences were each eliminated as causes during
 the A/B (see the sections below); they are listed here because they are real
@@ -498,10 +506,15 @@ cs-gpios = <&gpio 8 1>;
 
 So the pattern this repo kept finding across vendors is not a coincidence.
 **Everyone inherits it from the official reference**, and those two settings are
-precisely what hides two of the three defects: 50 MHz is the one clock at which
-the driver's broken delay model lands on a working value (defect 3), and a
-`reset-gpios` flag of 0 means `gpiod_set_value(reset, 1)` drives the pin *high*
-so RESET_N never fires and the chip is never knocked out of SPI mode (defect 2).
+precisely what hides one of the three defects: 50 MHz is the one clock at which
+the driver's broken delay model lands on a working value (defect 3).
+
+**Correction, 2026-08-24.** This paragraph used to claim that a `reset-gpios` flag
+of 0 hid defect 2 as well, via `gpiod_set_value(reset, 1)` driving the pin high so
+RESET_N never fired. That is wrong: `morse_driver` 2.0.1 contains no `gpiod_` call
+at all, so the flag is parsed and discarded and RESET_N fires everywhere. Defect 2
+is hidden by something the device tree cannot show — a kernel patch. Details in
+"Why OpenMANET never needed the fix".
 
 The property table in the same document describes `reset-gpios` only as "GPIO
 descriptor connected to the MM6108 RESET line" and **says nothing about
@@ -1304,11 +1317,17 @@ link held for the remaining 18 minutes of 1 Hz monitoring (486 replies, 41
 losses, 40 of them the deliberate power-off while a board was carried to the next
 measurement position).
 
-A likely reason `wifi reload` cannot do it: **this AP's `reset-gpios` flag is 0**,
-so RESET_N never fires on this board. Tearing down and recreating the interface
-cannot put the chip through a hardware reset; the bus reset path is what reaches
-it. That is the same device-tree property that made the AP immune to all three
-SPI defects the station hit — here it works against it.
+Why `wifi reload` cannot do it, established 2026-08-24: **the driver is built into
+the OpenMANET kernel.** `lsmod` lists no `morse`, `/sys/module/morse` does not
+exist, and `morse_spi` appears under `/sys/bus/spi/drivers/` as a built-in. So
+`wifi reload` cannot `rmmod` it, never re-enters probe, and therefore never calls
+`morse_hw_reset()` — `Resetting Morse Chip` appears exactly **once** in this AP's
+log, at boot, across 47907 s of uptime that includes the stall episodes. Tearing
+down and recreating the interface cannot put the chip through a hardware reset;
+the bus reset path is what reaches it.
+
+An earlier version of this paragraph blamed `reset-gpios` flag 0 "so RESET_N never
+fires on this board". That is withdrawn — the flag is never read by the driver.
 
 ### What the host sees while it is stalled: nothing at all
 
@@ -1645,9 +1664,88 @@ otherwise be tried again.
 
 ### Why OpenMANET never needed the fix
 
-Because it never resets the chip. Its `reset-gpios` flag is 0
-(`GPIO_ACTIVE_HIGH`), so `morse_hw_reset()`'s `gpiod_set_value(reset, 1)` drives
-the pin *high* — RESET_N never actually fires. Measured on this board, with the
+**Rewritten 2026-08-24.** The explanation that stood here was wrong, and what
+replaces it is both better evidenced and better for the upstream argument. What
+was wrong was only the *reason OpenMANET escapes*; the measurement below and the
+fix in `patches/upstream/` are untouched.
+
+**It does reset the chip.** Its own boot log:
+
+```
+[   10.066857] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[   10.074667] morse_spi spi0.0: morse_of_probe: Reading gpio pins configuration from device tree
+[   10.083313] Resetting Morse Chip
+[   10.894587] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+```
+
+`Resetting Morse Chip` is the `pr_info()` inside `morse_hw_reset()`, printed after
+`gpio_request()` succeeds and immediately before the pin is driven low. The AP runs
+**the same driver version this repo reads**, `2.0.1`, and pulses RESET_N at probe
+exactly as the station does.
+
+**The `reset-gpios` flag is inert.** `morse_driver` 2.0.1 contains no `gpiod_` call
+anywhere — `git grep gpiod_` over the tree returns zero hits. `of.c` reads the pin
+with `of_get_named_gpio()`, which returns the number and discards the flags, and
+`hw.c: morse_hw_reset()` uses the legacy integer API, whose `gpio_direction_output()`
+is `gpiod_direction_output_raw()` and bypasses polarity inversion by construction.
+Changing the flag from 0 to 1 cannot change what the driver does. That is why
+"testing `reset-gpios` flag 0 on its own changed nothing", recorded below as an
+oddity needing an explanation, was simply the correct result.
+
+**What OpenMANET actually has is a kernel patch, written by Morse Micro.**
+`OpenMANET/firmware`, `target/linux/bcm27xx/patches-6.6/991-0007-spi-support-control-cs-pin-on-init.patch`
+— identical copy in `MorseMicro/openwrt` as
+`999-001-morse-spi_driver_gpio_descriptor.patch` — from Sagar Bussa
+<sagar.bussa@morsemicro.com>, 2025-03-13. It adds a flag to the kernel's SPI core:
+
+```diff
+--- a/include/linux/spi/spi.h
++#define SPI_CONTROLLER_ENABLE_CS_GPIOD BIT(9)
+
+--- a/drivers/spi/spi.c          /* spi_setup() */
+   if (ctlr->use_gpio_descriptors && ctlr->cs_gpiods &&
+-      ctlr->cs_gpiods[spi->chip_select] && !(spi->mode & SPI_CS_HIGH)) {
++      ctlr->cs_gpiods[spi->chip_select] && !(spi->mode & SPI_CS_HIGH) &&
++      !(ctlr->flags & SPI_CONTROLLER_ENABLE_CS_GPIOD)) {
+           spi->mode |= SPI_CS_HIGH;
+
+--- a/drivers/spi/spi.c          /* spi_set_cs() */
+-      gpiod_set_value_cansleep(spi_get_csgpiod(spi, 0), activate);
++      gpiod_set_value_cansleep(spi_get_csgpiod(spi, 0),
++          (spi->controller->flags & SPI_CONTROLLER_ENABLE_CS_GPIOD) ? enable : activate);
+```
+
+Its commit message states the purpose outright: *"The Morse Micro driver requires
+control of the chip select line during initialisation, to correctly sequence the
+line to enter SPI mode. This patch adds a bit which instructs the bus to not force
+the chip select high in during spi_setup."*
+
+With that patch in the kernel, `morse_spi_initsequence()`'s `SPI_CS_HIGH` flip
+genuinely deasserts CS, the 74 training clocks land correctly, and the chip returns
+to SPI mode after every reset. Without it, `spi_setup()` forces `SPI_CS_HIGH` back
+on for a `cs-gpios` device, the flip is a no-op, and the burst goes out with the
+chip selected. **That is the entire difference between the AP and the station** —
+same SenseCAP M1 hardware, same MM6108A1, same driver 2.0.1, same
+`cs-gpios = <&gpio 8 1>`, same reset at probe. Only the kernel tree differs.
+
+**Independent confirmation, from a third party.** `OpenMANET/packages` carries
+`morse-micro/mm6108-driver/patches/021-spi-demote-cs-gpiod-warning-to-runtime.patch`,
+whose header reads: *"`SPI_CONTROLLER_ENABLE_CS_GPIOD` is not a mainline kernel
+flag; it is added by a Morse Micro patch to `include/linux/spi/spi.h` that only the
+bcm27xx target carries … the driver's `#warning` fallback is fatal under the
+kernel's `-Werror` … Without it CS may be forced high during `spi_setup`."* Someone
+else hit defect 1 on a ramips target and fixed it the same way this repo did, and
+described defect 2's mechanism in the same breath.
+
+**This strengthens the upstream case rather than weakening it.** Morse Micro's own
+answer to defect 2 is to patch the kernel's SPI core. This repo's answer is
+`SPI_NO_CS` inside the driver, which needs no kernel patch and therefore works on a
+stock Raspberry Pi OS kernel. The community claim that *"patching the kernel is
+practically required"* — recorded above as a vendor claim this repo is a
+counter-example to — turns out to have a specific, named, Morse-authored patch
+behind it. The counter-example still stands, and it is now a sharper one.
+
+**The measurement that started this is unaffected.** Taken on this board, with the
 module's power under our control on GPIO18:
 
 | | response |
@@ -1658,9 +1756,9 @@ module's power under our control on GPIO18:
 
 Step 1 → 2 is the clean one: same power-on, nothing changed but a reset pulse,
 and the chip goes from aligned to offset. **RESET_N takes the chip out of SPI
-mode.** So OpenMANET stays in the mode it powered up in and the broken burst is
-harmless there; this repo's overlay uses flag 1, the reset genuinely fires, and
-the broken burst cannot put it back.
+mode**, and only the training burst can put it back. That is why a broken burst is
+fatal on an unpatched kernel and invisible on a patched one — the reset happens
+either way.
 
 **Caveat:** the power-on state is not perfectly deterministic — 1 of 5 cold
 power-ups came up already offset. Cause unknown. The chip *usually* powers up in
@@ -1671,14 +1769,15 @@ time — *"the issue resolved after a physical power cycle rather than a soft
 reboot"* and *"most of our deployments use a reset script to toggle the reset
 line on boot"*. A physical power cycle puts the chip back into SPI mode; a soft
 reboot does not, because the module keeps power and stays where the last RESET_N
-pulse left it. And it explains why testing `reset-gpios` flag 0 on its own
-changed nothing: by then the chip had long been taken out of SPI mode by earlier
-boots, and was never power-cycled during that test.
+pulse left it. As for why testing `reset-gpios` flag 0 on its own changed nothing:
+the flag is never read by the driver, so there was nothing for it to change. The
+elaborate explanation this file used to give for that result is withdrawn.
 
 **With the fix none of this matters.** The driver delivers the training correctly
 straight after reset, so the chip ends up in SPI mode regardless of how it powered
-up or how often it has been reset. OpenMANET works by *avoiding* the problem, not
-by handling it — the fix makes it deterministic instead of lucky.
+up, how often it has been reset, or whether the kernel carries Morse's SPI-core
+patch. OpenMANET works by requiring a patched kernel; the fix makes the driver
+correct on any kernel.
 
 **A methodology note.** An earlier version of this test waited only 1.5 s after
 re-applying power and produced a completely different picture — everything

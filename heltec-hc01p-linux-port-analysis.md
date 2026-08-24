@@ -316,12 +316,40 @@ load-bearing one and demotes the reset-flag story to a red herring — which als
 *"testing flag 0 alone changed nothing"*, already recorded in NOTES.md as an unexplained
 result. It is no longer unexplained.
 
-**The limit of this claim:** I have not re-read the driver that OpenMANET actually ships
-(it is built into that kernel, with no source on the box), and OpenWrt carries Morse patches
-that this repo has already found to differ from the released driver. If OpenMANET's build
-does use a descriptor, the original sentence could be true *of that build*. It is not true of
-`mm6108-2.0.1` as published, which is what the port will use. Worth one direct check before
-the NOTES text is rewritten, rather than editing it on this analysis alone.
+**Settled the same day, and the answer is better than the guess above.** The check was run:
+OpenMANET's `morse-feed` at the pinned `fc332b0` applies 18 patches to the driver and **not
+one of them touches `morse_hw_reset()`, `gpiod_`, or `reset-gpios`** — the only GPIO patch
+adds a separate 4v3 FEM line, also through the legacy `gpio_*` API. The AP runs
+`rel_mm6108_2_0_1_2026_Jun_11`, i.e. this exact source, and its own boot log carries
+`Resetting Morse Chip`. So it resets, with the same code, and the flag is inert there too.
+
+What OpenMANET has instead is a **kernel** patch, written by Morse Micro:
+`OpenMANET/firmware`,
+`target/linux/bcm27xx/patches-6.6/991-0007-spi-support-control-cs-pin-on-init.patch`
+(Sagar Bussa <sagar.bussa@morsemicro.com>, 2025-03-13; identical copy in `MorseMicro/openwrt`).
+It adds `SPI_CONTROLLER_ENABLE_CS_GPIOD` to `include/linux/spi/spi.h` and two conditions to
+`drivers/spi/spi.c`: `spi_setup()` stops forcing `SPI_CS_HIGH` for a `cs-gpios` device, and
+`spi_set_cs()` honours the driver's CS_HIGH flip. Its commit message says why in as many
+words — *"The Morse Micro driver requires control of the chip select line during
+initialisation, to correctly sequence the line to enter SPI mode."*
+
+That is the whole difference between the AP and the station: same SenseCAP M1, same MM6108A1,
+same driver 2.0.1, same `cs-gpios = <&gpio 8 1>`, same reset at probe — different kernel tree.
+And it upgrades L1 from a likelihood to a mechanism: on a Raspberry Pi OS kernel, which does
+not carry that patch, the CS-deassert in `morse_spi_initsequence()` cannot work.
+
+**Independent confirmation.** `OpenMANET/packages` carries
+`morse-micro/mm6108-driver/patches/021-spi-demote-cs-gpiod-warning-to-runtime.patch`: *"…not
+a mainline kernel flag; it is added by a Morse Micro patch … that only the bcm27xx target
+carries … the driver's `#warning` fallback is fatal under the kernel's `-Werror` … Without it
+CS may be forced high during `spi_setup`."* A third party hit B1 on a ramips target and fixed
+it the same way this repo did.
+
+**Consequence for the upstream report.** Morse Micro's own answer to defect B is to patch the
+kernel's SPI core. This repo's `SPI_NO_CS` fix does it in the driver and needs no kernel
+patch, so it works on a stock Raspberry Pi OS kernel. The community claim that *"patching the
+kernel is practically required"* now has a specific named patch behind it — and this repo is
+still the counter-example.
 
 ---
 
@@ -428,8 +456,10 @@ own experiment (U3, L4).
 
 ## 7. What would falsify the main conclusions
 
-- **V7/§5** would fall if a `gpiod_` call exists in a build of the driver that this project
-  actually runs but has not read — specifically OpenMANET's built-in copy.
+- ~~**V7/§5** would fall if a `gpiod_` call exists in a build of the driver that this project
+  actually runs but has not read — specifically OpenMANET's built-in copy.~~ **Checked
+  2026-08-24: no such call exists.** The feed's 18 driver patches leave `morse_hw_reset()`
+  untouched, and the AP's own log shows it resetting. V7 stands.
 - **L1** would fall if a 6.6-kernel build of unpatched 2.0.1 on this HAT probes cleanly. That
   is a cheap experiment and worth doing deliberately at stage 3 before applying patch 2, on a
   throwaway boot, since it would settle the mechanism for the upstream report as well.

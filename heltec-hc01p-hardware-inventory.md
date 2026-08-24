@@ -504,12 +504,16 @@ int morse_hw_reset(int reset_pin)
 4. This did happen on this machine and the chip survived it: `Resetting Morse Chip` appears
    in the log at the driver reload, followed by a successful firmware load and association.
 
-**This contradicts a claim currently recorded in NOTES.md** ("its `reset-gpios` flag is 0,
-so `gpiod_set_value(reset, 1)` drives the pin *high* and RESET_N never fires"). That
-sentence cannot describe morse_driver 2.0.1, which contains no `gpiod_set_value` at all. See
-the analysis document for what the evidence supports instead. Flagged rather than silently
-corrected, because the NOTES conclusion was drawn from a hardware measurement that is not in
-dispute — only its explanation is.
+**This contradicted a claim recorded in NOTES.md** ("its `reset-gpios` flag is 0, so
+`gpiod_set_value(reset, 1)` drives the pin *high* and RESET_N never fires"). That sentence
+cannot describe morse_driver 2.0.1, which contains no `gpiod_set_value` at all.
+
+**Settled 2026-08-24 and NOTES.md is now corrected.** The OpenMANET AP's own boot log shows
+`Resetting Morse Chip` — so it *does* reset, running the same 2.0.1 — and what actually lets
+it survive that is a Morse-authored kernel patch,
+`991-0007-spi-support-control-cs-pin-on-init.patch`, which adds
+`SPI_CONTROLLER_ENABLE_CS_GPIOD` to the SPI core so the driver's CS-deassert during the
+training burst genuinely works. Full account in the analysis document, §5.
 
 ## 11. Kernel configuration relevant to the port
 
