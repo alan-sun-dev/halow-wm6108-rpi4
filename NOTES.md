@@ -218,6 +218,54 @@ driver.)
   This one came up as `BST` while the AP and the laptop are on Taipei time, and a
   7-hour skew briefly made one reboot look like two. Now set to `Asia/Taipei`.
 
+### The Ethernet backup path was broken in the way that is hardest to catch
+
+The direct-cable fallback — laptop straight to the Pi's RJ45, no house network
+involved — was configured at stage 1 and left untested, because testing it costs
+the `en5` cable. Tested 2026-08-25, and it failed.
+
+It was set up as `ipv4.method=auto` with a manual `10.42.0.2/24` and
+`may-fail=yes`, on the assumption that NetworkManager would take a DHCP lease when
+one was offered and fall back to the static address when none was. **It does not
+work that way.** With `method=auto`, no lease means IPv4 configuration is
+unavailable and the whole activation fails, and the manual address is irrelevant to
+that decision:
+
+```
+device (eth0): state change: ip-config -> failed (reason 'ip-config-unavailable')
+device (eth0): Activation: failed for connection 'eth0-bench'
+dhcp4 (eth0): state changed no lease
+device (eth0): Activation: starting connection 'eth0-bench'      <- loops, 4 times
+```
+
+**The dangerous part is that it works first.** The address *is* applied during the
+`ip-config` phase, so for the first ~45 s the link pings at 0.6 ms and SSH works —
+and then the DHCP attempt times out, the address is withdrawn and the path dies.
+Four retries later NM gives up and the interface sits `disconnected` with no
+address. A short "does it work" test passes; the path is useless when it is
+actually needed. That is worse than having no backup path at all, because it gets
+recorded as verified.
+
+Fix: `ipv4.method=manual`. There is no DHCP attempt, so there is nothing to fail.
+Verified afterwards on all three levels rather than by ping alone — NM reports
+`connected` with **0 failed activations**, 180/180 pings at 0.640 ms avg and
+0.863 ms max over three minutes (four times the window that killed the old one),
+and after a reboot `eth0`, `sun` and `halow` all come up unattended.
+
+The cost, stated because it is a real trade: this interface will not take a lease
+if it is ever plugged into a real network. For an emergency path whose whole point
+is to work when nothing else does, determinism is the right choice; if DHCP is ever
+wanted, add a *second* higher-priority profile and let NM fall through rather than
+changing this one.
+
+**A measurement discarded rather than explained away.** The first three-minute
+ping after the fix read 8.3% loss with a 3517 ms maximum, which looks like the fix
+did not work. That window overlapped a reboot — ~15 lost packets against ~20 s of
+downtime. It is confounded and proves nothing in either direction, so it was thrown
+out and re-run clean rather than reasoned about. Eleventh instance of the theme in
+[[feedback-verify-instruments]], and the first where the faulty instrument was
+something built here.
+
 ### The second kernel: 6.12.96, and what it removes from the caveat
 
 **The one honest weakness in the above — "one kernel, two hardwares" — is gone.**

@@ -29,7 +29,7 @@ modprobe   options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:9
 NM         sun    wlan0 → house SSID, priority 20
            halow  bound to MAC 0C:BF:74:40:8E:91, sae, pmf 3,
                   wifi.powersave 2, ipv4.never-default yes
-           eth0-bench  DHCP plus a fixed 10.42.0.2/24, priority 100
+           eth0-bench  STATIC 10.42.0.2/24, priority 100 — deliberately not DHCP
 ```
 
 Four things in there are load-bearing and easy to get wrong:
@@ -52,8 +52,11 @@ Four things in there are load-bearing and easy to get wrong:
 2. **Ethernet** — backup, needs no house network. Move `en5` to this Pi's RJ45,
    then `sudo ifconfig en5 alias 10.42.0.100 netmask 255.255.255.0` on the Mac
    (the `netmask` keyword is required; without it macOS assigns /8 and swallows
-   `10.41.0.0/16`), and `ssh alan@10.42.0.2`. Untested as of 2026-08-25 — the
-   Wi-Fi path has never needed it, and `en5` is the scarce resource.
+   `10.41.0.0/16`), and `ssh alan@10.42.0.2`. **Verified end to end 2026-08-25**,
+   including across a reboot: 180/180 pings, 0% loss, 0.640 ms avg / 0.863 ms max,
+   and the interface comes up on its own at boot alongside the Wi-Fi and HaLow
+   profiles. Note `en5` is the scarce resource — taking it costs the AP *and* the
+   station's HaLow address.
 3. **HaLow** — `ssh alan@10.41.0.216` from a host on the `10.41.0.0/16` segment.
 
 ## Files here
@@ -69,7 +72,7 @@ onto the card.
 boot/firstrun.sh                 first-boot provisioning, deletes itself
 boot/authorized_keys             the Mac's ed25519 public key
 boot/sun.nmconnection            wlan0 → house SSID
-boot/eth0.nmconnection           eth0 → DHCP + 10.42.0.2/24
+boot/eth0.nmconnection           eth0 → static 10.42.0.2/24 (read its comment first)
 secrets.env.example              template for the two values kept out of git
 apply-to-card.sh                 copies the above onto /Volumes/bootfs, substitutes
                                  the secrets, edits cmdline.txt

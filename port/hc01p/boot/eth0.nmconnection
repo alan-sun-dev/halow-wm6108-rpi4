@@ -1,3 +1,36 @@
+# Direct-cable backup path. Deliberately static, NOT DHCP.
+#
+# This started life as ipv4.method=auto plus a manual address plus
+# may-fail=yes, on the assumption that NetworkManager would take the DHCP lease
+# when one was offered and fall back to the static address when none was. It
+# does not. Measured 2026-08-25 with the cable going straight to a laptop and no
+# DHCP server on it:
+#
+#   device (eth0): state change: ip-config -> failed (reason 'ip-config-unavailable')
+#   device (eth0): Activation: failed for connection 'eth0-bench'
+#   dhcp4 (eth0): state changed no lease
+#   device (eth0): Activation: starting connection 'eth0-bench'      <- loops
+#
+# With method=auto, "no lease" makes IPv4 config unavailable and the whole
+# activation fails, regardless of the manual address. The address IS applied
+# during the ip-config phase, so the link works for the first ~45 seconds and
+# then dies when the DHCP attempt times out -- which is worse than not having a
+# backup path at all, because a short test looks like it passes.
+#
+# method=manual removes the DHCP attempt, so there is nothing to fail.
+# Verified: connected, address held, 0% loss well past the 45 s that killed the
+# previous version, and no further failed activations.
+#
+# The cost is that this interface will not take a lease if it is ever plugged
+# into a real network. That is the right trade for an emergency path whose whole
+# purpose is to work when nothing else is available. If DHCP is ever wanted here,
+# add a SECOND, higher-priority profile with method=auto rather than changing
+# this one -- NetworkManager falls through to the next profile when one fails.
+#
+# Mac side: sudo ifconfig en5 alias 10.42.0.100 netmask 255.255.255.0
+# The netmask keyword is required; without it macOS assigns /8 and swallows
+# 10.41.0.0/16.
+
 [connection]
 id=eth0-bench
 uuid=5c7d9e34-2a16-4f88-b0d3-1e6f8c4a2d57
@@ -9,13 +42,11 @@ interface-name=eth0
 [ethernet]
 
 [ipv4]
-method=auto
+method=manual
 address1=10.42.0.2/24
-may-fail=true
+never-default=true
 
 [ipv6]
-addr-gen-mode=default
-method=auto
-may-fail=true
+method=disabled
 
 [proxy]
