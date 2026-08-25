@@ -39,6 +39,18 @@ which measurement. Nothing here is from a README or a forum post.
 > is mandatory or the driver invents a random MAC on every load, and
 > `morse_driver` carries a git submodule that must be initialised or the build
 > fails in a way that looks unrelated.
+>
+> **U4 revisited, 2026-08-25: 6.12.96 was tested too, and it works.** The board was
+> upgraded to `6.12.96+rpt-rpi-v8`; pristine 2.0.1 fails to build there with the
+> identical `spi.c:1519` error, the patched driver builds clean and runs, and the
+> link comes up unattended with SAE + PMF, `errors 0`, MCS7. The driver source is
+> byte-identical across both builds (`srcversion 87374779AA811C291578351`), so the
+> kernel is the only variable. **`SPI_CONTROLLER_ENABLE_CS_GPIOD` was also counted
+> directly in both kernels' `spi.h` — 0 occurrences in each** — which turns the
+> "it is a Morse vendor-kernel flag" claim from inference into a measurement. This
+> removes the "one kernel, two hardwares" caveat that the rest of this document and
+> the upstream report were carefully hedged around. 6.6.51 remains the reference on
+> the station board so both comparisons exist.
 
 ---
 
@@ -510,9 +522,12 @@ own experiment (U3, L4).
   **Run 2026-08-25, and it did not probe cleanly.** Patch 1 only, patches 2 and 3 absent
   (verified by grep count before building): `failed to init SPI with CMD63 (ret:-71)`, and with
   instrumentation `mode=0x4` at all three points plus `c0 7f` where `01 ff` was expected. L1
-  stands and is now measured rather than reasoned. Note what did **not** change between the two
-  reproductions: the kernel. This is one kernel on two hardwares, not two kernels — the upstream
-  report should keep saying so.
+  stands and is now measured rather than reasoned. At the time of that run the kernel was the
+  one thing held constant, making it *one kernel on two hardwares*. **That caveat was removed
+  later the same day**: the board was moved to 6.12.96 and the whole sequence re-run — pristine
+  2.0.1 fails to build with the identical error, the patched driver builds clean and the link
+  comes up. It is now two kernels on two hardwares, and the macro's absence was counted in both
+  kernels' headers rather than inferred.
 - ~~**U1** would be settled either way by the RF-symmetry check at stage 4.~~ **Settled 2026-08-25:
   the AP sees the station at `-1 dBm`, `rx packets` climbing, `tx retries 0 / tx failed 0`, and
   mmrc holds MCS7 at 100% over 49/49 attempts. The BCF is compatible.**

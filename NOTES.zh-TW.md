@@ -52,8 +52,8 @@ SenseCAP M1 上那支 overlay 是 10 MHz + flag 1，三個缺陷同時在場。�
 
 兩次重現之間換掉的軸：模組（Wio-WM6108／Heltec HT-HC01 V2）、晶片（MM6108**A1**／
 **A2**）、載板（SenseCAP M1 mPCIe／Heltec Pi HAT）、chip select 數（二／一）、device
-tree（本 repo 的／原廠的）。**沒有**換的是核心，兩次都是 6.6.51。所以這仍然是「一個
-核心、兩種硬體」，對上游就要這樣講。
+tree（本 repo 的／原廠的）。當時**沒有**換的是核心，兩次都是 6.6.51 —— **而這個限制
+在同一天稍晚就解除了，見下面「第二個核心」那節。**
 
 分析文件 §7 寫「若未修正的 2.0.1 在這片 HAT 的 6.6 上 probe 成功，L1 就被推翻」。它
 沒有成功。**L1 從推論升格為實測。**
@@ -198,9 +198,60 @@ t = 8.61 s  BCF 載入
 - **拿板子的 log 跟別台對時間之前，先確認它的時區。** 這台開起來是 `BST`，而 AP 和筆電
   都在台北時間，7 小時的偏差一度讓一次重開機看起來像兩次。現已設為 `Asia/Taipei`。
 
+### 第二個核心：6.12.96，以及它拿掉了哪個保留
+
+**上面唯一誠實承認的弱點 ——「一個核心、兩種硬體」—— 沒有了。** 板子升級到
+**6.12.96+rpt-rpi-v8**，整套重跑一次。
+
+| | 6.6.51 | 6.12.96 |
+|---|---|---|
+| 原始 `mm6108-2.0.1` 編譯 | ❌ `spi.c:1519 #warning … [-Werror=cpp]` | ❌ **同一行、同一個錯誤** |
+| 套 patch 1+2+3 | ✅ 0 error、0 warning | ✅ **0 error、0 warning** |
+| probe／SAE／DHCP | ✅ | ✅ |
+| SPI `errors`／`timedout` | 0／0 | 0／0 |
+
+兩邊的驅動原始碼完全相同 —— 兩次建置的 `srcversion` 都是
+`87374779AA811C291578351` —— 所以兩欄之間唯一的變因就是核心。
+
+**一件原本靠推論的事，現在是直接查證。** 整個缺陷 1 所繫的那個巨集，在**兩個**核心的
+標頭檔裡都不存在：
+
+```
+SPI_CONTROLLER_ENABLE_CS_GPIOD  在 include/linux/spi/spi.h 的出現次數
+  6.6.51  : 0
+  6.12.96 : 0
+```
+
+所以「`SPI_CONTROLLER_ENABLE_CS_GPIOD` 是 Morse 自己加在核心上的」這句話，現在是數過
+兩個 Raspberry Pi OS 核心得來的，不是推出來的。B1 不是單一核心的偶然。
+
+**另外一併確認：2.0.1 在 6.12 上沒有 API 相容性問題。** 這件事原本真的未知 —— 站台當初
+在 6.12.93 上測的是**未修正**版本，只證明了它會用同樣的方式失敗。修正過的版本編得乾淨、
+也跑得起來。
+
+6.12 上無人介入的開機在 **t = 5.28 s** 載入 BCF，t ≈ 8 s 完成關聯，第一次就成功、沒有
+`CONN_FAILED`。AP 端讀到 `-1 dBm`、`rx packets` 持續增加、`tx retries 0 / tx failed 0`，
+mmrc 穩在 **MCS7 / 4 MHz、100%、50/50**，零 look-around 封包。20/20 ping，mdev 0.21 ms。
+
+**升級的做法，順序本身是重點。** 先跑 `apt upgrade`（199 個套件，核心會自動被擋下來，
+因為升核心需要安裝**新**套件），把使用者空間的變動跟核心的變動分開；那一步本身也通過了
+一次重開機，而且模組完全沒動。然後才是 `apt full-upgrade`，並且**先 hold 住
+`rpi-eeprom`** —— 開機韌體跟這個實驗無關，擋住它才能維持單一變因。重開機之前，把當時
+執行中的 `kernel8.img` 和 `initramfs8` 複製成 `kernel8-6.6.51.img` /
+`initramfs8-6.6.51`，**放在 FAT 開機分割區上**，那是筆電掛得上的，所以萬一新核心開不
+起來，從別台機器改 `config.txt` 加兩行就能救回來。什麼都沒有被移除：兩個 `linux-image`
+套件和兩棵 `/lib/modules` 都在，驅動也在兩個核心的 `updates/` 底下各裝一份。
+
+一件不要再犯的事：建置 log 原本寫在 `/tmp`，被重開機清掉，證據只好重新產生一次。現在
+建置 log 放在板上的 `~/halow-test/buildlogs/`。
+
+**站台 `55:04` 刻意留在 6.6.51**，所以「同核心、兩硬體」那組對照也還在。兩種比較現在
+都有了。
+
 ### 證據
 
-`logs/2026-08-25-hc01p-rpios-stage{2-devicetree,3a-defectB-reproduced,3a-defectB-mechanism,3b-driver-up,4a-station-associated,4b-persistent}.txt`。
+`logs/2026-08-25-hc01p-rpios-stage{2-devicetree,3a-defectB-reproduced,3a-defectB-mechanism,3b-driver-up,4a-station-associated,4b-persistent}.txt`
+以及 `logs/2026-08-25-hc01p-rpios-kernel-6.12-second-kernel.txt`。
 Overlay：`overlays/mm610x-spi-hc01p.dts`。首次開機的佈署檔與儀器 diff：`port/hc01p/`。
 
 ## 2026-08-24 深夜 —— HT-H7608 的 HaLow 介面不屬於任何防火牆區域

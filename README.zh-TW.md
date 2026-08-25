@@ -124,11 +124,16 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 > 重現是在 10 MHz + flag 1，三個缺陷同時在場。
 >
 > 兩次之間換掉的：模組、晶片版本（A1 → A2）、載板、chip select 數、device tree。
-> **沒有**換的是核心。所以這是「一個核心、兩種硬體」，不是兩個核心。
 >
-> 另外在那塊板子上也確認了缺陷 1 就是單純的編譯失敗：原始 2.0.1 在 6.6.51 上給出
-> `spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not
-> defined" [-Werror=cpp]`，沒有 `morse.ko`。它不是「只影響 mainline」的註腳。
+> **然後核心也換了。** 板子升級到 **6.12.96+rpt-rpi-v8** 再跑一次：原始 2.0.1 在那裡
+> 一樣編不過，`spi.c:1519` 同一個錯誤；修正過的版本零警告編成，鏈路無人介入就起來 ——
+> SAE + PMF、`errors 0`、MCS7。兩次建置的驅動原始碼相同
+> （`srcversion 87374779AA811C291578351`），所以核心是唯一變因。
+> `SPI_CONTROLLER_ENABLE_CS_GPIOD` 在**兩個核心的 `spi.h` 裡都出現 0 次**，是數出來的
+> 不是假設的 —— 它是 Morse 自己加在核心上的。
+>
+> 所以缺陷 1 既不是「只影響 mainline」的註腳，也不是單一核心的偶然：兩個核心、兩種
+> 硬體、兩個晶片版本。
 >
 > 移植文件：[`heltec-hc01p-linux-port-analysis.md`](heltec-hc01p-linux-port-analysis.md)、
 > [`heltec-hc01p-hardware-inventory.md`](heltec-hc01p-hardware-inventory.md)、

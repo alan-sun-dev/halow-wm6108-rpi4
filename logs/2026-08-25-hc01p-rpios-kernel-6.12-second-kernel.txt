@@ -1,0 +1,90 @@
+### HT-HC01P: the patched driver on a SECOND kernel, 6.12.96
+### captured 2026-08-25T05:09:05Z
+###
+### Purpose: the issue #15 / PR #16 evidence was 'one kernel, two hardwares'.
+### This makes it two kernels. Same board, same device tree, same firmware,
+### same BCF, same driver source -- only the kernel changed.
+
+=== host ===
+hc01p
+Linux hc01p 6.12.96+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.96-1+rpt1 (2026-07-24) aarch64 GNU/Linux
+Serial		: 100000004dd92ccc
+
+=== SPI_CONTROLLER_ENABLE_CS_GPIOD is in NEITHER kernel (it is a Morse vendor patch) ===
+  6.6.51   occurrences in include/linux/spi/spi.h: 0
+  6.12.96  occurrences in include/linux/spi/spi.h: 0
+
+=== B1 on 6.12.96: pristine mm6108-2.0.1 does NOT build ===
+/home/alan/halow-test/morse_driver/spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not defined" [-Werror=cpp]
+make: *** [Makefile:199: all] Error 2
+  no morse.ko produced
+
+=== with patches 1+2+3 it builds clean on 6.12.96 ===
+  tag mm6108-2.0.1  commit 98e1936c04ef9a62212c1c64b970218ecf08d15d
+  SPI_NO_CS: 4   SPI_MIN_DELAY_BYTES: 6
+  error/warning lines: 0
+make[1]: Leaving directory '/usr/src/linux-headers-6.12.96+rpt-rpi-v8'
+
+=== boot on 6.12.96, unattended ===
+[    4.477673] Morse Micro Dot11ah driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[    5.116371] morse micro driver registration. Version 0-rel_mm6108_2_0_1_2026_Jun_11
+[    5.116639] Resetting Morse Chip
+[    5.268247] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+[    5.284370] morse_spi spi0.0: Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170, crc32 0x389a48c4
+[    5.957452] morse_spi spi0.0: Failed to set regulatory to country TW, staying in SG
+
+=== same driver source as the 6.6.51 build ===
+  srcversion running: 87374779AA811C291578351
+  srcversion on the 6.6.51 build was the same: 87374779AA811C291578351
+
+=== link ===
+  iface wlan1  MAC 0c:bf:74:40:8e:91
+wlan1            UP             10.41.0.216/16 
+bssid=3c:1a:cc:70:3f:ca
+pairwise_cipher=CCMP
+group_cipher=CCMP
+key_mgmt=SAE
+pmf=2
+mgmt_group_cipher=BIP
+wpa_state=COMPLETED
+  power_save: Power save: off   enable_ps modparam: 2
+  SPI errors 0  timedout 0
+
+=== association: first attempt, no CONN_FAILED, no backoff ===
+Aug 25 13:03:48 hc01p wpa_supplicant[553]: wlan1: SME: Trying to authenticate with 3c:1a:cc:70:3f:ca (SSID='BCM2711-57e7' freq=5765 MHz)
+Aug 25 13:03:48 hc01p wpa_supplicant[553]: wlan1: SME: Trying to authenticate with 3c:1a:cc:70:3f:ca (SSID='BCM2711-57e7' freq=5765 MHz)
+Aug 25 13:03:48 hc01p wpa_supplicant[553]: wlan1: Associated with 3c:1a:cc:70:3f:ca
+Aug 25 13:03:49 hc01p wpa_supplicant[553]: wlan1: WPA: Key negotiation completed with 3c:1a:cc:70:3f:ca [PTK=CCMP GTK=CCMP]
+Aug 25 13:03:49 hc01p wpa_supplicant[553]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+
+=== both kernels remain installed; the way back is on the FAT partition ===
+  /lib/modules/6.12.96+rpt-rpi-2712/
+  /lib/modules/6.12.96+rpt-rpi-v8/
+  /lib/modules/6.6.51+rpt-rpi-2712/
+  /lib/modules/6.6.51+rpt-rpi-v8/
+  /boot/firmware/initramfs8
+  /boot/firmware/initramfs8-6.6.51
+  /boot/firmware/kernel8-6.6.51.img
+  /boot/firmware/kernel8.img
+
+=== AP side: RF symmetry on 6.12 ===
+	rx bytes:	11548
+	rx packets:	95
+	tx retries:	0
+	tx failed:	0
+	signal:  	0 dBm
+	signal avg:	0 dBm
+	connected time:	304 seconds
+--- mmrc ---
+Peer: 0c:bf:74:40:8e:91
+Cycle: 2757
+--------------Rate------------- ---Probability-- ---------Last--------   ------Total------ ----MPDU-----
+SS MCS BW Guard Selection Index Evidence Average Retry Success Attempt   Success   Attempt Success  Fail 
+ 1   7  4   SGI      A       47        0     100     0       0       0        71        71       0     0
+ 1   6  4   SGI       B      41        0       0     0       0       0         0         0       0     0
+ 1   5  4   SGI        C     35        0       0     0       0       0         0         0       0     0
+ 1   0  4   SGI         D     5        0       0     0       0       0         0         0       0     0
+
+Number of packets sent: 71 including 0 look-around packets
+=== pings ===
+  Mac -> station : 20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 3.430/5.091/13.157/2.928 ms 

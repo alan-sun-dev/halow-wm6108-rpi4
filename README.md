@@ -135,13 +135,18 @@ SPI from a Raspberry Pi 4.
 > play at once.
 >
 > Changed between the two: module, silicon revision (A1 → A2), carrier,
-> chip-select count, device tree. **Not** changed: the kernel. This is one kernel
-> on two hardwares, not two kernels.
+> chip-select count, device tree.
 >
-> Also confirmed there as a plain build failure: pristine 2.0.1 on 6.6.51 gives
-> `spi.c:1519:2: error: #warning "SPI_CONTROLLER_ENABLE_CS_GPIOD macro not
-> defined" [-Werror=cpp]` and no `morse.ko`. Defect 1 is not a mainline-only
-> footnote.
+> **And then the kernel too.** The board was moved to **6.12.96+rpt-rpi-v8** and
+> the sequence re-run: pristine 2.0.1 fails to build there with the identical
+> `spi.c:1519` error, the patched driver builds with zero warnings, and the link
+> comes up unattended — SAE + PMF, `errors 0`, MCS7. Same driver source in both
+> builds (`srcversion 87374779AA811C291578351`), so the kernel is the only
+> variable. `SPI_CONTROLLER_ENABLE_CS_GPIOD` occurs **0 times in either kernel's
+> `spi.h`**, counted rather than assumed — it is a Morse vendor-kernel addition.
+>
+> So defect 1 is not a mainline-only footnote and not a single-kernel accident:
+> two kernels, two hardwares, two silicon revisions.
 >
 > Port documents: [`heltec-hc01p-linux-port-analysis.md`](heltec-hc01p-linux-port-analysis.md),
 > [`heltec-hc01p-hardware-inventory.md`](heltec-hc01p-hardware-inventory.md),

@@ -57,8 +57,8 @@ defects were in play at once. The variable is isolated now.
 Axes changed between the two reproductions: module (Wio-WM6108 / Heltec HT-HC01
 V2), silicon (MM6108**A1** / **A2**), carrier (SenseCAP M1 mPCIe / Heltec Pi HAT),
 chip-select count (two / one), device tree (this repo's / the vendor's). Not
-changed: the kernel, 6.6.51. So this is still *one kernel, two hardwares* — say it
-that way upstream.
+changed at the time: the kernel, 6.6.51 in both — **and that limitation was removed
+later the same day, see "The second kernel" below.**
 
 Analysis document §7 said L1 would fall if unpatched 2.0.1 probed cleanly on this
 HAT under 6.6. It did not. **L1 is measured, not reasoned.**
@@ -218,9 +218,68 @@ driver.)
   This one came up as `BST` while the AP and the laptop are on Taipei time, and a
   7-hour skew briefly made one reboot look like two. Now set to `Asia/Taipei`.
 
+### The second kernel: 6.12.96, and what it removes from the caveat
+
+**The one honest weakness in the above — "one kernel, two hardwares" — is gone.**
+The board was upgraded to **6.12.96+rpt-rpi-v8** and everything was re-run.
+
+| | 6.6.51 | 6.12.96 |
+|---|---|---|
+| pristine `mm6108-2.0.1` builds | ❌ `spi.c:1519 #warning … [-Werror=cpp]` | ❌ **same line, same error** |
+| with patches 1+2+3 | ✅ 0 errors, 0 warnings | ✅ **0 errors, 0 warnings** |
+| probe / SAE / DHCP | ✅ | ✅ |
+| SPI `errors` / `timedout` | 0 / 0 | 0 / 0 |
+
+The driver source is identical across both — `srcversion 87374779AA811C291578351`
+in both builds — so the only variable between the two columns is the kernel.
+
+**A claim that was previously inference is now a direct check.** The macro the
+whole of defect 1 turns on is absent from *both* kernels' headers:
+
+```
+SPI_CONTROLLER_ENABLE_CS_GPIOD  occurrences in include/linux/spi/spi.h
+  6.6.51  : 0
+  6.12.96 : 0
+```
+
+So `SPI_CONTROLLER_ENABLE_CS_GPIOD` is confirmed as a Morse vendor-kernel addition
+by counting it in two Raspberry Pi OS kernels, not by reasoning about it. B1 is not
+a single-kernel accident.
+
+**Separately settled: 2.0.1 has no API breakage on 6.12.** That was genuinely
+unknown — the station board's earlier 6.12.93 test ran the *unpatched* driver and
+only established that it fails the same way. The patched driver compiles clean and
+runs.
+
+On 6.12 the unattended boot reaches `Loaded BCF` at **t = 5.28 s** and association
+completes by t ≈ 8 s, first attempt, no `CONN_FAILED`. The AP reads the station at
+`-1 dBm` with `rx packets` climbing, `tx retries 0 / tx failed 0`, and mmrc holding
+**MCS7 / 4 MHz at 100% over 50/50** with zero look-around packets. 20/20 pings at
+mdev 0.21 ms.
+
+**How the upgrade was done, because the ordering matters.** `apt upgrade` first
+(199 packages, kernel automatically held back because a kernel bump needs a *new*
+package) to separate userspace changes from the kernel change; that alone survived
+a reboot with the module untouched. Then `apt full-upgrade` with **`rpi-eeprom`
+held** — the bootloader has nothing to do with this experiment and holding it keeps
+the variable single. Before rebooting, the running `kernel8.img` and `initramfs8`
+were copied to `kernel8-6.6.51.img` / `initramfs8-6.6.51` **on the FAT boot
+partition**, which is readable from the laptop, so a kernel that would not boot is
+recoverable by adding two lines to `config.txt` from another machine. Nothing was
+removed: both `linux-image` packages and both `/lib/modules` trees remain, and the
+driver is installed under `updates/` for both kernels.
+
+One thing worth not repeating: the build logs were written to `/tmp`, which the
+reboot cleared, so the evidence had to be regenerated. Build logs now live in
+`~/halow-test/buildlogs/` on the board.
+
+**The station board `55:04` stays on 6.6.51 deliberately**, so the "same kernel,
+two hardwares" pairing still exists as well. Both comparisons are now available.
+
 ### Evidence
 
-`logs/2026-08-25-hc01p-rpios-stage{2-devicetree,3a-defectB-reproduced,3a-defectB-mechanism,3b-driver-up,4a-station-associated,4b-persistent}.txt`.
+`logs/2026-08-25-hc01p-rpios-stage{2-devicetree,3a-defectB-reproduced,3a-defectB-mechanism,3b-driver-up,4a-station-associated,4b-persistent}.txt`
+and `logs/2026-08-25-hc01p-rpios-kernel-6.12-second-kernel.txt`.
 Overlay: `overlays/mm610x-spi-hc01p.dts`. First-boot payload and the
 instrumentation diff: `port/hc01p/`.
 

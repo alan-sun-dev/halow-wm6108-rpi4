@@ -1,9 +1,10 @@
 # HT-HC01P → Raspberry Pi OS
 
-**Done, 2026-08-25.** The board runs Raspberry Pi OS bookworm 6.6.51 with
-morse_driver 2.0.1 plus this repo's three `patches/upstream/` fixes, associated to
-the OpenMANET AP with SAE + PMF at `10.41.0.216`, and it comes up unattended from
-a cold start. Full account in [NOTES.md](../../NOTES.md) under 2026-08-25; the
+**Done, 2026-08-25.** The board runs Raspberry Pi OS bookworm with morse_driver
+2.0.1 plus this repo's three `patches/upstream/` fixes, associated to the
+OpenMANET AP with SAE + PMF at `10.41.0.216`, and it comes up unattended from a
+cold start. **Verified on two kernels — 6.6.51 and 6.12.96** — with the same
+driver source; it currently runs 6.12.96 and both are installed. Full account in [NOTES.md](../../NOTES.md) under 2026-08-25; the
 verdict tables in
 [`heltec-hc01p-linux-port-analysis.md`](../../heltec-hc01p-linux-port-analysis.md)
 record what was predicted against what happened.
@@ -17,10 +18,11 @@ the slot the OpenWrt node is simply gone; that is expected, not a fault.
 ## Installed configuration
 
 ```
-image      2024-11-19-raspios-bookworm-arm64-lite   kernel 6.6.51+rpt-rpi-v8
+image      2024-11-19-raspios-bookworm-arm64-lite
+kernel     6.12.96+rpt-rpi-v8 running; 6.6.51+rpt-rpi-v8 also installed
 overlay    dtoverlay=mm610x-spi-hc01p       (NOT dtparam=spi=on — see below)
 cmdline    cfg80211.ieee80211_regdom=TW     (for the brcmfmac interface only)
-driver     /lib/modules/6.6.51+rpt-rpi-v8/updates/{morse,dot11ah}.ko
+driver     /lib/modules/<both kernels>/updates/{morse,dot11ah}.ko
 firmware   /lib/firmware/morse/mm6108.bin              468304 B  crc32 0xbe7b5c8f
 BCF        /lib/firmware/morse/bcf_HC01_V2_H.bin         1170 B  crc32 0x389a48c4
 modprobe   options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:91
@@ -79,7 +81,10 @@ instrument-initsequence.patch    4 log calls used to prove defect B is the same
 ## Rebuilding the driver on the board
 
 The 2024-11-19 image already ships matching `linux-headers`, so nothing has to be
-transplanted. `git`, `build-essential` and `bc` were the only additions.
+transplanted. `git`, `build-essential` and `bc` were the only additions. To build
+for a kernel other than the running one, point `KERNEL_SRC` at it — that is how
+the 6.12 module was built while still running 6.6.51, which keeps the risky step
+(the reboot) separate from the step that can fail loudly (the build).
 
 ```sh
 cd ~/halow-test/morse_driver          # tag mm6108-2.0.1, commit 98e1936
@@ -93,5 +98,25 @@ sudo install -m 644 morse.ko dot11ah/dot11ah.ko /lib/modules/$(uname -r)/updates
 sudo depmod -a
 ```
 
-**Do not `apt full-upgrade`** — it would move the kernel to 6.12 and break the
-comparison against the station board, which is on this exact kernel.
+Build logs go in `~/halow-test/buildlogs/` on the board, **not `/tmp`** — a reboot
+clears `/tmp` and the evidence for the 6.12 run had to be regenerated once because
+of that.
+
+**On upgrading.** The original advice here was "do not `apt full-upgrade`",
+to keep this board on the station board's kernel while the port was being
+established. That is done and recorded, so the freeze has been lifted — the board
+was deliberately taken to 6.12.96 to test the patched driver on a second kernel,
+and it works. Two things worth keeping from how that was done:
+
+- `apt upgrade` holds the kernel back on its own (a kernel bump needs a *new*
+  package), so it is the safe way to take security updates without touching the
+  module. Run it detached — `systemd-run --unit=... apt-get -y upgrade` — because
+  the NetworkManager upgrade restarts the service and a dropped SSH session must
+  not be able to interrupt dpkg.
+- Before a kernel change, copy the running `kernel8.img` and `initramfs8` to
+  suffixed names on the FAT boot partition. If the new kernel will not boot, the
+  card can be mounted on a laptop and `config.txt` pointed back with
+  `kernel=kernel8-6.6.51.img` / `initramfs initramfs8-6.6.51`. `rpi-eeprom` is
+  held (`apt-mark hold`) so the bootloader stays out of the experiment.
+
+**The station board stays on 6.6.51** so the same-kernel comparison still exists.
