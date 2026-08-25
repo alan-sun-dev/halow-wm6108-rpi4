@@ -53,6 +53,42 @@ house Wi-Fi on that board had degraded to **−84 dBm at 1.0 Mbit/s with 10% los
 while HaLow sat at −49 dBm, so on that floor HaLow is not the fallback — it is
 the good link.
 
+### HaLow throughput at both ends of the range, 2026-08-26
+
+Measured with `iperf` 2.1.8 between each station and the AP, so the data path is
+one HaLow hop and nothing else. 10 s per direction, TCP.
+
+| | `dkmstest` (A2, beside the AP) | station `55:04` (A1, one floor up) |
+|---|---|---|
+| signal | **−29 dBm** | −49 dBm |
+| uplink, station → AP | **8.92 Mbit/s** | 3.56 Mbit/s |
+| downlink, AP → station | **8.73 Mbit/s** | 5.34 Mbit/s |
+| the AP's own `expected throughput` | 14.648 Mbps | 5.859 Mbps |
+| measured against that estimate | −40% | −9% |
+
+**One floor costs roughly half the throughput** — 60% of the uplink and 39% of
+the downlink — for 20 dB of signal.
+
+The near figures are close to the ceiling of this link: both directions land at
+about the same place (8.9 up, 8.7 down) and the first five seconds of each run
+are faster than the second five (10.9 → 8.8 and 13.2 → 8.8), which is TCP's
+window still opening. Steady state is ~8.8 Mbit/s, symmetric.
+
+The gap against the AP's own estimate is larger close in (−40%) than far out
+(−9%). The estimate is a rate-control figure for the air interface; TCP, headers
+and medium access take a bigger proportional bite when the air is fast.
+
+Both were measured on the **DKMS-installed** module on `6.12.96+rpt-rpi-v8`, so
+this is also a throughput data point for the packaged build: `SPI errors 0`,
+`timedout 0` across 125,975 messages, `tx failed 0` at both ends, and neither
+station's association dropped. `dkmstest` ended the run with 729 tx retries, the
+highest of the three nodes — that is the node that just moved 25 MB, and with
+`tx failed 0` it means every retry eventually succeeded.
+
+The station one floor up shares the channel and was saturated for the ~20 s of
+the test; it recovered immediately, back to 34.3 ms average with 1.8 ms mdev to
+`1.1.1.1`.
+
 ### Two failed attempts, and the real cause
 
 The first two attempts left the AP unreachable and were rolled back. Both
