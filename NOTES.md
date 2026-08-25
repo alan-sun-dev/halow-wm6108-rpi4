@@ -2,6 +2,101 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-25 (evening) — the AP became a router, and the HaLow segment got internet
+
+The OpenMANET AP was a LAN appliance with no WAN: `br-lan` bridged `eth0`,
+`wlh0` and `phy1-ap0` together on `10.41.0.0/16`, reachable only over a USB
+Ethernet cable to the laptop. The HaLow segment was an island. That is now
+changed, so that nodes behind a HaLow link can reach the internet.
+
+```
+                       UniFi 192.168.108.1 ──> internet
+                               │
+                  eth0 = WAN, static 192.168.108.5/24, NAT
+                               │
+                    ┌──────────┴──────────┐
+                    │   AP (57:E7)        │
+                    │   br-lan 10.41.254.1│  ← wlh0 + phy1-ap0 only
+                    └──────────┬──────────┘
+                         HaLow │ 922 MHz, 4 MHz
+              ┌────────────────┼────────────────┐
+        station .208       H7608 .197      hc01p .216
+        one floor up
+        default route via HaLow
+```
+
+**Reach the AP at `ssh root@192.168.108.5`.** `10.41.254.1` is now the HaLow-side
+address only and is not reachable from the laptop. `br-lan` keeps serving DHCP to
+the three HaLow nodes, so their addresses are unchanged.
+
+The `wan` firewall zone is `input REJECT`, so two explicit rules carry all
+management access and **must not be deleted**: `Allow-SSH-house` (tcp/22 from
+`192.168.108.0/24`) and `Allow-Ping-mgmt`. NAT is the stock `masq='1'` on that
+zone, which was already configured — nothing had to be added for it.
+
+### The station now defaults out over HaLow, and that is the better path
+
+`ipv4.never-default yes` had been set on the `halow` profile precisely because
+the AP had no internet; with the AP routing, that setting became the only thing
+in the way. It is now `no`, with `ipv4.route-metric 100` against the house
+Wi-Fi's 601, so HaLow wins and Wi-Fi is the backup.
+
+Measured from the station, one floor from the AP, both paths to `1.1.1.1`:
+
+| out via | loss | avg | max | mdev |
+|---|---|---|---|---|
+| **HaLow** | 0% | **34.9 ms** | 40.4 ms | **4.8** |
+| house Wi-Fi | 0% | 115.1 ms | 328 ms | 111.7 |
+
+A real HTTPS fetch over HaLow returned `HTTP 200`, 47,826 bytes, in 2.4 s. The
+house Wi-Fi on that board had degraded to **−84 dBm at 1.0 Mbit/s with 10% loss**
+while HaLow sat at −49 dBm, so on that floor HaLow is not the fallback — it is
+the good link.
+
+### Two failed attempts, and the real cause
+
+The first two attempts left the AP unreachable and were rolled back. Both
+diagnoses along the way were wrong and are worth recording as such:
+
+- **"the firewall rejects it"** — no. The pre-existing `Allow-Ping` rule accepts
+  echo-request, and the nft counters showed **1 packet of 45** reaching the input
+  chain at all. Packets were not being rejected; they were not arriving.
+- **"reverse-path filtering"** — no. `rp_filter` is `0` on `all`, `default` and
+  `eth0`.
+
+The actual cause was an address-plan error. The transition address was
+`10.41.0.254/16`, which is **inside br-lan's own `10.41.0.0/16`**:
+
+```
+10.41.0.0/16 dev br-lan  src 10.41.254.1
+10.41.0.0/16 dev eth0    src 10.41.0.254     <- two routes, one subnet
+```
+
+The AP could not tell which interface reached `10.41.0.100`, and most replies
+left via `br-lan` — over the air, in the wrong direction. Moving the transition
+address to `10.42.0.254/24`, which overlaps nothing, made it work on the first
+try. **Any second address on this box must avoid both `10.41.0.0/16` and
+`192.168.108.0/24`.**
+
+### What made this safe
+
+Every attempt ran detached with a timed auto-rollback: copy `network` and
+`firewall` aside, apply, and unless a confirm file appears within N minutes,
+copy the backups back and `reload_config`. It fired twice, and it is the only
+reason the AP never needed recovering by hand — it sits on a desk, but its
+`eth0` was the only way in. Backups remain on the AP as
+`/etc/config/{network,firewall}.bak3` and `.bak4`.
+
+The HaLow side was never disturbed by any of it: across all three attempts the
+station's association never dropped, and SPI `errors`/`timedout` stayed at 0.
+
+### Not done
+
+Devices *behind* a HaLow node still cannot get out — only the nodes themselves
+can. That needs `hostapd` + DHCP + NAT on the station, or the HT-H7608, which
+does exactly this in its own web UI and is the device the vendor diagram shows
+in that role.
+
 ## 2026-08-25 — the HT-HC01P is ported to Raspberry Pi OS, and defect B reproduces on a second board
 
 The Heltec HT-HC01P (MM6108**A2** on a Pi HAT, SPI) now runs **Raspberry Pi OS

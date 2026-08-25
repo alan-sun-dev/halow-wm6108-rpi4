@@ -19,9 +19,17 @@ only direct comparison left.
 ## Prepare *before* swapping the card
 
 The probe is Python and needs `python3` plus the `spidev` module. A stock
-OpenWrt image is unlikely to have either, and OpenMANET comes up as a LAN
-appliance on 10.41.254.1 with no WAN, so `opkg update` will not reach the
-internet. Fetch the packages onto the laptop first.
+OpenWrt image is unlikely to have either.
+
+> **Changed 2026-08-25 (evening).** This used to add "and OpenMANET comes up as a
+> LAN appliance on 10.41.254.1 with no WAN, so `opkg update` will not reach the
+> internet." That is no longer true of *our* AP: its `eth0` was moved out of
+> `br-lan` and made a WAN port with NAT, so it now reaches the internet and is
+> reached at `ssh root@192.168.108.5`. `10.41.254.1` remains its HaLow-side
+> address and is not reachable from the laptop. See NOTES.md, "2026-08-25
+> (evening)". The statement still holds for a **freshly flashed** OpenMANET card,
+> which is what the rest of this section is about, so fetch the packages onto the
+> laptop first anyway.
 
 Target is **OpenWrt 24.10, `aarch64_cortex-a72`, kernel 6.6.138**. You need
 `python3-light` (or `python3-base`) and `python3-spidev`, plus `kmod-spi-dev`.
