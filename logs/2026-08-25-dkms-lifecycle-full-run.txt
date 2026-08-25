@@ -427,3 +427,20 @@ record: /home/alan/halow-test/dkms-lifecycle-record.txt
 1043- The default action is to keep your current version.
 1044-*** initramfs.conf (Y/I/N/O/D/Z) [default=N] ? dpkg: error processing package initramfs-tools-core (--configure):
 1045- end of file on stdin at conffile prompt
+
+===== SOAK CHECKPOINT — station 55:04 (MM6108A1, 6.6.51), read-only =====
+taken 2026-08-25T18:16:51+08:00. No reload, restart or reboot.
+  uptime            8274 s (2 h 17 m)
+  module            0-rel_mm8108_2_0_0_2026_Apr_21  srcversion 89A7C1DAC9B51F941EFC8F2
+  SPI messages      774947
+  SPI bytes         236782092
+  SPI errors        0
+  SPI timedout      0
+  tx retries        34 (AP side) / 76 (station side)
+  tx failed         0 / 0
+  MCS               VHT-MCS 7 both directions, expected throughput 14.648 Mbps
+  connected time    8263 s against uptime 8274 s -> associated 11 s after boot,
+                    one association for the whole soak, no re-association
+  MFP               yes;  authorized: yes
+  AP                up 1 d 18 h 45 m, 2 stations (the HC01P is absent by design:
+                    its card is out while the DKMS test card is in that board)
