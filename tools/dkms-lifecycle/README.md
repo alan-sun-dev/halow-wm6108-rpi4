@@ -116,6 +116,18 @@ The A1 hardware. The test board is the HAT, so the lifecycle is validated on
 MM6108A2 only. Repeating it on the SenseCAP carrier would need that board, which
 is soaking, and a fourth card.
 
+## Soak classification
+
+The A1 station's result at the time of writing is **"short-duration soak passed
+under sustained real SPI activity"** — 2 h 32 m, SPI counters climbing
+continuously (854,517 messages / 259.8 MB) with `errors 0`, `timedout 0`,
+`tx failed 0` at both ends and a single unbroken association. That is **not**
+long-term stability and must not be described as such. The metric that matters is
+not uptime on its own: it is that message and byte counts keep rising while the
+error counters stay at zero. Checkpoints continue at roughly 6, 12, 24 and 48
+hours using `tools/soak/soak-checkpoint.sh`, which is read-only and takes the
+same fixed measurement set every time.
+
 ## Results, 2026-08-25
 
 All ten legs ran. The lifecycle itself works: `dkms install` on 6.6.51 →
@@ -181,14 +193,17 @@ laptop's USB-Ethernet to the board's RJ45 reached it in one ping. That profile i
 
 ## Lessons
 
-**Lesson 1 — `AUTOINSTALL="no"` in dkms 3.0.10 does not behave as assumed.** It
-does not disable autoinstall. `/usr/sbin/dkms` tests `[[ ! $AUTOINSTALL ]]`,
+**Lesson 1 — `AUTOINSTALL="no"` in dkms 3.0.10 does not behave as assumed.**
+**This is a DKMS semantic, not a Morse driver defect, and not a bug in the
+driver, the firmware or HaLow.** It does not disable autoinstall. `/usr/sbin/dkms` tests `[[ ! $AUTOINSTALL ]]`,
 which is a test for *empty*, so every non-empty string is truthy and `"no"` is
 identical in effect to `"yes"`. The off state is the variable being absent or
 empty. `packaging/dkms/dkms.conf.in` in the fork now says `"yes"`, which is what
 it always did and what the hardware run validated.
 
-**Lesson 2 — `apt -y` does not answer dpkg conffile prompts.** `-y` answers apt.
+**Lesson 2 — `apt -y` does not answer dpkg conffile prompts.** The failed
+kernel-upgrade stage was **an incomplete dpkg transaction — not Morse, not
+HaLow, not DKMS.** `-y` answers apt.
 A conffile prompt comes from dpkg, and with stdin closed it fails the package:
 `end of file on stdin at conffile prompt`. Every unattended upgrade in this
 procedure uses
@@ -210,7 +225,32 @@ package state is sound *before* attributing anything to the driver.
 
 **Lesson 4 — never reboot into a new kernel until dpkg, `modules.dep`, initramfs
 and DKMS have all been verified for that kernel.** This is now a gate rather than
-a habit; see below.
+a habit; see below. And when a future build does fail the gate, fix the build —
+**do not weaken `-Werror` to get past it.** A warning from a new kernel is
+information, and suppressing it is how the class of defect this fork exists to
+fix stays invisible.
+
+**Lesson 5 — a cached ARP entry is not connectivity evidence.** While the board
+was unreachable, `arp -a` still resolved both of its addresses, and it would have
+been easy to read that as "the host is alive, something above L2 is wrong". Both
+entries were stale cache; macOS holds them for roughly twenty minutes. What
+exposed them was that one of the two was a HaLow address the board could not
+possibly have held, because no module existed for the kernel it had booted.
+Require **active** evidence — a reply to a probe sent now — plus identity that
+ties the answer to the machine you think you are talking to: route and interface
+for the path, `boot_id` and `uptime` for the boot.
+
+**Lesson 6 — the static Ethernet path is a validated out-of-band recovery path,
+not a bench convenience.** When the kernel upgrade left the board with no
+loadable modules, every wireless path was gone at once: no `brcmfmac`, so no
+house Wi-Fi, and no `morse`, so no HaLow. The board's `eth0` profile — a static
+`10.42.0.2/24` with `ipv4.method=manual` — recovered it in a single ping once the
+laptop's USB-Ethernet was moved to its RJ45, and the whole diagnosis and repair
+ran over it. `method=manual` is the load-bearing part: the earlier
+`method=auto` plus a manual address held the address for about 45 s and then
+NetworkManager withdrew it, so a short test passed while the path was dead when
+it was actually needed. Any board that can lose its wireless drivers in a package
+transaction should carry one of these.
 
 ## The gate: `preflight <kernelrelease>`
 

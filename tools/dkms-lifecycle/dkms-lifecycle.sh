@@ -97,8 +97,16 @@ preflight() {
         [ "$2" = PASS ] || fail=1
     }
 
-    # 1. dpkg must be clean. A half-configured kernel package is how a machine
-    #    ends up booting a kernel whose postinst never ran.
+    # 0. the module tree for the target kernel must exist at all
+    if [ -d "/lib/modules/$K" ]; then
+        chk "/lib/modules/$K exists" PASS "$(find /lib/modules/"$K" -name '*.ko*' 2>/dev/null | wc -l | tr -d ' ') module files"
+    else
+        chk "/lib/modules/$K exists" FAIL "no such directory -- that kernel is not installed"
+    fi
+
+    # 1. dpkg must be clean. `dpkg -C` is `dpkg --audit`. A half-configured
+    #    kernel package is how a machine ends up booting a kernel whose
+    #    postinst never ran, leaving no modules.dep at all.
     # Settled states are ii (installed), hi (installed and HELD -- a hold is
     # deliberate, e.g. rpi-eeprom here, and is not a fault), rc (removed, config
     # left), pn/un (not installed). Anything else is half-done.
@@ -174,13 +182,15 @@ preflight() {
         out=$(sudo modinfo -k "$K" "$m" 2>&1)
         if echo "$out" | grep -q '^filename:'; then
             fn=$(echo "$out" | awk '/^filename:/{print $2}')
+            ver=$(echo "$out" | awk '/^version:/{print $2}')
             sv=$(echo "$out" | awk '/^srcversion:/{print $2}')
             vm=$(echo "$out" | awk -F': *' '/^vermagic:/{print $2}')
             case "$vm" in
-                "$K"*) chk "modinfo -k $K $m" PASS "srcversion $sv, vermagic $vm" ;;
+                "$K"*) chk "modinfo -k $K $m" PASS "version $ver, srcversion $sv" ;;
                 *)     chk "modinfo -k $K $m" FAIL "vermagic '$vm' does not start with $K" ;;
             esac
             say "      filename: $fn"
+            say "      vermagic: $vm"
         else
             chk "modinfo -k $K $m" FAIL "$(echo "$out" | head -1)"
         fi
@@ -190,7 +200,9 @@ preflight() {
     if [ "$fail" -eq 0 ]; then
         say "GATE: PASS -- safe to reboot into $K"
     else
-        say "GATE: FAIL -- do NOT reboot into $K. Fix the FAIL lines first."
+        say "GATE: FAIL -- DO NOT REBOOT into $K."
+        say "Fix every FAIL line above first. Do not weaken -Werror to get a"
+        say "future build to pass: a warning from a new kernel is information."
     fi
     return $fail
 }
