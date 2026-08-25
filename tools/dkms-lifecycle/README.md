@@ -5,8 +5,10 @@ Validates the `packaging/dkms/` layer of
 through a complete lifecycle: add → build → install → cold boot → HaLow →
 kernel upgrade → rebuild → boot → HaLow → uninstall → rollback.
 
-**Not started.** It needs a test board and there is not one free; see
-"Why a separate card" below. Everything except the running of it is prepared:
+**Run end to end on 2026-08-25** on a dedicated card in the HT-HC01P board.
+Result: `logs/2026-08-25-dkms-lifecycle-full-run.txt`. Two findings overturned
+what this document predicted; both are in "Results" at the bottom. Everything
+except the running of it was prepared beforehand:
 `dkms-lifecycle.sh` performs each leg and appends every recorded value to
 `~/halow-test/dkms-lifecycle-record.txt` on the board — not `/tmp`, which a
 reboot clears, and this test contains two reboots.
@@ -113,3 +115,66 @@ procedure can reach the two soaking cards or the labelled OpenWrt one.
 The A1 hardware. The test board is the HAT, so the lifecycle is validated on
 MM6108A2 only. Repeating it on the SenseCAP carrier would need that board, which
 is soaking, and a fourth card.
+
+## Results, 2026-08-25
+
+All ten legs ran. The lifecycle itself works: `dkms install` on 6.6.51 →
+cold boot → autoload at t=7.6 s → SAE association → kernel upgrade to 6.12.96 →
+module rebuilt and installed **automatically** → cold boot → autoload at
+t=4.42 s → association → uninstall → reboot → nothing left. `srcversion` was
+`89A7C1DAC9B51F941EFC8F2` at every stage, identical to a manual build, and SPI
+`errors 0 / timedout 0` throughout.
+
+**Two things this document got wrong.**
+
+**1. `AUTOINSTALL="no"` does not disable autoinstall.** From `/usr/sbin/dkms`
+(3.0.10, Debian bookworm) line 2225:
+
+```sh
+# if the module does not want to be autoinstalled, skip it.
+if [[ ! $AUTOINSTALL ]]; then
+    continue
+fi
+```
+
+That tests for **empty**, not for `"no"`. Any non-empty value is truthy, so
+`"no"` behaves exactly like `"yes"`. To genuinely disable it the variable must be
+absent or empty. The staged `dkms.conf` did carry `AUTOINSTALL="no"` — checked on
+disk, so this is dkms semantics and not a lost setting.
+
+The upshot is mixed: the cross-kernel **automatic** rebuild was demonstrated,
+successfully and unintentionally — dkms built and installed for both
+`6.12.96+rpt-rpi-v8` and `6.12.96+rpt-rpi-2712` from the kernel postinst by
+itself — but the safety measure we believed we had was never in effect.
+
+**2. The upgrade leg failed for a reason that had nothing to do with DKMS, and
+the failure was procedural.** `apt-get -y full-upgrade` was run detached, with no
+tty and no conffile policy. dpkg hit a conffile prompt on
+`/etc/initramfs-tools/initramfs.conf` and died with `end of file on stdin at
+conffile prompt`. `initramfs-tools` never configured, so
+`linux-image-6.12.96+rpt-rpi-v8` never configured, so **its postinst never ran and
+no `modules.dep` was generated for the new kernel**. The board booted 6.12.96
+with zero loadable modules — no `brcmfmac`, therefore no `wlan0`, therefore it
+disappeared from the network for twenty minutes.
+
+`-y` answers apt, not dpkg. Any unattended upgrade in this procedure needs
+
+```sh
+DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confold full-upgrade
+```
+
+and the repair for a system already in that state is the same options with
+`dpkg --configure -a` followed by `apt-get --fix-broken install`.
+
+The important consequence is evidential: the "no morse on the new kernel"
+observation taken immediately after that reboot proved nothing about
+`AUTOINSTALL`, because no module of any kind could load. An elimination is only
+valid in the state it was measured in. The real answer came after the repair, and
+it was the opposite.
+
+**Recovery path that worked** — worth keeping, because the board was unreachable
+on every wireless path: the `eth0` static `10.42.0.2/24` profile. Moving the
+laptop's USB-Ethernet to the board's RJ45 reached it in one ping. That profile is
+`ipv4.method=manual` on purpose; a DHCP-based one would have failed after ~45 s.
+
+**Still not covered:** the MM6108**A1** hardware. This ran on the A2 HAT only.

@@ -1,0 +1,429 @@
+
+===== SNAPSHOT stage0 =====
+at 2026-08-25T10:16:47+01:00  kernel 6.6.51+rpt-rpi-v8  uptime 328s
+kernel running : 6.6.51+rpt-rpi-v8
+kernels present: /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 7649cad7-64aa-4c3a-8324-402ac95e56ea
+held packages  : 
+-- loaded module --
+  (morse not loaded)
+-- module files on disk (all kernels) --
+-- modules.dep --
+-- dkms --
+  version: dkms-3.0.10
+-- link --
+  no interface bound to morse_spi
+  SPI errors/timedout/messages: 0/0/0
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== LEG 1 — stage + dkms add =====
+at 2026-08-25T17:17:03+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 344s
+staging /home/alan/halow-test/fork-build -> /usr/src/morse-mm8108-2.0.0+rpi-portability  (version mm8108-2.0.0+rpi-portability, from MORSE_VERSION=0-rel_mm8108_2_0_0_2026_Apr_21)
+populating mmrc-submodule
+Submodule 'mmrc-submodule' (https://github.com/MorseMicro/mm_rate_control.git) registered for path 'mmrc-submodule'
+Cloning into '/home/alan/halow-test/fork-build/mmrc-submodule'...
+Submodule path 'mmrc-submodule': checked out '24f6c69dc9b78490b75cd181ad7013c1b3c3def6'
+staged. next:
+  sudo dkms add   morse/mm8108-2.0.0+rpi-portability
+  sudo dkms build morse/mm8108-2.0.0+rpi-portability
+package version: mm8108-2.0.0+rpi-portability
+Creating symlink /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/source -> /usr/src/morse-mm8108-2.0.0+rpi-portability
+
+===== SNAPSHOT after add =====
+at 2026-08-25T17:17:10+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 351s
+kernel running : 6.6.51+rpt-rpi-v8
+kernels present: /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 7649cad7-64aa-4c3a-8324-402ac95e56ea
+held packages  : 
+-- loaded module --
+  (morse not loaded)
+-- module files on disk (all kernels) --
+-- modules.dep --
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability: added
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  no interface bound to morse_spi
+  SPI errors/timedout/messages: 0/0/0
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== LEG 2 — dkms build (running kernel) =====
+at 2026-08-25T17:17:21+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 362s
+Sign command: /lib/modules/6.6.51+rpt-rpi-v8/build/scripts/sign-file
+Signing key: /var/lib/dkms/mok.key
+Public certificate (MOK): /var/lib/dkms/mok.pub
+Certificate or key are missing, generating self signed certificate for MOK...
+
+Building module:
+Cleaning build area...
+make -j4 KERNELRELEASE=6.6.51+rpt-rpi-v8 -C /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/build KERNEL_SRC=/lib/modules/6.6.51+rpt-rpi-v8/build CONFIG_WLAN_VENDOR_MORSE=m CONFIG_MORSE_SPI=y CONFIG_MORSE_USER_ACCESS=y CONFIG_MORSE_VENDOR_COMMAND=y CONFIG_MORSE_DEBUGFS=y........................
+Signing module /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/build/morse.ko
+Signing module /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/build/dot11ah/dot11ah.ko
+Cleaning build area...
+
+===== SNAPSHOT after build =====
+at 2026-08-25T17:18:31+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 432s
+kernel running : 6.6.51+rpt-rpi-v8
+kernels present: /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 7649cad7-64aa-4c3a-8324-402ac95e56ea
+held packages  : 
+-- loaded module --
+  (morse not loaded)
+-- module files on disk (all kernels) --
+-- modules.dep --
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability, 6.6.51+rpt-rpi-v8, aarch64: built
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/morse.ko.xz (179000 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28060 bytes)
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  no interface bound to morse_spi
+  SPI errors/timedout/messages: 0/0/0
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== LEG 3 — dkms install =====
+at 2026-08-25T17:18:46+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 447s
+
+morse.ko.xz:
+Running module version sanity check.
+ - Original module
+   - No original module exists within this kernel
+ - Installation
+   - Installing to /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/
+
+dot11ah.ko.xz:
+Running module version sanity check.
+ - Original module
+   - No original module exists within this kernel
+ - Installation
+   - Installing to /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/
+depmod....
+-- what install put where --
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz -> /usr/lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz -> /usr/lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz
+
+===== SNAPSHOT after install =====
+at 2026-08-25T17:18:50+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 451s
+kernel running : 6.6.51+rpt-rpi-v8
+kernels present: /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 7649cad7-64aa-4c3a-8324-402ac95e56ea
+held packages  : 
+-- loaded module --
+  (morse not loaded)
+-- module files on disk (all kernels) --
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28060 bytes 2026-08-25 17:18:46
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz  179000 bytes 2026-08-25 17:18:46
+-- modules.dep --
+  updates/dkms/dot11ah.ko.xz
+  updates/dkms/morse.ko.xz
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability, 6.6.51+rpt-rpi-v8, aarch64: installed
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/morse.ko.xz (179000 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28060 bytes)
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  no interface bound to morse_spi
+  SPI errors/timedout/messages: 0/0/0
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== SNAPSHOT after cold boot =====
+at 2026-08-25T17:21:20+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 116s
+kernel running : 6.6.51+rpt-rpi-v8
+kernels present: /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : d9967b00-47df-4198-8b4e-ba0958bb2c07
+held packages  : 
+-- loaded module --
+  version    : 0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion : 89A7C1DAC9B51F941EFC8F2
+  lsmod      : morse                 495616  0|dot11ah               114688  1 morse|
+-- module files on disk (all kernels) --
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28060 bytes 2026-08-25 17:18:46
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz  179000 bytes 2026-08-25 17:18:46
+-- modules.dep --
+  updates/dkms/dot11ah.ko.xz
+  updates/dkms/morse.ko.xz
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability, 6.6.51+rpt-rpi-v8, aarch64: installed
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/morse.ko.xz (179000 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28060 bytes)
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  iface wlan1  mac 0c:bf:74:40:8e:91  addr 10.41.0.216/16
+  Connected to 3c:1a:cc:70:3f:ca (on wlan1)
+  power_save: Power save: off
+  SPI errors/timedout/messages: 0/0/14031
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== FUNCTIONAL — HaLow =====
+at 2026-08-25T17:21:23+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 119s
+-- boot log --
+  [    7.596090] morse micro driver registration. Version 0-rel_mm8108_2_0_0_2026_Apr_21
+  [    7.596390] Resetting Morse Chip
+  [    7.736718] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+  [    7.799412] morse_spi spi0.0: Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170, crc32 0x389a48c4
+  [   10.728174] wlan1: authenticated
+  [   10.748131] wlan1: associated
+-- failure lines (with a positive control) --
+  matches cmd63|eproto|crc error|read fail|write fail|probe fail: 0
+  positive control, morse_spi lines: 89
+-- ping the AP over the air --
+  20 packets transmitted, 20 received, 0% packet loss, time 5716ms rtt min/avg/max/mdev = 2.874/5.600/19.034/3.748 ms 
+
+===== SNAPSHOT functional check =====
+at 2026-08-25T17:21:28+08:00  kernel 6.6.51+rpt-rpi-v8  uptime 125s
+kernel running : 6.6.51+rpt-rpi-v8
+kernels present: /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : d9967b00-47df-4198-8b4e-ba0958bb2c07
+held packages  : 
+-- loaded module --
+  version    : 0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion : 89A7C1DAC9B51F941EFC8F2
+  lsmod      : morse                 495616  0|dot11ah               114688  1 morse|
+-- module files on disk (all kernels) --
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28060 bytes 2026-08-25 17:18:46
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz  179000 bytes 2026-08-25 17:18:46
+-- modules.dep --
+  updates/dkms/dot11ah.ko.xz
+  updates/dkms/morse.ko.xz
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability, 6.6.51+rpt-rpi-v8, aarch64: installed
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/morse.ko.xz (179000 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28060 bytes)
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  iface wlan1  mac 0c:bf:74:40:8e:91  addr 10.41.0.216/16
+  Connected to 3c:1a:cc:70:3f:ca (on wlan1)
+  power_save: Power save: off
+  SPI errors/timedout/messages: 0/0/15233
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== PREDICTION for LEG 6, written before running it =====
+AUTOINSTALL="no", so Debian /etc/kernel/postinst.d/dkms runs `dkms autoinstall`
+and SKIPS this module. Predicted after upgrading to 6.12.96 and rebooting:
+  - dkms status shows the module installed for 6.6.51 ONLY
+  - /lib/modules/6.12.96*/updates/ has no morse or dot11ah
+  - morse does not load, no interface bound to morse_spi, HaLow DOES NOT come up
+That result is the measurement of what AUTOINSTALL="no" costs. Leg 7 then does
+the cross-kernel install by hand, which is the path that has to be shown safe
+before AUTOINSTALL="yes" is worth trying.
+
+===== LEG 6 RESULT — the prediction was WRONG, and the state was contaminated =====
+Two separate things went wrong and they must not be conflated.
+
+1. THE UPGRADE FAILED, and my procedure caused it. `apt-get -y full-upgrade` ran
+   detached with no tty and no conffile policy. dpkg hit a conffile prompt on
+   /etc/initramfs-tools/initramfs.conf and died with "end of file on stdin at
+   conffile prompt". initramfs-tools never configured -> linux-image-6.12.96
+   never configured -> its postinst never ran -> NO modules.dep for 6.12.96 at
+   all. The board booted 6.12.96 with zero loadable modules: no brcmfmac, hence
+   no wlan0, hence it vanished from the house network. Nothing to do with morse,
+   which could not have loaded either.
+   `-y` answers apt, not dpkg. The fix is DEBIAN_FRONTEND=noninteractive plus
+   -o Dpkg::Options::=--force-confold, and that repaired it.
+
+   Consequence: the "no morse on the new kernel" observation taken right after
+   that reboot proves nothing about AUTOINSTALL. No module could load. An
+   elimination is only valid in the state it was measured in.
+
+2. AUTOINSTALL="no" DOES NOT DISABLE AUTOINSTALL. Once dpkg was repaired the
+   kernel postinst ran /etc/kernel/postinst.d/dkms, and dkms built and installed
+   morse for BOTH 6.12.96+rpt-rpi-v8 and 6.12.96+rpt-rpi-2712 by itself.
+   Cause, read from /usr/sbin/dkms line 2225:
+       # if the module does not want to be autoinstalled, skip it.
+       if [[ ! $AUTOINSTALL ]]; then continue; fi
+   That tests for EMPTY, not for "no". Any non-empty value is truthy, so
+   AUTOINSTALL="no" behaves exactly like "yes". To actually disable it the
+   variable must be absent or empty. dkms 3.0.10, Debian bookworm.
+   The staged dkms.conf did contain AUTOINSTALL="no" (line 34) -- checked, so
+   this is dkms semantics and not a lost setting.
+
+   Consequence: the cross-kernel AUTOMATIC rebuild has now been demonstrated,
+   accidentally and successfully -- but the safety measure we thought we had was
+   never in effect.
+
+===== SNAPSHOT leg 7-8: boot into 6.12.96, DKMS-autoinstalled =====
+at 2026-08-25T17:58:38+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 133s
+kernel running : 6.12.96+rpt-rpi-v8
+kernels present: /lib/modules/6.12.96+rpt-rpi-2712/ /lib/modules/6.12.96+rpt-rpi-v8/ /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 9730c3e7-f7d0-40a6-92ca-8beaff051c28
+held packages  : rpi-eeprom 
+-- loaded module --
+  version    : 0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion : 89A7C1DAC9B51F941EFC8F2
+  lsmod      : morse                 499712  0|dot11ah               114688  1 morse|
+-- module files on disk (all kernels) --
+  /lib/modules/6.12.96+rpt-rpi-2712/updates/dkms/dot11ah.ko.xz  28196 bytes 2026-08-25 17:53:43
+  /lib/modules/6.12.96+rpt-rpi-2712/updates/dkms/morse.ko.xz  179156 bytes 2026-08-25 17:53:43
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28196 bytes 2026-08-25 17:52:10
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/morse.ko.xz  178996 bytes 2026-08-25 17:52:10
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28060 bytes 2026-08-25 17:18:46
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz  179000 bytes 2026-08-25 17:18:46
+-- modules.dep --
+  updates/dkms/dot11ah.ko.xz
+  updates/dkms/morse.ko.xz
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability, 6.12.96+rpt-rpi-2712, aarch64: installed
+  status: morse/mm8108-2.0.0+rpi-portability, 6.12.96+rpt-rpi-v8, aarch64: installed
+  status: morse/mm8108-2.0.0+rpi-portability, 6.6.51+rpt-rpi-v8, aarch64: installed
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-v8/aarch64/module/morse.ko.xz (178996 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28196 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-2712/aarch64/module/morse.ko.xz (179156 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-2712/aarch64/module/dot11ah.ko.xz (28196 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/morse.ko.xz (179000 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28060 bytes)
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  iface wlan1  mac 0c:bf:74:40:8e:91  addr 10.41.0.216/16
+  Connected to 3c:1a:cc:70:3f:ca (on wlan1)
+  power_save: Power save: off
+  SPI errors/timedout/messages: 0/0/13253
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== FUNCTIONAL — HaLow =====
+at 2026-08-25T17:58:42+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 137s
+-- boot log --
+  [    4.423301] morse micro driver registration. Version 0-rel_mm8108_2_0_0_2026_Apr_21
+  [    4.423467] Resetting Morse Chip
+  [    4.544991] morse_spi spi0.0: Loaded firmware from morse/mm6108.bin, size 468304, crc32 0xbe7b5c8f
+  [    4.545622] morse_spi spi0.0: Loaded BCF from morse/bcf_HC01_V2_H.bin, size 1170, crc32 0x389a48c4
+  [    7.300680] wlan1: authenticated
+  [    7.318576] wlan1: associated
+-- failure lines (with a positive control) --
+  matches cmd63|eproto|crc error|read fail|write fail|probe fail: 0
+  positive control, morse_spi lines: 89
+-- ping the AP over the air --
+  20 packets transmitted, 20 received, 0% packet loss, time 5715ms rtt min/avg/max/mdev = 2.995/4.691/14.952/2.715 ms 
+
+===== SNAPSHOT functional check =====
+at 2026-08-25T17:58:48+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 143s
+kernel running : 6.12.96+rpt-rpi-v8
+kernels present: /lib/modules/6.12.96+rpt-rpi-2712/ /lib/modules/6.12.96+rpt-rpi-v8/ /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 9730c3e7-f7d0-40a6-92ca-8beaff051c28
+held packages  : rpi-eeprom 
+-- loaded module --
+  version    : 0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion : 89A7C1DAC9B51F941EFC8F2
+  lsmod      : morse                 499712  0|dot11ah               114688  1 morse|
+-- module files on disk (all kernels) --
+  /lib/modules/6.12.96+rpt-rpi-2712/updates/dkms/dot11ah.ko.xz  28196 bytes 2026-08-25 17:53:43
+  /lib/modules/6.12.96+rpt-rpi-2712/updates/dkms/morse.ko.xz  179156 bytes 2026-08-25 17:53:43
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28196 bytes 2026-08-25 17:52:10
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/morse.ko.xz  178996 bytes 2026-08-25 17:52:10
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz  28060 bytes 2026-08-25 17:18:46
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dkms/morse.ko.xz  179000 bytes 2026-08-25 17:18:46
+-- modules.dep --
+  updates/dkms/dot11ah.ko.xz
+  updates/dkms/morse.ko.xz
+-- dkms --
+  version: dkms-3.0.10
+  status: morse/mm8108-2.0.0+rpi-portability, 6.12.96+rpt-rpi-2712, aarch64: installed
+  status: morse/mm8108-2.0.0+rpi-portability, 6.12.96+rpt-rpi-v8, aarch64: installed
+  status: morse/mm8108-2.0.0+rpi-portability, 6.6.51+rpt-rpi-v8, aarch64: installed
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-v8/aarch64/module/morse.ko.xz (178996 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28196 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-2712/aarch64/module/morse.ko.xz (179156 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-2712/aarch64/module/dot11ah.ko.xz (28196 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/morse.ko.xz (179000 bytes)
+  built: /var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.6.51+rpt-rpi-v8/aarch64/module/dot11ah.ko.xz (28060 bytes)
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  iface wlan1  mac 0c:bf:74:40:8e:91  addr 10.41.0.216/16
+  Connected to 3c:1a:cc:70:3f:ca (on wlan1)
+  power_save: Power save: off
+  SPI errors/timedout/messages: 0/0/14247
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== LEG 5 — uninstall and remove =====
+at 2026-08-25T17:59:06+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 161s
+   - No original module was found for this module on this kernel.
+   - Use the dkms install command to reinstall any previous module version.
+
+dot11ah.ko.xz:
+ - Uninstallation
+   - Deleting from: /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/
+ - Original module
+   - No original module was found for this module on this kernel.
+   - Use the dkms install command to reinstall any previous module version.
+depmod....
+Module morse mm8108-2.0.0+rpi-portability is not installed for kernel 6.6.51+rpt-rpi-v8 (aarch64). Skipping...
+Module morse mm8108-2.0.0+rpi-portability is not installed for kernel 6.12.96+rpt-rpi-2712 (aarch64). Skipping...
+Module morse mm8108-2.0.0+rpi-portability is not installed for kernel 6.12.96+rpt-rpi-v8 (aarch64). Skipping...
+Deleting module morse-mm8108-2.0.0+rpi-portability completely from the DKMS tree.
+
+===== SNAPSHOT after uninstall+remove =====
+at 2026-08-25T17:59:21+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 175s
+kernel running : 6.12.96+rpt-rpi-v8
+kernels present: /lib/modules/6.12.96+rpt-rpi-2712/ /lib/modules/6.12.96+rpt-rpi-v8/ /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 9730c3e7-f7d0-40a6-92ca-8beaff051c28
+held packages  : rpi-eeprom 
+-- loaded module --
+  version    : 0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion : 89A7C1DAC9B51F941EFC8F2
+  lsmod      : morse                 499712  0|dot11ah               114688  1 morse|
+-- module files on disk (all kernels) --
+-- modules.dep --
+-- dkms --
+  version: dkms-3.0.10
+  staged: /usr/src/morse-mm8108-2.0.0+rpi-portability
+-- link --
+  iface wlan1  mac 0c:bf:74:40:8e:91  addr 10.41.0.216/16
+  Connected to 3c:1a:cc:70:3f:ca (on wlan1)
+  power_save: Power save: off
+  SPI errors/timedout/messages: 0/0/16790
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== ROLLBACK VERIFICATION =====
+at 2026-08-25T18:01:54+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 116s
+expected: no morse/dot11ah under any updates/, no dkms morse entry,
+          /usr/src/morse-* may remain until removed by hand
+module files still present: 0
+dkms status: (none)
+staged tree: (none)
+
+===== SNAPSHOT after rollback =====
+at 2026-08-25T18:01:56+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 117s
+kernel running : 6.12.96+rpt-rpi-v8
+kernels present: /lib/modules/6.12.96+rpt-rpi-2712/ /lib/modules/6.12.96+rpt-rpi-v8/ /lib/modules/6.6.51+rpt-rpi-2712/ /lib/modules/6.6.51+rpt-rpi-v8/ 
+boot_id        : 97e83216-e219-43b6-b9be-f86a1d5254b5
+held packages  : rpi-eeprom 
+-- loaded module --
+  (morse not loaded)
+-- module files on disk (all kernels) --
+-- modules.dep --
+-- dkms --
+  version: dkms-3.0.10
+-- link --
+  no interface bound to morse_spi
+  SPI errors/timedout/messages: 0/0/0
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== APPENDIX: the exact dpkg failure, from leg6-upgrade.log =====
+1033:Setting up initramfs-tools-core (0.142+rpt4+deb12u3) ...
+1034-
+1035-Configuration file '/etc/initramfs-tools/initramfs.conf'
+1036- ==> Modified (by you or by a script) since installation.
+1037- ==> Package distributor has shipped an updated version.
+1038-   What would you like to do about it ?  Your options are:
+1039-    Y or I  : install the package maintainer's version
+1040-    N or O  : keep your currently-installed version
+1041-      D     : show the differences between the versions
+1042-      Z     : start a shell to examine the situation
+1043- The default action is to keep your current version.
+1044-*** initramfs.conf (Y/I/N/O/D/Z) [default=N] ? dpkg: error processing package initramfs-tools-core (--configure):
+1045- end of file on stdin at conffile prompt
