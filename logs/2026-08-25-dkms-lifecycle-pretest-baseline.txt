@@ -1,0 +1,62 @@
+PRE-TEST BASELINE — recorded 2026-08-25T16:30:44+08:00 from the Mac
+Neither board was modified to produce this record.
+
+================ 192.168.108.13 ================
+hostname:        hc01p
+running kernel:  6.12.96+rpt-rpi-v8
+installed kernels:
+  /lib/modules/6.12.96+rpt-rpi-2712/
+  /lib/modules/6.12.96+rpt-rpi-v8/
+  /lib/modules/6.6.51+rpt-rpi-2712/
+  /lib/modules/6.6.51+rpt-rpi-v8/
+held packages:   rpi-eeprom 
+loaded morse:
+  version:       0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion:    89A7C1DAC9B51F941EFC8F2
+module paths on disk:
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/morse.ko  (26597200 bytes, 2026-08-25 15:46:15)
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/dot11ah.ko.mm6108-2.0.1  (143240 bytes, 2026-08-25 13:03:37)
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/morse.ko.mm6108-2.0.1  (26597912 bytes, 2026-08-25 13:03:37)
+  /lib/modules/6.12.96+rpt-rpi-v8/updates/dot11ah.ko  (143224 bytes, 2026-08-25 15:46:15)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko  (22990328 bytes, 2026-08-25 01:28:12)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah.ko  (142800 bytes, 2026-08-25 01:28:12)
+modules.dep entries:
+  updates/dot11ah.ko
+  updates/morse.ko
+  updates/dot11ah.ko
+  updates/morse.ko
+modprobe options: options morse country=SG bcf=bcf_HC01_V2_H.bin macaddr_suffix=40:8e:91
+dkms:            dkms-3.0.10
+dkms status:     (no morse entry)
+halow iface:     wlan1  mac 0c:bf:74:40:8e:91
+halow addr:      10.41.0.216/16
+SPI errors/timedout/messages: 0/0/239504
+uptime:          up 43 minutes
+
+================ 192.168.108.19 ================
+hostname:        Sensecap
+running kernel:  6.6.51+rpt-rpi-v8
+installed kernels:
+  /lib/modules/6.6.51+rpt-rpi-2712/
+  /lib/modules/6.6.51+rpt-rpi-v8/
+held packages:   
+loaded morse:
+  version:       0-rel_mm8108_2_0_0_2026_Apr_21
+  srcversion:    89A7C1DAC9B51F941EFC8F2
+module paths on disk:
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz.stale-20260822  (3678960 bytes, 2026-08-22 18:42:42)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz.stale-20260822  (27668 bytes, 2026-08-22 18:43:03)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz.mm6108-2.0.1  (27672 bytes, 2026-08-23 09:27:28)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz  (27672 bytes, 2026-08-25 15:58:21)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz  (3577516 bytes, 2026-08-25 15:58:21)
+  /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz.mm6108-2.0.1  (3577056 bytes, 2026-08-23 09:27:27)
+modules.dep entries:
+  updates/dot11ah/dot11ah.ko.xz
+  updates/morse.ko.xz
+modprobe options: options morse country=SG bcf=bcf_fgh100mhaamd.bin
+dkms:            not installed
+dkms status:     (no morse entry)
+halow iface:     wlan1  mac 9c:04:b6:ff:df:fe
+halow addr:      10.41.0.208/16
+SPI errors/timedout/messages: 0/0/227328
+uptime:          up 31 minutes
