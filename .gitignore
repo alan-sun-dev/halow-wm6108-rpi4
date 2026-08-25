@@ -7,3 +7,8 @@
 # Secrets for the HT-HC01P first-boot payload. The tracked files carry
 # placeholders; the real values live here and are substituted onto the card.
 port/hc01p/secrets.env
+
+# Device configuration backups. OpenWrt's sysupgrade -b archive carries
+# /etc/config/wireless, which contains Wi-Fi PSKs in plaintext, so these are
+# kept locally and never committed.
+backups/
