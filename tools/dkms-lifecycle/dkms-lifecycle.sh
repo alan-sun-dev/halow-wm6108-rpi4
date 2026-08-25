@@ -11,6 +11,9 @@
 #   ./dkms-lifecycle.sh install
 #   ./dkms-lifecycle.sh halow
 #   ./dkms-lifecycle.sh build-for <kernelrelease>   cross-kernel rebuild
+#   ./dkms-lifecycle.sh preflight <kernelrelease>   GATE: run before any reboot
+#                                                   into a new kernel. Exits
+#                                                   non-zero if it is not safe.
 #   ./dkms-lifecycle.sh uninstall
 #   ./dkms-lifecycle.sh rollback-check
 #
@@ -83,6 +86,115 @@ pkg_version() {
     ls -d /usr/src/morse-* 2>/dev/null | head -1 | sed 's|.*/morse-||'
 }
 
+
+preflight() {
+    K=${1:?usage: preflight <kernelrelease>}
+    rule "PREFLIGHT GATE for $K"
+    say "Nothing may reboot into a new kernel until every line below says PASS."
+    fail=0
+    chk() { # chk <label> <PASS|FAIL> <detail>
+        say "  [$2] $1 -- $3"
+        [ "$2" = PASS ] || fail=1
+    }
+
+    # 1. dpkg must be clean. A half-configured kernel package is how a machine
+    #    ends up booting a kernel whose postinst never ran.
+    # Settled states are ii (installed), hi (installed and HELD -- a hold is
+    # deliberate, e.g. rpi-eeprom here, and is not a fault), rc (removed, config
+    # left), pn/un (not installed). Anything else is half-done.
+    broken=$(dpkg -C 2>/dev/null | grep -c .)
+    notok=$(dpkg -l 2>/dev/null | awk 'NR>5 && $1 !~ /^(ii|hi|rc|pn|un)$/ {n++} END{print n+0}')
+    held=$(apt-mark showhold 2>/dev/null | tr '\n' ' ')
+    if [ "$broken" -eq 0 ] && [ "$notok" -eq 0 ]; then
+        chk "dpkg clean" PASS "dpkg -C empty, no half-configured packages; held: ${held:-none}"
+    else
+        chk "dpkg clean" FAIL "dpkg -C lines=$broken, half-configured packages=$notok"
+        dpkg -l 2>/dev/null | awk 'NR>5 && $1 !~ /^(ii|hi|rc|pn|un)$/ {print "      " $1, $2}' | while read -r l; do say "$l"; done
+    fi
+
+    # 2. modules.dep must exist for the target kernel, with a control entry that
+    #    proves it is a real dependency file and not an empty stub.
+    DEP=/lib/modules/$K/modules.dep
+    if [ -s "$DEP" ]; then
+        n=$(wc -l < "$DEP")
+        ctl=$(grep -c 'mac80211\|brcmfmac' "$DEP")
+        if [ "$ctl" -gt 0 ]; then
+            chk "modules.dep for $K" PASS "$n lines, $ctl control entries"
+        else
+            chk "modules.dep for $K" FAIL "$n lines but no mac80211/brcmfmac -- suspect stub"
+        fi
+    else
+        chk "modules.dep for $K" FAIL "missing or empty: $DEP"
+    fi
+
+    # 3. initramfs: initramfs-tools writes /boot/initrd.img-<K>, and on
+    #    Raspberry Pi OS raspi-firmware then copies it to the FAT partition as
+    #    initramfs8 (or initramfs_2712). The firmware loads THAT copy, so both
+    #    must exist and be identical, or the kernel boots against a stale one.
+    IMG=/boot/initrd.img-$K
+    if [ -s "$IMG" ]; then
+        case "$K" in
+            *-2712) FW=/boot/firmware/initramfs_2712 ;;
+            *)      FW=/boot/firmware/initramfs8 ;;
+        esac
+        if [ ! -d /boot/firmware ]; then
+            chk "initramfs for $K" PASS "$IMG present ($(stat -c %s "$IMG") bytes); no /boot/firmware on this system"
+        elif [ ! -s "$FW" ]; then
+            chk "initramfs for $K" FAIL "$IMG exists but $FW is missing"
+        elif sudo cmp -s "$IMG" "$FW"; then
+            chk "initramfs for $K" PASS "$IMG == $FW ($(stat -c %s "$IMG") bytes)"
+        else
+            chk "initramfs for $K" FAIL "$FW differs from $IMG -- firmware would load a stale initramfs"
+        fi
+    else
+        chk "initramfs for $K" FAIL "missing or empty: $IMG"
+    fi
+
+    # 4. headers, or the next kernel cannot be built for at all
+    if [ -d "/lib/modules/$K/build" ]; then
+        chk "kernel headers for $K" PASS "$(readlink -f /lib/modules/$K/build)"
+    else
+        chk "kernel headers for $K" FAIL "/lib/modules/$K/build missing"
+    fi
+
+    # 5. DKMS must report the package installed for THIS kernel, and both
+    #    modules must actually be on disk for it.
+    st=$(sudo $DKMS status 2>/dev/null | grep ", $K," | grep -c installed)
+    [ "$st" -gt 0 ] && chk "dkms status for $K" PASS "installed" \
+                    || chk "dkms status for $K" FAIL "no 'installed' line for $K"
+    for m in morse dot11ah; do
+        f=$(find /lib/modules/"$K"/updates -name "$m.ko*" 2>/dev/null | head -1)
+        [ -n "$f" ] && chk "$m installed for $K" PASS "$f" \
+                    || chk "$m installed for $K" FAIL "not found under /lib/modules/$K/updates"
+    done
+
+    # 6. modinfo -k is the check that ties file, source and kernel together.
+    #    vermagic must name the target kernel, not the running one.
+    for m in morse dot11ah; do
+        out=$(sudo modinfo -k "$K" "$m" 2>&1)
+        if echo "$out" | grep -q '^filename:'; then
+            fn=$(echo "$out" | awk '/^filename:/{print $2}')
+            sv=$(echo "$out" | awk '/^srcversion:/{print $2}')
+            vm=$(echo "$out" | awk -F': *' '/^vermagic:/{print $2}')
+            case "$vm" in
+                "$K"*) chk "modinfo -k $K $m" PASS "srcversion $sv, vermagic $vm" ;;
+                *)     chk "modinfo -k $K $m" FAIL "vermagic '$vm' does not start with $K" ;;
+            esac
+            say "      filename: $fn"
+        else
+            chk "modinfo -k $K $m" FAIL "$(echo "$out" | head -1)"
+        fi
+    done
+
+    say ""
+    if [ "$fail" -eq 0 ]; then
+        say "GATE: PASS -- safe to reboot into $K"
+    else
+        say "GATE: FAIL -- do NOT reboot into $K. Fix the FAIL lines first."
+    fi
+    return $fail
+}
+
 case "${1:-}" in
 snapshot)  snapshot "${2:-}" ;;
 
@@ -122,6 +234,8 @@ halow)
     GW=$(ip -4 route show dev "$IF" | awk '/scope link/{print $1}' | head -1)
     say "  $(ping -c 20 -i 0.3 10.41.254.1 2>&1 | tail -2 | tr '\n' ' ')"
     snapshot "functional check" ;;
+
+preflight) preflight "${2:-}" || exit 1 ;;
 
 build-for)
     K=${2:?usage: build-for <kernelrelease>}

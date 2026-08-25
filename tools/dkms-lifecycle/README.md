@@ -178,3 +178,68 @@ laptop's USB-Ethernet to the board's RJ45 reached it in one ping. That profile i
 `ipv4.method=manual` on purpose; a DHCP-based one would have failed after ~45 s.
 
 **Still not covered:** the MM6108**A1** hardware. This ran on the A2 HAT only.
+
+## Lessons
+
+**Lesson 1 — `AUTOINSTALL="no"` in dkms 3.0.10 does not behave as assumed.** It
+does not disable autoinstall. `/usr/sbin/dkms` tests `[[ ! $AUTOINSTALL ]]`,
+which is a test for *empty*, so every non-empty string is truthy and `"no"` is
+identical in effect to `"yes"`. The off state is the variable being absent or
+empty. `packaging/dkms/dkms.conf.in` in the fork now says `"yes"`, which is what
+it always did and what the hardware run validated.
+
+**Lesson 2 — `apt -y` does not answer dpkg conffile prompts.** `-y` answers apt.
+A conffile prompt comes from dpkg, and with stdin closed it fails the package:
+`end of file on stdin at conffile prompt`. Every unattended upgrade in this
+procedure uses
+
+```sh
+DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confold full-upgrade
+```
+
+and a system already stuck that way is repaired with the same options plus
+`dpkg --configure -a`, then `apt-get --fix-broken install`.
+
+**Lesson 3 — a missing HaLow link during an incomplete kernel or package
+installation is not evidence about the driver.** When `linux-image` never
+configures, no `modules.dep` is generated and *nothing* loads — `brcmfmac`
+included, which is why the board also left the network. In that state "morse did
+not load" and "no module of any kind could load" are indistinguishable, and the
+conclusion drawn from it was the opposite of the truth. Establish that the
+package state is sound *before* attributing anything to the driver.
+
+**Lesson 4 — never reboot into a new kernel until dpkg, `modules.dep`, initramfs
+and DKMS have all been verified for that kernel.** This is now a gate rather than
+a habit; see below.
+
+## The gate: `preflight <kernelrelease>`
+
+`dkms-lifecycle.sh preflight <kernelrelease>` must exit 0 before any reboot into
+a new kernel. It is a read-only check and it exits non-zero on the first problem
+it finds, so it can be used in a script:
+
+```sh
+./dkms-lifecycle.sh preflight 6.12.96+rpt-rpi-v8 && sudo reboot
+```
+
+| check | passes when |
+|---|---|
+| dpkg clean | `dpkg -C` empty and no half-configured packages. `ii`, `hi`, `rc`, `pn`, `un` are all settled states — **a held package is not a fault**, and held packages are named in the output |
+| `modules.dep` | exists for the target kernel and contains `mac80211`/`brcmfmac` entries, so an empty stub cannot pass |
+| initramfs | `/boot/initrd.img-<K>` exists **and is byte-identical to** the copy the firmware actually loads (`/boot/firmware/initramfs8`, or `initramfs_2712`). On a non-Raspberry-Pi system only the first half applies |
+| headers | `/lib/modules/<K>/build` resolves |
+| dkms status | an `installed` line for that exact kernel |
+| both modules | `morse` **and** `dot11ah` present under `/lib/modules/<K>/updates` — matched as `*.ko*`, since these images compress modules |
+| `modinfo -k` | both resolve, and `vermagic` starts with the target kernel release. Filename and srcversion are printed into the record |
+
+Validated in both directions on 2026-08-25, which matters more than that it
+passes: with the module absent it returns FAIL on five checks and exits 1; with
+everything installed it returns PASS on all nine and exits 0. It also caught a
+false positive of its own on the first run — `rpi-eeprom` is deliberately held,
+which shows as `hi` rather than `ii`, and the first version of the dpkg check
+called that broken. A check that fails in the healthy state is not a check.
+
+One useful true negative it produces: running it against `6.6.51` on a board now
+carrying the 6.12.96 initramfs reports that the firmware would load a stale
+initramfs. That is correct — rolling back to the older kernel needs explicit
+`kernel=` and `initramfs` lines in `config.txt`, not just a reboot.
