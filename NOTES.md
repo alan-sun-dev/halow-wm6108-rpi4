@@ -2,6 +2,161 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-26 (evening) — local access over USB-C, and three of our own tools caught lying
+
+This project's driver work exists to serve something else: a **console server**
+wired to Cisco switches, shipping configuration and logs to a central server for
+diagnosis, with **HaLow as the backhaul** — chosen for fast deployment and
+because that traffic deliberately does not ride the production network. That
+reframes the bench work. Console text and log shipping need almost no
+bandwidth; what matters is that a link stays up, and that a person standing at
+the rack can get in when it does not.
+
+### Why the local access path is USB-C and not a Wi-Fi AP
+
+The obvious answer was `hostapd` on each Pi's idle radio. It was rejected, and
+the reason is worth recording because the RF argument is the weakest one:
+
+- **It does not interfere with HaLow at all.** The Pi's radio is 2.4/5 GHz on
+  SDIO; HaLow is 922 MHz on SPI. Separate radios, separate buses, no overlap.
+  On this hardware the constraint that does exist is
+  `#{managed, AP, mesh point} <= 2, total <= 2, #channels <= 1` — station and AP
+  can coexist but only on one channel.
+- **The real objections are policy and multiplication.** An unmanaged AP in a
+  datacentre is a rogue-AP finding before it is an RF problem, and N console
+  servers means N SSIDs, N credentials, N attack surfaces. This project has
+  already found unauthenticated `ttyd` shipped as a vendor default; repeating
+  that shape in our own work would be worse.
+
+Wired Ethernet was reconsidered and repositioned rather than dismissed: as **a
+point-to-point cable to a technician's laptop** it has every property that made
+it attractive and none of the provisioning cost, because it needs no switch
+port. USB-C then beat it on one specific ground the user raised — it leaves
+`eth0` free for an uplink.
+
+Bluetooth was examined as a *control* channel rather than a data path — "press
+a button without a button" — and deferred. The pattern is real and precedented
+(Dell iDRAC Quick Sync 2, UniFi's BLE adoption, Aruba's AP utilities, ESP32's
+`wifi_prov_mgr`), but a physical button or a cable **is itself authentication**,
+and a BLE endpoint that can enable an AP is reachable from the corridor. It
+earns its place only where the box cannot be physically reached.
+
+### What one USB-C cable now gives, on both boards
+
+`tools/usb-gadget/`. A composite gadget: **NCM** (a USB Ethernet link) plus
+**ACM** (`/dev/ttyGS0`, a serial console — a console server with no console of
+its own was a real gap). Verified on macOS against a Pi 4 Model B, hands-free
+across a reboot:
+
+| | |
+|---|---|
+| laptop address | `192.168.44.x` by DHCP, automatic |
+| **default route** | **unchanged** — the laptop's own internet is untouched |
+| **DNS** | **unchanged** — none is offered on this link |
+| route to `10.41.0.0/16` | handed out via DHCP option 121 |
+| `traceroute` to a node two hops away | `192.168.44.1` 0.9 ms → `10.41.0.208` 7.0 ms |
+
+Suppressing the default route is the point: in dnsmasq an option **with no
+value** means *do not send it*, so `dhcp-option=3` and `dhcp-option=6` leave the
+laptop alone while option 121 still makes the cable useful. `.local` names keep
+working — mDNS is multicast and needs no DNS server.
+
+`dkmstest` uses `192.168.44.0/24` and the station `192.168.45.0/24`, so both can
+be plugged into one laptop; a fleet would standardise on one.
+
+**Two obstacles that would otherwise cost an hour each.** NetworkManager ships
+`85-nm-unmanaged.rules`, which marks *every* USB gadget interface unmanaged —
+its own comment gives the reason as "whatever created it might want to set it up
+itself (e.g. activate an `ipv4.method=shared` connection)", which is exactly
+what we want NM to do. And a gadget netdev **asserts no carrier until it is
+administratively up**, while NM will not touch a carrier-less device; it reports
+`unavailable` and stops. The script breaks the loop by running
+`ip link set usb0 up` itself.
+
+**A correction worth keeping.** The `otg_mode=1` and `dtoverlay=dwc2,dr_mode=host`
+lines already in `config.txt` sit under `[cm4]` and `[cm5]` and **do not apply to
+a Pi 4 Model B**. Reading them out with `grep -n` and missing the section headers
+produced exactly the wrong conclusion — that the board already had dwc2 in host
+mode and needed one word changed. It had no dwc2 overlay at all.
+
+**Still unresolved, and it is hardware:** the Pi 4's USB-C is power *and* gadget,
+so plugging in a laptop interrupts the board's power unless it is fed over the
+GPIO header. Acceptable on a bench, wrong for a deployed console server.
+Measured on a MacBook Air, `vcgencmd get_throttled` stayed `0x0` across a full
+boot with the HaLow HAT and both radios up, so laptop power itself is adequate.
+
+### Installing it on the board with no way back
+
+The station is one floor up and its only working path is the link under test, so
+everything was staged first and the reboot done once. The path used was neither
+HaLow-direct nor the other node, but **the AP as a jump host**:
+
+```sh
+PX="ssh -o BatchMode=yes -o UserKnownHostsFile=$KH root@192.168.108.5 nc %h %p"
+ssh -o ProxyCommand="$PX" alan@10.41.0.208
+```
+
+**`ssh -J` does not work here** — the AP's dropbear has no `-W`/direct-tcpip, and
+it fails with a misleading `Host key verification failed`. busybox `nc` as a
+plain connect does.
+
+It came back clean: `boot_id 1ce7f475… → 2ea29cc0…`, `/sys/class/udc/fe980000.usb`
+present, `/dev/ttyGS0` present, HaLow re-associated, `spi_errors 0`,
+`spi_timedout 0`, both modules loaded. Its `usb0` reads `unavailable` rather
+than `unmanaged`, which is how you confirm the udev override took on a board
+with nothing plugged in.
+
+### Three of our own tools, caught lying
+
+All three were found by *using* the tools on a board they had not been used on
+before. None of them were found by reading the code.
+
+**The preflight gate reported PASS on the wrong file.** Its module check globbed
+`"$m.ko*"`, which also matches the backups this project leaves beside the live
+module. The station's directory holds `morse.ko.xz`,
+`morse.ko.xz.mm6108-2.0.1` and `morse.ko.xz.stale-20260822`; `head -1` picked
+the one from 2026-08-22 and the gate reported PASS naming it. **Right answer,
+wrong evidence — worse than a FAIL, because nobody re-examines a PASS.**
+
+**The same gate could never pass on a hand-installed board.** `dkms status` has
+no entry there, so it FAILed on a check that structurally cannot succeed, and
+the next step would have been to override it and reboot a board with no recovery
+path anyway. **A gate that is always overridden is not a gate.** It now
+separates "dkms manages this module but has no build for the kernel about to
+boot" (still FAIL) from "dkms does not manage it at all" (`[N/A ]`, the file and
+`modinfo` checks being the authority) — verified on hardware that the dangerous
+case still fails:
+
+| | | |
+|---|---|---|
+| station + 6.6.51 | dkms unmanaged here | `[N/A ]` → **PASS** |
+| `dkmstest` + 6.6.51 | dkms manages, no build | `[FAIL]` → **FAIL** |
+| `dkmstest` + 6.12.96 | installed | `[PASS]` → **PASS** |
+
+**"Reachable" is not "usable", and the soak tool could not tell.** After the
+station's reboot its house Wi-Fi came back — SSID `Sun` at **−86 dBm**. The
+preflight probe added to that tool this morning is `ssh <host> true`; it
+succeeded, so the tool preferred that path over the working one and then hung
+for minutes mid-checkpoint, twice, leaving a banner and a timestamp in the log
+with nothing under them. The probe is now **timed**, and a path slower than
+`PROBE_MAX` (8 s) is skipped like an unreachable one. Control-tested with
+`PROBE_MAX=0`, which correctly rejects a healthy 1 s path.
+
+**This corrects an entry from earlier the same day.** "The station has no
+out-of-band path" is too strong. It re-associates to `Sun` after a reboot and
+holds `192.168.108.19`, but at −86 dBm it alternates between timing out and
+being too slow to carry a checkpoint. **Unusable is a different statement from
+absent**, and the difference is what let the tool pick it.
+
+### One operational trap the new setup introduces
+
+Option 121 advertises `10.41.0.0/16` **via whichever node is plugged into the
+laptop**. When that node briefly could not reach a station on that segment — a
+transient ARP failure, cleared by traffic from the far side — the laptop got
+`Network is unreachable` for the *entire* HaLow range while the AP could reach
+everything on it. If the whole segment goes dark from the laptop, suspect the
+USB-connected node before the segment.
+
 ## 2026-08-26 (afternoon) — the AP was moved, the DKMS card identified, and a documented measurement that could not have happened
 
 ### Moving the root of the bench, with the one node that has no way back
