@@ -9,20 +9,80 @@
 #
 # The measurement set is fixed. Do not add or remove fields between runs, or
 # the checkpoints stop being comparable.
+#
+# The framing lines -- mgmt_path, mgmt_medium, checkpoint_status and any line
+# starting `!!!!` -- are not measurements. They say whether the measurements
+# below them can be trusted, and they may change without breaking anything.
+#
+# THIS SCRIPT FAILS LOUDLY AND EXITS NON-ZERO WHEN A BLOCK IS MISSING.
+# On 2026-08-26 an earlier version wrote a checkpoint with exit 0 and 25 of its
+# 30 fields blank: the station's out-of-band management address had gone away,
+# and the ssh stderr went to /dev/null, so the failure was invisible. A
+# checkpoint missing its subject is not a checkpoint, and it must not look
+# like one in the log. Exit codes: 0 complete, 2 incomplete or unreachable.
 set -u
 
-STATION=${STATION:-192.168.108.19}      # house-Wi-Fi management path, NOT the link under test
 HALOW=${HALOW:-10.41.0.208}
-AP=${AP:-10.41.254.1}
+AP=${AP:-192.168.108.5}                 # the AP on the house LAN. 10.41.254.1 is
+                                        # its HaLow side only and the laptop cannot reach it
+STA_MAC=${STA_MAC:-9c:04:b6:ff:df:fe}   # the A1 station, as the AP sees it
 KH=${KH:-$HOME/.ssh/known_hosts_soak}
 LABEL=${1:-unlabelled}
 
-s() { ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KH" alan@"$STATION" "$@" 2>/dev/null; }
-a() { ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KH" root@"$AP" "$@" 2>/dev/null; }
+# Management paths to the station, in preference order. The first is
+# out-of-band (house Wi-Fi). The second IS the link under test: usable when
+# nothing else is left, but then the ping below shares the medium with the ssh
+# carrying the instrument, so it stops being an independent measurement. Which
+# one was used is recorded in mgmt_medium.
+STATION_CANDIDATES=${STATION_CANDIDATES:-"192.168.108.19 $HALOW"}
+STATION=${STATION:-}
+
+SSHOPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+         -o UserKnownHostsFile="$KH")
+ERR=$(mktemp -t soakerr) || exit 2
+OUT=$(mktemp -t soakout) || exit 2
+trap 'rm -f "$ERR" "$OUT"' EXIT
+
+incomplete=0
+# Loud on stdout so it lands in the log next to the fields it invalidates, and
+# on stderr so it is visible when stdout is redirected.
+warn() { printf '!!!! %s\n' "$*"; printf '!!!! %s\n' "$*" >&2; incomplete=1; }
+die()  { warn "$*"; printf '%-18s %s\n' "checkpoint_status" "FAILED"; exit 2; }
+
+s() { ssh "${SSHOPTS[@]}" alan@"$STATION" "$@" 2>"$ERR"; }
+a() { ssh "${SSHOPTS[@]}" root@"$AP" "$@" 2>"$ERR"; }
 
 echo "================ SOAK CHECKPOINT: $LABEL ================"
 echo "taken(laptop)      $(date -Iseconds)"
 
+# ---- preflight: find a live management path before measuring anything -------
+if [ -n "$STATION" ]; then
+  ssh "${SSHOPTS[@]}" alan@"$STATION" true 2>"$ERR" \
+    || die "station $STATION (given explicitly) is not reachable: $(tr -d '\r' < "$ERR" | tail -1)"
+else
+  for h in $STATION_CANDIDATES; do
+    if ssh "${SSHOPTS[@]}" alan@"$h" true 2>"$ERR"; then STATION=$h; break; fi
+    warn "management path $h is down: $(tr -d '\r' < "$ERR" | tail -1)"
+  done
+  [ -n "$STATION" ] || die "no management path to the station: tried $STATION_CANDIDATES"
+  # A path being down is a fact about the bench, not a broken checkpoint --
+  # only having none is. Reset so a fallback still scores OK.
+  incomplete=0
+fi
+
+case "$STATION" in
+  10.41.*) MEDIUM="halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent" ;;
+  *)       MEDIUM="out-of-band (house Wi-Fi)" ;;
+esac
+printf '%-18s %s\n' "mgmt_path" "$STATION"
+printf '%-18s %s\n' "mgmt_medium" "$MEDIUM"
+
+ssh "${SSHOPTS[@]}" root@"$AP" true 2>"$ERR" \
+  || die "AP $AP is not reachable: $(tr -d '\r' < "$ERR" | tail -1)"
+
+# ---- station-side view -----------------------------------------------------
+# The remote block ends in a sentinel. Without one, a block that dies halfway
+# through is indistinguishable from a block that had nothing to say.
 s '
 echo "taken(station)     $(date -Iseconds)"
 echo "uptime_seconds     $(cut -d. -f1 /proc/uptime)"
@@ -54,11 +114,28 @@ P=/sys/class/spi_master/spi0/spi0.0/statistics
 for f in messages bytes errors timedout; do printf "%-18s %s\n" "spi_$f" "$(cat $P/$f)"; done
 printf "%-18s %s\n" "dmesg_failures" "$(sudo dmesg | grep -icE "cmd63|eproto|crc error|read fail|write fail|probe fail")"
 printf "%-18s %s\n" "dmesg_control"  "$(sudo dmesg | grep -c morse_spi)"
-'
+echo "__station_block_end__"
+' > "$OUT"
+rc=$?
+grep -v '^__station_block_end__$' "$OUT"
+if [ $rc -ne 0 ]; then
+  warn "station block exited $rc: $(tr -d '\r' < "$ERR" | tail -1)"
+elif ! grep -q '^__station_block_end__$' "$OUT"; then
+  warn "station block stopped early -- the fields above are partial: $(tr -d '\r' < "$ERR" | tail -1)"
+fi
+# 25 measurement lines when whole. Fewer means a field went missing quietly.
+n=$(grep -vc '^__station_block_end__$' "$OUT")
+[ "$n" -ge 25 ] || warn "station block produced $n measurement lines, expected 25"
 
-# AP-side view. A second, independently maintained set of counters -- the
-# station's own numbers and the AP's should move together.
-a "iw dev wlh0 station dump" | awk '/^Station/{p=($2=="9c:04:b6:ff:df:fe")} p' | awk '
+# ---- AP-side view ----------------------------------------------------------
+# A second, independently maintained set of counters -- the station's own
+# numbers and the AP's should move together.
+if ! a "iw dev wlh0 station dump" > "$OUT"; then
+  warn "AP station dump failed: $(tr -d '\r' < "$ERR" | tail -1)"
+elif ! grep -qi "^Station $STA_MAC" "$OUT"; then
+  warn "the AP's station dump does not list $STA_MAC -- the station is not associated"
+fi
+awk -v mac="$STA_MAC" '/^Station/{p=(tolower($2)==tolower(mac))} p' "$OUT" | awk '
   /rx packets/  {printf "%-18s %s\n", "ap_rx_packets", $3}
   /tx packets/  {printf "%-18s %s\n", "ap_tx_packets", $3}
   /rx bytes/    {printf "%-18s %s\n", "ap_rx_bytes", $3}
@@ -68,10 +145,19 @@ a "iw dev wlh0 station dump" | awk '/^Station/{p=($2=="9c:04:b6:ff:df:fe")} p' |
   /expected thr/{printf "%-18s %s\n", "ap_expected_thr", $3}
   /connected ti/{printf "%-18s %s\n", "ap_assoc_uptime_s", $3}
   /MFP/         {printf "%-18s %s\n", "ap_mfp", $2}'
-printf "%-18s %s\n" "ap_uptime" "$(a uptime | sed 's/^ *//')"
+ap_up=$(a uptime | sed 's/^ *//')
+[ -n "$ap_up" ] || warn "AP uptime came back empty: $(tr -d '\r' < "$ERR" | tail -1)"
+printf "%-18s %s\n" "ap_uptime" "$ap_up"
 
-# Small, deliberately light sample: 20 pings at 3/s over HaLow, from the laptop,
-# which reaches it through the AP bridge -- a different path from the management
-# SSH, so the instrument is not sharing the medium with the thing it measures.
+# Small, deliberately light sample: 20 pings at 3/s over HaLow, from the
+# laptop. Independent of the management ssh only while mgmt_medium says
+# out-of-band -- read that line before reading this one.
 printf "%-18s %s\n" "ping_20x" "$(ping -c 20 -i 0.3 "$HALOW" 2>&1 | tail -2 | tr '\n' ' ' | sed 's/  */ /g')"
+
+if [ "$incomplete" -eq 0 ]; then
+  printf '%-18s %s\n' "checkpoint_status" "OK"
+else
+  printf '%-18s %s\n' "checkpoint_status" "INCOMPLETE -- see the !!!! lines above"
+fi
 echo
+[ "$incomplete" -eq 0 ] || exit 2
