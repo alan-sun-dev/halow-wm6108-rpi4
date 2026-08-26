@@ -79,6 +79,33 @@ and NetworkManager will not touch a device it sees as carrier-less — it
 reports `unavailable` and stops. Chicken and egg. `usb-gadget-oob.sh` breaks it
 by running `ip link set usb0 up` itself after binding the UDC.
 
+## Attaching to the console shows a blank screen — press Enter
+
+`agetty` prints its banner and `login:` **once**, when it starts. Anything that
+consumes that output — an earlier session, a script reading the port — takes it
+with it, and the next person to attach sees an empty screen with a live,
+healthy console behind it.
+
+    screen /dev/cu.usbmodem<N> 115200     # blank
+    <press Enter>                          # dkmstest login:
+
+Confirmed rather than assumed: `agetty` was `Ss+` on `ttyGS0` the whole time
+and the tty was in normal canonical mode. If a fresh prompt is wanted without
+touching the port (e.g. someone is already attached), restart the unit from
+another session:
+
+    systemctl restart serial-getty@ttyGS0.service
+
+**Do not write to a console that is sitting at a `Password:` prompt.** Anything
+piped to `/dev/ttyGS0` at that moment is consumed as the password and lands in
+the journal as `FAILED LOGIN`. Found the obvious way.
+
+**On macOS the port is exclusive.** A `screen` session holds
+`/dev/cu.usbmodem<N>`, and anything else opening it gets `resource busy`. Check
+with `lsof /dev/cu.usbmodem<N>` and read **lsof's own exit code** — 1 means
+nothing holds it. Piping lsof into `head` throws that status away, so
+`lsof ... | head || echo free` always reports free.
+
 ## Power
 
 The Pi 4's USB-C port is both power input and the gadget port, so a board
