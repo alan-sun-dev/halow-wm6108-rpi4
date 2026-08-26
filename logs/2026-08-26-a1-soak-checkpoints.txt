@@ -1,0 +1,92 @@
+A1 SOAK — Wio-WM6108 / MM6108A1 / SenseCAP M1 / kernel 6.6.51+rpt-rpi-v8
+Driver: this fork's rpi-stock-kernel-portability branch, hand-installed.
+Read-only checkpoints. The station is never rebooted, reloaded, or
+reconfigured during the soak, and the AP is not touched either.
+
+TWO DISCONTINUITIES SINCE THE 2026-08-25 FILE, both outside the soak:
+
+  1. The station rebooted 2026-08-25 20:16 during the AP re-architecture.
+     boot_id ff3c110f… -> 1ce7f475…. The continuous-uptime clock restarts
+     there; anything measured against the 2026-08-25 checkpoints spans a
+     boot and is not a soak interval.
+
+  2. The station has no out-of-band management path any more. wlan0 is
+     disconnected and neither house SSID (Sun, Unifi) appears in its scan
+     from where the board now sits. Every checkpoint below is taken over
+     HaLow — the link under test — so ping_20x shares its medium with the
+     ssh carrying the instrument. The mgmt_medium field says so on every
+     run; read it before reading ping_20x.
+
+The first entry below is the FAILED checkpoint that exposed a defect in the
+checkpoint tool itself. It is kept because it is the evidence.
+
+---------------- KEPT AS EVIDENCE: a checkpoint that failed silently ----------------
+# Taken with the pre-fix tool. It exited 0 and looks like a checkpoint.
+# 25 of its 30 fields are missing: the whole station-side block is gone,
+# because the tool had STATION=192.168.108.19 hard-wired and sent the
+# ssh stderr to /dev/null. Nothing in the output says the subject of the
+# measurement was never contacted. The tool was fixed the same hour;
+# see the commit to tools/soak/soak-checkpoint.sh.
+================ SOAK CHECKPOINT: 2026-08-26 morning, ~18h after checkpoint 2 ================
+taken(laptop)      2026-08-26T12:44:52+08:00
+ap_rx_bytes        46688
+ap_rx_packets      463
+ap_tx_bytes        134572
+ap_tx_packets      285
+ap_tx_retries      142
+ap_tx_failed       0
+ap_expected_thr    8.789Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  48126
+ap_uptime          04:45:02 up 2 days, 13:13,  load average: 0.00, 0.00, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 6.691/14.325/23.074/4.748 ms 
+
+
+================ SOAK CHECKPOINT: t+17h30m, first checkpoint from the fixed tool ================
+taken(laptop)      2026-08-26T12:55:37+08:00
+!!!! management path 192.168.108.19 is down: ssh: connect to host 192.168.108.19 port 22: Operation timed out
+mgmt_path          10.41.0.208
+mgmt_medium        halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent
+taken(station)     2026-08-26T12:55:48+08:00
+uptime_seconds     57341
+uptime_human       up 15 hours, 55 minutes
+boot_id            1ce7f475-8f7d-42e4-b3a0-16da2e8b33d2
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     207
+sta_tx_failed      0
+sta_rx_drop_misc   6
+sta_signal_dbm     -47
+sta_tx_bitrate     195.0 MBit/s VHT-MCS 4
+sta_rx_bitrate     130.0 MBit/s VHT-MCS 3
+assoc_uptime_s     48773
+spi_messages       4960374
+spi_bytes          1495993425
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      87
+ap_rx_bytes        145608
+ap_rx_packets      893
+ap_tx_bytes        227576
+ap_tx_packets      779
+ap_tx_retries      476
+ap_tx_failed       1
+ap_expected_thr    5.859Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  48772
+ap_uptime          04:55:49 up 2 days, 13:24,  load average: 0.00, 0.00, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 6.394/13.392/22.625/4.253 ms 
+checkpoint_status  OK
+
