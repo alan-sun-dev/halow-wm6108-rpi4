@@ -135,7 +135,7 @@ moved, went:
 
 **A front-end band mismatch is a fixed property — it would be consistently poor,
 not intermittently perfect.** Something physical and intermittent is also wrong
-(a loose SMA connector is the obvious candidate). The twoproblems are independent:
+(a loose SMA connector is the obvious candidate). The two problems are independent:
 the SKU explains why it is slower than the other nodes even at its best; it does
 not explain the flapping.
 
