@@ -182,6 +182,70 @@ Replaced (old file kept as `known_hosts_soak.bak-20260826`) and verified by
 logging in with `StrictHostKeyChecking=yes`, so the key was checked rather than
 accepted. **Before deciding a key is new, look at what else in the file already
 holds it.**
+### The preflight gate, exercised against four kernels — the failure scenario needed nothing broken
+
+The `preflight` gate has guarded every kernel reboot in this project since
+2026-08-25, and until today its FAIL path had been seen only in passing. The
+open question was whether it actually stops a reboot into a kernel DKMS never
+built for. Testing that normally means breaking a build on purpose. It did not
+have to: **`dkmstest` already carries four installed kernels and a DKMS package
+built for exactly one of them.**
+
+```
+6.12.96+rpt-rpi-v8     <- running; dkms status: installed
+6.12.96+rpt-rpi-2712      no module
+6.6.51+rpt-rpi-v8         no module
+6.6.51+rpt-rpi-2712       no module
+```
+
+Four runs, read-only, on the soaking board:
+
+| target | checks | verdict | exit |
+|---|---|---|---|
+| `6.12.96+rpt-rpi-v8` | 10 PASS, 0 FAIL | **PASS** | 0 |
+| `6.6.51+rpt-rpi-v8` | 4 PASS, 6 FAIL | FAIL | 1 |
+| `6.12.96+rpt-rpi-2712` | 5 PASS, 5 FAIL | FAIL | 1 |
+| `9.9.9-does-not-exist` | 1 PASS, 9 FAIL | FAIL | 1 |
+| no argument | usage error | — | 1 |
+
+The first row is the positive control, run in the same pass: without it, four
+FAILs prove only that the gate can say no.
+
+**What was genuinely new, and what was not.** The 2026-08-25 session had
+already run the gate against `6.6.51+rpt-rpi-v8` and against a nonexistent
+kernel, and both FAILed — so that much is a reproduction, not a first. Two
+things are new:
+
+- **Check 0 (`/lib/modules/$K exists`) had never executed.** It was added in
+  `819a108` at 18:33:08 on 2026-08-25 — **41 seconds after that session's last
+  gate run**. Today is the first time it has run, and the nonexistent-kernel
+  case is what fires it.
+- **The 2712 case isolates the thing the gate is actually for.** The 6.6.51 run
+  is a blunt instrument: its initramfs check fails too, so it cannot separate
+  "no module was ever built" from "this boot would be wrong anyway". The 2712
+  kernel has its own initramfs slot, so that line PASSes and **the only five
+  failures are the DKMS and module ones.** That is the clean demonstration.
+
+**A structural point about the initramfs check, which is not a bug.**
+`/boot/firmware/initramfs8` holds one image at a time — the running kernel's.
+So for any *other* `+rpt-rpi-v8` kernel that check must FAIL, and correctly:
+the firmware really would load a stale initramfs. The remedy for that
+particular line is to make the target kernel the default so raspi-firmware
+regenerates the FAT copy — **not** to build a module. Worth knowing before
+someone reads it as a DKMS fault.
+
+**`preflight` with no argument refuses rather than guessing**, exiting 1 on a
+usage error. It does not fall back to `uname -r`; a gate that defaults to the
+running kernel answers the wrong question at the one moment it matters.
+
+**The one check still never seen firing on hardware is `dpkg clean`** — the
+check with the most history behind it, since an unattended `apt full-upgrade`
+once died on a conffile prompt, `linux-image`'s postinst never ran, and no
+module of any kind could load. Faking that on a soaking board is not worth it,
+so the awk was exercised on synthetic `dpkg -l` input: `notok=0` on clean
+input, `notok=2` when `iF` and `iU` lines are added, and a held package (`hi`)
+correctly not counted as a fault. The check discriminates; it has still never
+run against real damaged dpkg output, and that stays open.
 
 ## 2026-08-26 (midday) — the soak checkpoint tool was failing silently, and the station has no out-of-band path left
 

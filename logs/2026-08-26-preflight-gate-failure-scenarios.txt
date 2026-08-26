@@ -1,0 +1,165 @@
+PREFLIGHT GATE — FAILURE SCENARIOS, 2026-08-26
+tools/dkms-lifecycle/dkms-lifecycle.sh preflight <kernelrelease>
+Run on dkmstest (HT-HC01P / MM6108A2 / Raspberry Pi OS / 6.12.96+rpt-rpi-v8),
+which carries the DKMS-installed build. Read-only: the gate makes no change.
+
+WHY THIS BOARD IS THE TEST CASE, WITH NOTHING BROKEN ON PURPOSE
+  Four kernels are installed:
+      6.12.96+rpt-rpi-v8    <- running, DKMS built and installed for it
+      6.12.96+rpt-rpi-2712
+      6.6.51+rpt-rpi-v8
+      6.6.51+rpt-rpi-2712
+  dkms status lists exactly one:
+      morse/mm8108-2.0.0+rpi-portability, 6.12.96+rpt-rpi-v8, aarch64: installed
+  So three of the four kernels have no morse module at all, and booting into
+  any of them is the exact accident the gate exists to prevent.
+
+WHAT WAS ALREADY TESTED ON 2026-08-25, AND WHAT WAS NOT
+  The 2026-08-25 session already ran the gate against 6.6.51+rpt-rpi-v8 and
+  against a nonexistent kernel. Both FAILed. What it could NOT have tested is
+  check 0 (/lib/modules/$K exists), which was added in 819a108 at 18:33:08 --
+  41 seconds AFTER that session's last gate run at 18:32:32. Today is the
+  first time check 0 has ever executed.
+
+  The 6.6.51 run is also a blunt instrument: its initramfs check fails too, so
+  it cannot separate "the module was never built" from "the boot would be
+  wrong anyway". The 2712 case below is the clean isolation, and it is new.
+
+RESULT SUMMARY
+  6.12.96+rpt-rpi-v8    10 PASS,  0 FAIL   GATE: PASS   exit 0   <- positive control
+  6.6.51+rpt-rpi-v8      4 PASS,  6 FAIL   GATE: FAIL   exit 1
+  6.12.96+rpt-rpi-2712   5 PASS,  5 FAIL   GATE: FAIL   exit 1   <- clean isolation
+  9.9.9-does-not-exist   1 PASS,  9 FAIL   GATE: FAIL   exit 1   <- check 0 fires
+  (no argument)          usage error,      exit 1                <- does not default
+
+A STRUCTURAL POINT ABOUT THE INITRAMFS CHECK, NOT A BUG
+  /boot/firmware/initramfs8 can hold one image at a time, and it holds the
+  running kernel's. So for any OTHER +rpt-rpi-v8 kernel the check must FAIL --
+  correctly, because the firmware really would load a stale initramfs. The
+  2712 slot is separate (initramfs_2712), which is why that case PASSes the
+  initramfs line while failing every module line.
+  Consequence: the remedy for that particular FAIL is not "build the module".
+  It is to make the target kernel the default so raspi-firmware regenerates
+  the FAT copy. Do not read it as a DKMS fault.
+
+THE ONE CHECK STILL NEVER SEEN FIRING ON HARDWARE: "dpkg clean"
+  This is the check with the most history behind it -- an unattended
+  apt full-upgrade once died on a dpkg conffile prompt, linux-image's postinst
+  never ran, and no module of any kind could load on that kernel. Faking that
+  state on a soaking board is not worth it, so the awk was exercised on
+  synthetic dpkg -l input instead:
+
+      clean input (ii / hi / rc / un)          -> notok=0   correct
+      dirty input (adds iF and iU)             -> notok=2   correct
+      held package (hi rpi-eeprom)             -> NOT counted as a fault, correct
+
+  So the check discriminates. It has still never fired against real dpkg
+  output, and that remains untested.
+
+================================================================
+FULL OUTPUT OF THE FOUR RUNS, 2026-08-26, as recorded on the board
+================================================================
+===== PREFLIGHT GATE for 6.12.96+rpt-rpi-v8 =====
+at 2026-08-26T19:05:52+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 69347s
+Nothing may reboot into a new kernel until every line below says PASS.
+  [PASS] /lib/modules/6.12.96+rpt-rpi-v8 exists -- 1913 module files
+  [PASS] dpkg clean -- dpkg -C empty, no half-configured packages; held: rpi-eeprom 
+  [PASS] modules.dep for 6.12.96+rpt-rpi-v8 -- 1913 lines, 82 control entries
+  [PASS] initramfs for 6.12.96+rpt-rpi-v8 -- /boot/initrd.img-6.12.96+rpt-rpi-v8 == /boot/firmware/initramfs8 (6949301 bytes)
+  [PASS] kernel headers for 6.12.96+rpt-rpi-v8 -- /usr/src/linux-headers-6.12.96+rpt-rpi-v8
+  [PASS] dkms status for 6.12.96+rpt-rpi-v8 -- installed
+  [PASS] morse installed for 6.12.96+rpt-rpi-v8 -- /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/morse.ko.xz
+  [PASS] dot11ah installed for 6.12.96+rpt-rpi-v8 -- /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz
+  [PASS] modinfo -k 6.12.96+rpt-rpi-v8 morse -- version 0-rel_mm8108_2_0_0_2026_Apr_21, srcversion 89A7C1DAC9B51F941EFC8F2
+      filename: /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/morse.ko.xz
+      vermagic: 6.12.96+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+  [PASS] modinfo -k 6.12.96+rpt-rpi-v8 dot11ah -- version 0-rel_mm8108_2_0_0_2026_Apr_21, srcversion 866E8BB32C387B0B3D846EC
+      filename: /lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/dot11ah.ko.xz
+      vermagic: 6.12.96+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+
+GATE: PASS -- safe to reboot into 6.12.96+rpt-rpi-v8
+
+record: /home/alan/halow-test/dkms-lifecycle-record.txt
+
+===== PREFLIGHT GATE for 6.6.51+rpt-rpi-v8 =====
+at 2026-08-26T19:06:04+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 69358s
+Nothing may reboot into a new kernel until every line below says PASS.
+  [PASS] /lib/modules/6.6.51+rpt-rpi-v8 exists -- 1825 module files
+  [PASS] dpkg clean -- dpkg -C empty, no half-configured packages; held: rpi-eeprom 
+  [PASS] modules.dep for 6.6.51+rpt-rpi-v8 -- 1825 lines, 55 control entries
+  [FAIL] initramfs for 6.6.51+rpt-rpi-v8 -- /boot/firmware/initramfs8 differs from /boot/initrd.img-6.6.51+rpt-rpi-v8 -- firmware would load a stale initramfs
+  [PASS] kernel headers for 6.6.51+rpt-rpi-v8 -- /usr/src/linux-headers-6.6.51+rpt-rpi-v8
+  [FAIL] dkms status for 6.6.51+rpt-rpi-v8 -- no 'installed' line for 6.6.51+rpt-rpi-v8
+  [FAIL] morse installed for 6.6.51+rpt-rpi-v8 -- not found under /lib/modules/6.6.51+rpt-rpi-v8/updates
+  [FAIL] dot11ah installed for 6.6.51+rpt-rpi-v8 -- not found under /lib/modules/6.6.51+rpt-rpi-v8/updates
+  [FAIL] modinfo -k 6.6.51+rpt-rpi-v8 morse -- modinfo: ERROR: Module morse not found.
+  [FAIL] modinfo -k 6.6.51+rpt-rpi-v8 dot11ah -- modinfo: ERROR: Module dot11ah not found.
+
+GATE: FAIL -- DO NOT REBOOT into 6.6.51+rpt-rpi-v8.
+Fix every FAIL line above first. Do not weaken -Werror to get a
+future build to pass: a warning from a new kernel is information.
+
+===== PREFLIGHT GATE for 6.12.96+rpt-rpi-2712 =====
+at 2026-08-26T19:06:25+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 69379s
+Nothing may reboot into a new kernel until every line below says PASS.
+  [PASS] /lib/modules/6.12.96+rpt-rpi-2712 exists -- 1910 module files
+  [PASS] dpkg clean -- dpkg -C empty, no half-configured packages; held: rpi-eeprom 
+  [PASS] modules.dep for 6.12.96+rpt-rpi-2712 -- 1910 lines, 81 control entries
+  [PASS] initramfs for 6.12.96+rpt-rpi-2712 -- /boot/initrd.img-6.12.96+rpt-rpi-2712 == /boot/firmware/initramfs_2712 (6949281 bytes)
+  [PASS] kernel headers for 6.12.96+rpt-rpi-2712 -- /usr/src/linux-headers-6.12.96+rpt-rpi-2712
+  [FAIL] dkms status for 6.12.96+rpt-rpi-2712 -- no 'installed' line for 6.12.96+rpt-rpi-2712
+  [FAIL] morse installed for 6.12.96+rpt-rpi-2712 -- not found under /lib/modules/6.12.96+rpt-rpi-2712/updates
+  [FAIL] dot11ah installed for 6.12.96+rpt-rpi-2712 -- not found under /lib/modules/6.12.96+rpt-rpi-2712/updates
+  [FAIL] modinfo -k 6.12.96+rpt-rpi-2712 morse -- modinfo: ERROR: Module morse not found.
+  [FAIL] modinfo -k 6.12.96+rpt-rpi-2712 dot11ah -- modinfo: ERROR: Module dot11ah not found.
+
+GATE: FAIL -- DO NOT REBOOT into 6.12.96+rpt-rpi-2712.
+Fix every FAIL line above first. Do not weaken -Werror to get a
+future build to pass: a warning from a new kernel is information.
+
+===== PREFLIGHT GATE for 9.9.9-does-not-exist =====
+at 2026-08-26T19:06:26+08:00  kernel 6.12.96+rpt-rpi-v8  uptime 69381s
+Nothing may reboot into a new kernel until every line below says PASS.
+  [FAIL] /lib/modules/9.9.9-does-not-exist exists -- no such directory -- that kernel is not installed
+  [PASS] dpkg clean -- dpkg -C empty, no half-configured packages; held: rpi-eeprom 
+  [FAIL] modules.dep for 9.9.9-does-not-exist -- missing or empty: /lib/modules/9.9.9-does-not-exist/modules.dep
+  [FAIL] initramfs for 9.9.9-does-not-exist -- missing or empty: /boot/initrd.img-9.9.9-does-not-exist
+  [FAIL] kernel headers for 9.9.9-does-not-exist -- /lib/modules/9.9.9-does-not-exist/build missing
+  [FAIL] dkms status for 9.9.9-does-not-exist -- no 'installed' line for 9.9.9-does-not-exist
+  [FAIL] morse installed for 9.9.9-does-not-exist -- not found under /lib/modules/9.9.9-does-not-exist/updates
+  [FAIL] dot11ah installed for 9.9.9-does-not-exist -- not found under /lib/modules/9.9.9-does-not-exist/updates
+  [FAIL] modinfo -k 9.9.9-does-not-exist morse -- modinfo: ERROR: Module morse not found.
+  [FAIL] modinfo -k 9.9.9-does-not-exist dot11ah -- modinfo: ERROR: Module dot11ah not found.
+
+GATE: FAIL -- DO NOT REBOOT into 9.9.9-does-not-exist.
+Fix every FAIL line above first. Do not weaken -Werror to get a
+future build to pass: a warning from a new kernel is information.
+
+================================================================
+THE NO-ARGUMENT CASE — the gate must refuse, not guess
+================================================================
+$ ~/halow-test/dkms-lifecycle.sh preflight
+/home/alan/halow-test/dkms-lifecycle.sh: line 91: 1: usage: preflight <kernelrelease>
+EXIT=1
+
+It does not fall back to `uname -r`. A gate that defaults to the running
+kernel would answer the wrong question at the one moment it matters.
+
+================================================================
+THE "dpkg clean" CHECK, EXERCISED ON SYNTHETIC INPUT
+================================================================
+The check:
+    notok=$(dpkg -l | awk 'NR>5 && $1 !~ /^(ii|hi|rc|pn|un)$/ {n++} END{print n+0}')
+
+Clean input — ii bash / hi rpi-eeprom / rc oldpkg / un nevertherepkg:
+    notok=0                                     correct
+Same input plus two half-done states:
+    iF  linux-image-6.12.96   half-configured -- postinst never ran
+    iU  raspi-firmware        unpacked, not configured
+    notok=2                                     correct
+The held package (hi rpi-eeprom) is NOT counted as a fault  correct
+    — a hold is deliberate here and must not read as damage.
+
+So the check discriminates between the two states it is used to distinguish.
+It has still never fired against real dpkg output on this hardware; that is
+the one part of the gate with no live evidence behind it.
