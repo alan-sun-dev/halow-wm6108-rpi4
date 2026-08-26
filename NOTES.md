@@ -2,6 +2,187 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-26 (afternoon) — the AP was moved, the DKMS card identified, and a documented measurement that could not have happened
+
+### Moving the root of the bench, with the one node that has no way back
+
+The AP was powered off, physically moved, and brought back. It is the NAT
+router, the DHCP server and the only AP on the bench, and since this morning
+the station one floor up has had **no out-of-band path at all** — if the AP had
+come back differently, that board would have needed a walk upstairs.
+
+Two things were done first.
+
+**The two HaLow nodes were pinned to their addresses.** `/tmp/dhcp.leases` is
+on tmpfs, so a power cycle loses every lease, and both nodes held addresses
+from the dynamic pool (`start=100 limit=150`, 12 h). dnsmasq usually returns
+the same address for the same MAC, but usually is not a configuration
+guarantee, and `10.41.0.208` is the one machine that cannot be recovered
+remotely. Applied detached with a 900 s auto-rollback, per the rule that
+anything written to the AP must be able to undo itself:
+
+```
+dhcp-host=9c:04:b6:ff:df:fe,10.41.0.208,Sensecap
+dhcp-host=0c:bf:74:40:8e:91,10.41.0.216,dkmstest
+```
+
+Those two lines are read from **what dnsmasq generated**, not from `uci show` —
+the `proto`-less firewall rule of 2026-08-26 is the reason that distinction is
+now a habit.
+
+**A size check worth doing.** After `uci commit` the live `/etc/config/dhcp` was
+*smaller* than its backup — 936 bytes against 1183 — which is the wrong
+direction after adding two sections. Comparing option by option (the AP has no
+`diff`; the files were pulled to the laptop) showed uci's canonical rewrite had
+stripped 247 bytes of trailing `#` comments from five lines whose values are
+unchanged. Nothing was lost. The check took a minute and would have caught a
+real loss.
+
+**A closing checkpoint was taken before power-off**, so the soak has a defined
+end: 18 h 55 m uptime, 16.5 h association, `spi_errors 0`, `spi_timedout 0`
+across 1.752 GB and 5.85 M SPI messages, 20/20 pings.
+
+### What came back
+
+Everything, unchanged. The AP had genuinely rebooted — uptime 10 minutes
+against 2 days 16 hours before, which is the check that matters, not the fact
+that ssh answered.
+
+| | before the move | after |
+|---|---|---|
+| station, AP-side signal | −56 dBm | −54 dBm |
+| station, own view | −53 dBm | −48 dBm |
+| `dkmstest`, AP-side signal | −43 dBm | −37 dBm |
+| `dkmstest`, own view | −42 dBm | −33 dBm |
+| SSID / frequency / bandwidth | `BCM2711-57e7` / 922.0 MHz / 4 MHz | identical |
+| both nodes' addresses | .208 / .216 | .208 / .216, now by configuration |
+| station uptime | 18 h 55 m | 19 h 16 m — it never rebooted |
+
+**No conclusion is drawn from those signal columns.** Every one of them moved
+in the "better" direction, and all four differences are smaller than the ~8 dB
+this same bench was measured drifting between two samples four minutes apart
+earlier the same day. Single samples cannot resolve a change this size.
+
+**The AP's clock is right, which was not expected.** The box has no RTC, and
+the standing advice has been that `logread` timestamps are unusable after a
+boot. With a working WAN it now syncs at startup: the AP and the laptop agreed
+to the second. The no-RTC limitation is real but only bites when the AP has no
+internet.
+
+### A latency finding that dissolved on the second sample
+
+The first checkpoint after the move read **53.7 ms average, 116 ms max, stddev
+32.2** against 13.1 ms / 4.9 before it — a clear "the move made it worse" if
+written up. Three more runs, taken minutes later:
+
+```
+station : 14.362 / 13.427 / 16.438 ms
+dkmstest: 13.472 / 14.641 ms
+```
+
+and the AP's own interface counters moved **+62 B tx / +42 B rx in 10 s**, so
+the link was idle while they were taken. The first sample was the link settling
+in the minute after both nodes re-associated. Same lesson as the RSSI column
+above, one layer up.
+
+### Throughput after the move: unchanged, and measured over the right link
+
+`iperf` between `dkmstest` and the AP, one HaLow hop, 10 s per direction, TCP —
+the same shape as the 2026-08-26 morning baseline:
+
+| | baseline (before) | after the move |
+|---|---|---|
+| uplink, node → AP | 8.92 Mbit/s | **9.20 Mbit/s** |
+| downlink, AP → node | 8.73 Mbit/s | **8.60 Mbit/s** |
+
+`tx failed 0`, `spi_errors 0`, `spi_timedout 0` after ~25 MB. Both runs show
+the same first-half/second-half shape (12.0 → 8.4 up, 13.8 → 7.3 down) — TCP's
+window opening, not a link effect.
+
+**The test target had to be chosen carefully.** From `dkmstest`, the AP has two
+addresses: `10.41.254.1` routes over `wlan1`, and `192.168.108.5` routes over
+`wlan0`, the house Wi-Fi. Aiming at the wrong one would have benchmarked the
+house Wi-Fi and reported it as a HaLow figure. `ip route get` before the run
+settles it in one command.
+
+### A documented measurement that could not have been taken
+
+The morning's throughput table records a station column — 3.56 Mbit/s up,
+5.34 Mbit/s down — under the heading "measured with `iperf` 2.1.8 between each
+station and the AP". **The station has never had `iperf` installed.** Checked
+with the positive control in the same pass: its apt history holds exactly one
+`Install:` line (build tools, 2026-08-22) and zero mentions of iperf; its
+`dpkg.log` has 14 `status installed` lines and no iperf; and no binary exists
+under any of the usual paths, nor `nc`, nor `socat`. `iperf` was installed on
+`dkmstest` alone, on 2026-08-25 23:55.
+
+So the station column was produced some other way, and the sentence describing
+how the table was measured is wrong for half of it. The numbers are not
+retracted — there is no evidence against them — but **their provenance is
+unknown, and they must not be compared against an `iperf` run as though the
+method matched.** Only the `dkmstest` column is comparable, which is why only
+that row is repeated above.
+
+### Five ways a command lied on the way through this
+
+All caught, all cheap, all the same family as the rest of this file:
+
+- **`ps w | grep -c "[s]tatic-leases"` returned 1 for a process that was not
+  running.** The pattern matched the ssh session's *own* `ash -c` command line,
+  which contained the pattern as text. Printing the matches instead of counting
+  them showed one line, and it was the grep's own invocation.
+- **`nohup … &` inside an ssh command did not survive the session**, twice, with
+  no error and no output — the script simply never ran. `start-stop-daemon -S -b`
+  (OpenWrt) and `setsid nohup … < /dev/null &` (Debian) both work, and the proof
+  is a printed process line plus a listening socket, not the absence of an error.
+- **`diff` does not exist on the AP.** The command returned 127 and the shell
+  printed `diff: not found`, which is only visible because stderr was not
+  redirected that time.
+- **`diff` on two empty files exits 0.** An unquoted `$SSHOPTS` in zsh — which
+  does not word-split — made both `cat`s fail, and the comparison of two 0-byte
+  files "passed". The byte counts printed next to it are what caught it; this is
+  the same shape as the empty-string sha256 recorded on 2026-08-25.
+- **`command -v iperf` on the station said nothing, and this time it was true** —
+  but only after checking `/usr/bin`, `/usr/sbin`, `/sbin`, `/usr/local/bin` and
+  `dpkg -l` directly, because `dkms` had failed the identical test an hour
+  earlier for the opposite reason: it is at `/usr/sbin/dkms`, off a non-root
+  `PATH`, and the package was installed all along. Third time on this project
+  after `iw` and `modinfo`.
+
+### The `dkmstest` card, identified
+
+The board is running the **DKMS-installed** build, confirmed three independent
+ways: the modules load from `/lib/modules/6.12.96+rpt-rpi-v8/updates/dkms/`,
+`/var/lib/dkms/morse/mm8108-2.0.0+rpi-portability/6.12.96+rpt-rpi-v8` exists,
+and `dkms status` reports `installed`. 128 GB card, PARTUUID `f3449563`.
+
+**DKMS has built the module for one kernel only.** Four are installed
+(`6.12.96` and `6.6.51`, each `+rpt-rpi-v8` and `+rpt-rpi-2712`); `dkms status`
+lists `6.12.96+rpt-rpi-v8` alone. Booting this card into `6.6.51+rpt-rpi-v8`
+would find no morse module at all — which is a ready-made, un-engineered test
+case for the `preflight` gate, needing nothing broken on purpose.
+
+**`apt-daily-upgrade.timer` fires daily on this board.** Left alone — it
+installs security updates only and does not reboot — but it is worth knowing it
+exists on a board that is soaking, given that an unattended `apt full-upgrade`
+once left this same hardware unable to load any module at all.
+
+### The SSH host key that was never new
+
+`10.41.0.216` presented a key that did not match `known_hosts_soak`. The
+two-address check used on 2026-08-25 says "same host, new install" — but
+reading the whole file says something better: the presented key
+`SHA256:T7zNvr…` was **already trusted there**, recorded under two other names
+for the same board, `192.168.108.13` and `10.42.0.2`. What was stale was the
+`10.41.0.216` line itself, holding `SHA256:xBXal2…` — the key of that board's
+**OpenWrt** install, which used the same HaLow address before the card was
+swapped. The address was reused; the old entry was never cleared.
+
+Replaced (old file kept as `known_hosts_soak.bak-20260826`) and verified by
+logging in with `StrictHostKeyChecking=yes`, so the key was checked rather than
+accepted. **Before deciding a key is new, look at what else in the file already
+holds it.**
+
 ## 2026-08-26 (midday) — the soak checkpoint tool was failing silently, and the station has no out-of-band path left
 
 ### A measurement tool that reported nothing, and said nothing about it
