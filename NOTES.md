@@ -2,6 +2,105 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-26 (midday) — the soak checkpoint tool was failing silently, and the station has no out-of-band path left
+
+### A measurement tool that reported nothing, and said nothing about it
+
+`tools/soak/soak-checkpoint.sh` returned **exit 0 with 25 of its 30 fields
+blank**. The output has the right banner, the right timestamp and a plausible
+set of AP-side counters; what is missing is the entire station-side block —
+module versions, SPI statistics, RSSI, association uptime, dmesg counts. In
+other words, everything about the board the soak is measuring. The failed run
+is kept verbatim in `logs/2026-08-26-a1-soak-checkpoints.txt`.
+
+Two lines caused it:
+
+```sh
+STATION=${STATION:-192.168.108.19}   # a management path that no longer exists
+s() { ssh ... alan@"$STATION" "$@" 2>/dev/null; }
+```
+
+The address had gone away (below), and the `2>/dev/null` — put there to keep
+ssh's banner noise out of the log — swallowed `Operation timed out` with it.
+The block's exit status was never checked.
+
+**This is the same failure mode this project has recorded some twenty times,
+committed this time inside the tool built to guard against it.** The tool is
+read-only by design, which is what made it feel safe; being read-only says
+nothing about whether it is *reading*. A checkpoint missing its subject must
+not be able to look like a checkpoint.
+
+**The fixed tool fails loudly and exits non-zero.** What changed, none of it
+touching the measurement fields:
+
+- **Preflight.** Both the station and the AP are probed before anything is
+  measured. Unreachable → `!!!!` line, `checkpoint_status FAILED`, exit 2.
+- **stderr is captured and printed**, not discarded.
+- **The remote block ends in a sentinel** (`__station_block_end__`), plus a
+  field count. Without one, a block that dies halfway through is
+  indistinguishable from a block that had nothing to say.
+- **The AP block checks its dump actually contains the station's MAC**, rather
+  than emitting empty `ap_*` fields when it does not.
+- `AP` now defaults to `192.168.108.5`. `10.41.254.1` is the AP's HaLow side
+  only and the laptop has not been able to reach it since the re-architecture —
+  a second silent-empty source that was live at the same time.
+- Exit codes: **0** complete, **2** incomplete or unreachable. `!!!!` lines go
+  to stdout as well as stderr, so they land in the log beside the fields they
+  invalidate.
+
+**Five failure paths were then exercised on the real bench, not read off the
+source** — the point of the exercise being that a guard nobody has seen fire is
+a guard nobody has tested:
+
+| forced condition | result |
+|---|---|
+| station given explicitly, unreachable | `FAILED`, exit 2 |
+| AP unreachable | `FAILED`, exit 2 |
+| no management path at all | `FAILED`, exit 2 |
+| station block truncated to 5 lines, sentinel removed | two `!!!!` lines, `INCOMPLETE`, exit 2 |
+| AP dump not listing the station's MAC | `!!!!` not associated, `INCOMPLETE`, exit 2 |
+
+The truncation case was forced with an `ssh` shim earlier on `PATH` that
+returns five lines and exits 0 — a way to test the "died halfway" branch
+without breaking anything on the bench.
+
+### The station has no out-of-band management path any more
+
+`wlan0` is disconnected, and **neither house SSID is in its scan at all** — a
+scan from the board returns `chome` −68, `HITRON-07B8-5G` −69, `family-2.4G`
+−81 and six others, but no `Sun` and no `Unifi`. Both profiles are present
+and set to autoconnect; there is nothing for them to connect to from where the
+board now sits. It associated twice early in this boot and has not since.
+
+**So the station is reachable over HaLow and nothing else.** Two consequences:
+
+- **The link under test now carries its own instrument.** Every checkpoint's
+  `ping_20x` shares a medium with the ssh session collecting the other 25
+  fields. The tool records this in a `mgmt_medium` field on every run rather
+  than leaving it to be remembered — this project has already published one
+  wrong loss figure measured over the link carrying the measurement.
+- **There is no recovery path if HaLow drops.** The AP's transmitter is known
+  to stall silently on this bench, and the recovery for that is issued *to the
+  AP*, so it is still available — but a station-side fault now needs physical
+  access.
+
+### Two discontinuities that break comparison with the 2026-08-25 checkpoints
+
+**The station rebooted 2026-08-25 20:16**, during the AP re-architecture:
+`boot_id ff3c110f…` → `1ce7f475…`. The continuous-uptime clock restarts there.
+Association is 48,773 s (13.5 h) against an uptime of 57,341 s (15.9 h), so the
+link also re-established about 2.4 h into the boot — consistent with the
+profile bounce recorded that evening.
+
+**A single RSSI sample does not establish degradation.** Two checkpoints four
+minutes apart read **−55 dBm at VHT-MCS 4/1** and **−47 dBm at MCS 4/3**; the
+2026-08-25 file reads `0` (saturated, when the board was on the bench) and the
+notes record −44 one floor up. The reading moves ~8 dB between consecutive
+samples, which is what a real path one floor up does, and it is not evidence of
+a fault on its own. What is stable across all of it: `spi_errors 0`,
+`spi_timedout 0`, `sta_tx_failed 0`, `dmesg_failures 0` across 1.50 GB and
+4.96 M SPI messages, and 20/20 pings.
+
 ## 2026-08-26 — the HT-H7608 is an 863-870 MHz unit, and the HaLow segment is routable from the house LAN
 
 ### The H7608 is the wrong regional SKU
