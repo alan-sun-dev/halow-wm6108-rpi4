@@ -186,3 +186,98 @@ ap_uptime          08:16:45 up 11 min,  load average: 0.00, 0.03, 0.01
 ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 6.147/53.728/116.537/32.250 ms 
 checkpoint_status  OK
 
+================ SOAK CHECKPOINT: CLOSING: before the station reboots for USB gadget ================
+taken(laptop)      2026-08-26T23:18:26+08:00
+!!!! management path 192.168.108.19 is down: ssh: connect to host 192.168.108.19 port 22: Operation timed out
+mgmt_path          10.41.0.208
+mgmt_medium        halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent
+taken(station)     2026-08-26T23:21:18+08:00
+uptime_seconds     94871
+uptime_human       up 1 day, 2 hours, 21 minutes
+boot_id            1ce7f475-8f7d-42e4-b3a0-16da2e8b33d2
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     5127
+sta_tx_failed      12
+sta_rx_drop_misc   191
+sta_signal_dbm     -56
+sta_tx_bitrate     30.0 MBit/s VHT-MCS 1
+sta_rx_bitrate     14.4 MBit/s VHT-MCS 1
+assoc_uptime_s     26121
+spi_messages       8560178
+spi_bytes          2731939976
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      80
+ap_rx_bytes        48054316
+ap_rx_packets      55706
+ap_tx_bytes        105163746
+ap_tx_packets      77851
+ap_tx_retries      12847
+ap_tx_failed       587
+ap_expected_thr    0.585Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  26121
+ap_uptime          15:21:19 up  7:15,  load average: 0.00, 0.00, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 9.813/12.265/25.247/3.235 ms 
+checkpoint_status  OK
+================ SOAK CHECKPOINT: AFTER: station rebooted with USB gadget installed ================
+taken(laptop)      2026-08-26T23:44:53+08:00
+!!!! management path 192.168.108.19 is down: Connection to 192.168.108.19 port 22 timed out
+mgmt_path          10.41.0.208
+mgmt_medium        halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent
+taken(station)     2026-08-26T23:45:14+08:00
+uptime_seconds     1017
+uptime_human       up 16 minutes
+boot_id            2ea29cc0-0e74-4830-af3b-4c23284afc5f
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     163
+sta_tx_failed      0
+sta_rx_drop_misc   8
+sta_signal_dbm     -51
+sta_tx_bitrate     130.0 MBit/s VHT-MCS 3
+sta_rx_bitrate     65.0 MBit/s VHT-MCS 1
+assoc_uptime_s     1006
+spi_messages       85490
+spi_bytes          25075819
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      87
+ap_rx_bytes        43898
+ap_rx_packets      214
+ap_tx_bytes        39407
+ap_tx_packets      210
+ap_tx_retries      197
+ap_tx_failed       0
+ap_expected_thr    2.929Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  1005
+ap_uptime          15:45:15 up  7:39,  load average: 0.02, 0.02, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 7.713/15.145/25.065/5.353 ms 
+checkpoint_status  OK
+

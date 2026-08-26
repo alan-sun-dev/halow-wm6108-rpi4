@@ -38,7 +38,14 @@ STATION_CANDIDATES=${STATION_CANDIDATES:-"192.168.108.19 $HALOW"}
 STATION=${STATION:-}
 
 SSHOPTS=(-o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+         -o ServerAliveInterval=5 -o ServerAliveCountMax=4
          -o UserKnownHostsFile="$KH")
+# A management path that answers but crawls is not a usable path. The station's
+# house Wi-Fi came back at -86 dBm on 2026-08-26: `ssh <host> true` succeeded,
+# the tool selected it, and the checkpoint then hung for minutes in the middle
+# of the station block. Reachable is not the same as usable, so the probe is
+# timed and a slow path is rejected like an unreachable one.
+PROBE_MAX=${PROBE_MAX:-8}
 ERR=$(mktemp -t soakerr) || exit 2
 OUT=$(mktemp -t soakout) || exit 2
 trap 'rm -f "$ERR" "$OUT"' EXIT
@@ -56,12 +63,27 @@ echo "================ SOAK CHECKPOINT: $LABEL ================"
 echo "taken(laptop)      $(date -Iseconds)"
 
 # ---- preflight: find a live management path before measuring anything -------
+probe() {  # $1 = host. Sets PROBE_SECS. Returns ssh's status.
+  local t0 t1 rc
+  t0=$(date +%s)
+  ssh "${SSHOPTS[@]}" alan@"$1" true 2>"$ERR"; rc=$?
+  t1=$(date +%s)
+  PROBE_SECS=$((t1 - t0))
+  return $rc
+}
+
 if [ -n "$STATION" ]; then
-  ssh "${SSHOPTS[@]}" alan@"$STATION" true 2>"$ERR" \
+  probe "$STATION" \
     || die "station $STATION (given explicitly) is not reachable: $(tr -d '\r' < "$ERR" | tail -1)"
+  [ "$PROBE_SECS" -le "$PROBE_MAX" ] \
+    || warn "station $STATION answered but took ${PROBE_SECS}s (limit ${PROBE_MAX}s) -- it was given explicitly, so it is being used anyway"
 else
   for h in $STATION_CANDIDATES; do
-    if ssh "${SSHOPTS[@]}" alan@"$h" true 2>"$ERR"; then STATION=$h; break; fi
+    if probe "$h"; then
+      if [ "$PROBE_SECS" -le "$PROBE_MAX" ]; then STATION=$h; break; fi
+      warn "management path $h answers but took ${PROBE_SECS}s (limit ${PROBE_MAX}s) -- too slow to carry a checkpoint, skipping"
+      continue
+    fi
     warn "management path $h is down: $(tr -d '\r' < "$ERR" | tail -1)"
   done
   [ -n "$STATION" ] || die "no management path to the station: tried $STATION_CANDIDATES"
