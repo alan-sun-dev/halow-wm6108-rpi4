@@ -1,0 +1,9 @@
+# NetworkManager ships /usr/lib/udev/rules.d/85-nm-unmanaged.rules, which marks
+# EVERY USB gadget interface unmanaged. Its own comment gives the reason as
+# "whatever created it might want to set it up itself (e.g. activate an
+# ipv4.method=shared connection)" -- which is exactly what we want, except we
+# want NetworkManager to be the thing that does it, via the usb-oob profile.
+#
+# Without this override `nmcli dev status` reports usb0 as `unmanaged` and the
+# profile never activates. This file sorts after 85- and puts usb0 back.
+SUBSYSTEM=="net", ACTION=="add|change|move", ENV{DEVTYPE}=="gadget", ENV{INTERFACE}=="usb0", ENV{NM_UNMANAGED}="0"

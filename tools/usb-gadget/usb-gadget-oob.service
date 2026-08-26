@@ -1,0 +1,12 @@
+[Unit]
+Description=USB-C composite gadget (NCM network + ACM serial) for local OOB access
+After=sys-kernel-config.mount
+Requires=sys-kernel-config.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/usb-gadget-oob.sh
+
+[Install]
+WantedBy=multi-user.target
