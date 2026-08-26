@@ -246,66 +246,104 @@ so the awk was exercised on synthetic `dpkg -l` input: `notok=0` on clean
 input, `notok=2` when `iF` and `iU` lines are added, and a held package (`hi`)
 correctly not counted as a fault. The check discriminates; it has still never
 run against real damaged dpkg output, and that stays open.
-### The station's throughput, measured for the first time — and the link is 3x asymmetric
+### The station's throughput, and an asymmetry that tracks the PHY rate — with two of its own claims corrected
 
 `iperf` was installed on the station (2.1.8+dfsg-1, the same version
 `dkmstest` runs, so the two boards are method-identical). The simulate step
 first, because this board is soaking: `0 upgraded, 1 newly installed, 0 to
 remove and 208 not upgraded`, and `dpkg -C` empty afterwards. The 208 pending
-upgrades were deliberately left alone.
+upgrades were deliberately left alone. One HaLow hop to `10.41.254.1`, checked
+with `ip route get`, 10 s per direction, TCP.
 
-One HaLow hop to `10.41.254.1`, checked with `ip route get`, 10 s per
-direction, TCP:
+**Two claims made from the first measurements were wrong and are withdrawn
+below: a "10% frame failure rate", and a "3x asymmetry". Both came from one
+short window and neither survived repetition.** What did survive is better.
 
-| | station 55:04 (one floor up) | `dkmstest` (beside the AP) |
+#### The link was measured in two different states, hours apart, without moving anything
+
+| | state A | state B |
 |---|---|---|
-| uplink, node → AP | **6.7–7.0 Mbit/s** (steady halves 7.8/7.8, 9.2/6.5) | 9.20 Mbit/s |
-| downlink, AP → node | **1.6–2.7 Mbit/s** over four runs | 8.60–8.81 Mbit/s |
-| ratio | **≈ 3x, uplink favoured** | symmetric |
+| AP's view of the station | −52 dBm | **−45 dBm** |
+| AP → station rate | MCS3, 117.0 Mbit/s, **long GI** | MCS4, **195.0 Mbit/s, short GI** |
+| station → AP rate | MCS6, 292.6 Mbit/s | MCS6, 292.6 Mbit/s — unchanged |
+| downlink, 6 runs | 1.63–2.67, mean **2.29 Mbit/s** | 4.82–5.29, mean **5.14 Mbit/s** |
+| uplink, 2 runs | mean **6.84 Mbit/s** | mean **7.85 Mbit/s** |
+| measured throughput ratio | **2.99x** | **1.53x** |
+| PHY rate ratio 292.6 / (AP's rate) | **2.50x** | **1.50x** |
 
-Every downlink run has the same shape — a fast first half, a slower second,
-then a 5–6 s tail moving 60–128 KB. Four runs, reproducible.
+**The throughput asymmetry equals the PHY rate asymmetry, in both states.**
+That is the finding. The direction is stable — uplink is always faster — but
+the *magnitude* is not a property of the link, it is a readout of whatever MCS
+the AP has settled on at that moment.
 
-**The mechanism was measured rather than guessed.** AP-side counters read
-immediately before and after a single downlink run:
+Nothing was moved between the two states. The signal drifted 7 dB on its own,
+which is the same order as the ~8 dB this board was measured drifting between
+two samples four minutes apart earlier the same day. The reverse direction sat
+at MCS6 throughout.
 
-```
-AP -> station 55:04   tx_packets +2,616   tx_retries +621   tx_failed +261
-                      0.24 retries/packet, 10.0% of frames FAILED
-```
+#### Withdrawn: "10% of the AP's frames to the station fail"
 
-The station's own `tx_failed` across the whole association is 3. The losses
-are on the AP's transmit side, in exactly the direction that is slow.
+That figure came from a single run — `tx_packets +2,616, tx_failed +261` — and
+**it has not reproduced in seventeen subsequent measurements**, all taken the
+same way from the AP's own counters:
 
-**The control is what makes that a finding rather than a suspicion.** The same
-command toward `dkmstest`, on the same AP, minutes later:
+| condition | packets | failed | |
+|---|---|---|---|
+| ping, 56 / 500 / 1400 B payload at 5 pps | 102 / 101 / 101 | 0 / 0 / 0 | 0.0% |
+| UDP offered 1M | 896 | 0 | 0.0% |
+| UDP offered 2M / 3M / 4M / 6M / 10M | 1788 / 2309 / 1908 / 2162 / 2368 | 12 / 11 / 22 / 17 / 7 | 0.7 / 0.5 / **1.2** / 0.8 / 0.3% |
+| TCP, state A, 2 runs | 3550 / 2927 | 19 / 28 | 0.5 / 1.0% |
+| TCP, state B, 6 runs | 5800–6524 each | 0 in every one | **0.0%** |
+| *the original run* | *2,616* | *261* | *10.0%* |
 
-```
-AP -> dkmstest        tx_packets +9,239   tx_retries +678   tx_failed +0
-                      0.07 retries/packet, 0.0% failed, 8.81 Mbit/s
-```
+The outlier run was also the slowest downlink ever recorded here
+(1.63 Mbit/s against 2.15–2.67 for its neighbours), so it was anomalous on two
+axes at once. **What happened during it is not known**, and no mechanism is
+claimed for it.
 
-So the 10% failure rate belongs to the station's path — one floor, −50 dBm —
-and **not** to the AP's transmitter. Without that control the same numbers
-would have read as "the AP transmits badly", a hypothesis this bench has
-already spent a day on once.
+The load ramp was built to test the theory that failures scale with offered
+traffic. **They do not**: from 1 Mbit/s offered to 10 Mbit/s — well past
+saturation, since 10M offered delivers only 2.64 — the failure rate stays
+between 0.0% and 1.2% with no trend. The aggregation theory that motivated the
+ramp is unsupported.
 
-**The board is unharmed by any of it.** Through ~40 MB of test traffic the
-association never dropped (12,192 s and counting), `spi_errors 0`,
-`spi_timedout 0`, `dmesg` failures 0, and a 20-ping run afterwards returned
-0% loss at 11.9 ms. Saturating the station's only management path for 20 s at
-a time cost nothing.
+A failure rate under 1.2% cannot account for a 1.5x throughput ratio, let
+alone 3x. **Frame loss was never the mechanism.** The rate is.
 
-**Not established: why those frames fail.** −50 dBm leaves roughly 40 dB of
-headroom on paper, so signal strength alone does not explain a 10% failure
-rate. The rate controller settles on MCS2–MCS3 downlink against MCS6 uplink,
-which is consistent with the failures without explaining them. One floor and a
-wooden ceiling are the obvious candidates and neither is measured.
+#### What does hold up
 
-**A note on the figures this replaces.** The morning table's station column
-(3.56 up / 5.34 down) is asymmetric the *other* way, downlink faster than
-uplink — the opposite of all six runs here. That is one more reason not to use
-it; its provenance was already unknown.
+- **Frames are not dropped in the driver.** The AP's `page_stats` reads
+  `Tx aged out: 0`, `Page write fail: 0`, `No page: 0`, `TX ps filtered: 0`,
+  `TX status dropped: 0`, `TX dropped due to duty cycle: 0`. `Queue stop` is
+  non-zero (1148) and that is ordinary flow control under load.
+- **The control still does its job.** `dkmstest`, beside the AP, ran
+  `tx_packets +9,239, tx_retries +678, tx_failed +0` at 8.81 Mbit/s in the same
+  minutes as the outlier. Whatever that outlier was, it was not the AP's
+  transmitter — which is the hypothesis this bench has already spent a day on
+  once, and the reason the control was run at all.
+- **The board is untouched by any of it.** Through ~150 MB of test traffic the
+  association never dropped (14,129 s and counting), `spi_errors 0`,
+  `spi_timedout 0`, `dmesg` failures 0, and the station's own `tx_failed` for
+  the entire association is 3.
+
+#### Still open, and now a sharper question
+
+**Why does the AP pick an MCS one to two steps below the station's, when both
+radios report `txpower 22.00 dBm` and the two ends see each other within 2 dB
+(−45 / −50)?** The AP is not choosing badly by its own evidence: at state B its
+main rate MCS4 succeeds 40,135 of 45,227 attempts (88.7%) while its MCS5 probes
+succeed 26 of 275 (9.5%). From where it sits, MCS4 is the rate that works.
+
+With power and signal symmetric, the difference has to be at the receivers, and
+that is where the tools run out: **`iw dev … survey dump` returns nothing on
+both ends** — no noise floor, no channel-busy time. Verified by exit code
+rather than assumed: it exits 0 with empty output on the AP and on the station,
+i.e. the morse driver does not implement the survey callback.
+
+The obvious next measurement is cheap and has not been taken: wait for the
+signal to drift back toward −52 and re-run both directions. If the ratio
+returns to ~2.5x, "throughput ratio = PHY rate ratio" goes from two points to a
+relationship.
 
 ## 2026-08-26 (midday) — the soak checkpoint tool was failing silently, and the station has no out-of-band path left
 
