@@ -1,0 +1,81 @@
+STATION THROUGHPUT — FIRST REAL iperf MEASUREMENT, 2026-08-26
+Station 55:04 (Wio-WM6108 / MM6108A1 / SenseCAP M1 / 6.6.51+rpt-rpi-v8),
+one floor above the AP. iperf 2.1.8 at both ends, 10 s per direction, TCP.
+
+WHY THIS IS THE FIRST ONE
+  The 2026-08-26 morning table records 3.56 Mbit/s up / 5.34 down for this
+  board "measured with iperf 2.1.8 between each station and the AP". The board
+  had never had iperf installed -- see NOTES.md, "A documented measurement that
+  could not have been taken". Those numbers stand unexplained; nothing here
+  refutes them, but they cannot be compared with what follows.
+  Note in passing that they are asymmetric the OTHER WAY (downlink faster than
+  uplink), which is the opposite of every run below.
+
+INSTALL
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+       -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef iperf
+  Simulated first:  0 upgraded, 1 newly installed, 0 to remove and 208 not upgraded.
+  Installed:        iperf 2.1.8+dfsg-1 arm64 -- the same version as dkmstest,
+                    so the two boards are method-identical.
+  After:            dpkg -C empty. The 208 pending upgrades were deliberately
+                    not touched; this board is soaking.
+  Run detached, log in ~/halow-test/buildlogs/, per the standing rule.
+
+TARGET ADDRESS
+  ip route get 10.41.254.1 -> dev wlan1. One HaLow hop, no NAT, nothing else.
+
+UPLINK — station -> AP
+  run 1   0-5s  7.76 Mbit/s   5-10s  7.76 Mbit/s   overall 6.96 Mbit/s
+  run 2   0-5s  9.23 Mbit/s   5-10s  6.50 Mbit/s   overall 6.72 Mbit/s
+  (the overall figure includes a ~1.5 s trailing flush; steady state is the
+   5 s halves)
+
+DOWNLINK — AP -> station
+  run 1   0-5s  5.24 Mbit/s   5-10s  2.47 Mbit/s   overall 2.42 Mbit/s
+  run 2   0-5s  4.40 Mbit/s   5-10s  2.42 Mbit/s   overall 2.26 Mbit/s
+  run 3   0-5s  5.24 Mbit/s   5-10s  2.73 Mbit/s   overall 2.67 Mbit/s
+  run 4                                            overall 1.63 Mbit/s
+  Every run has the same shape: a fast first half, a slower second half, then
+  a long tail of 5-6 s moving 60-128 KB. Reproducible, not a fluke.
+
+  ==> THE LINK IS ASYMMETRIC BY ROUGHLY 3x, UPLINK FAVOURED.
+
+MECHANISM — measured, not inferred
+  AP-side counters read immediately before and after one downlink run:
+
+    AP -> station 55:04    tx_bytes +4,003,616   tx_packets +2,616
+                           tx_retries  +621      tx_failed   +261
+                           retries/packet 0.24   FAILED 10.0% OF FRAMES
+
+  The station's own tx_failed over the whole association is 3. The failures
+  are on the AP's transmit side, in the direction that is slow.
+
+CONTROL — the same measurement toward the other station, same AP, minutes later
+  dkmstest sits beside the AP. Identical command, identical tooling:
+
+    AP -> dkmstest         tx_bytes +14,163,966  tx_packets +9,239
+                           tx_retries  +678      tx_failed     +0
+                           retries/packet 0.07   FAILED 0.0%
+                           throughput 8.81 Mbit/s
+
+  So the 10% frame-failure rate belongs to the station's path -- one floor,
+  -50 dBm -- and NOT to the AP's transmitter. Without this control the same
+  numbers would have supported "the AP transmits badly", which is a hypothesis
+  this bench already has history with.
+
+STATION HEALTH AFTER ~40 MB OF TEST TRAFFIC
+  association    12,192 s, never dropped through any of it
+  spi_errors     0        spi_timedout   0
+  dmesg failures 0
+  signal         -50 dBm  tx MCS6 263.3 / rx MCS2 97.6 Mbit/s
+  station tx_failed 3, rx_drop_misc 32 (whole association)
+  ping           20/20, 0% loss, 11.946 ms avg
+  The board is fine. Saturating its only management path for ~20 s at a time
+  cost nothing.
+
+WHAT IS NOT ESTABLISHED
+  Why the AP's frames to this station fail 10% of the time. Distance and one
+  wooden floor are the obvious candidates, and the -50 dBm reading has ~40 dB
+  of headroom on paper, so signal strength alone does not explain it. The rate
+  controller is picking MCS2-MCS3 downlink against MCS6 uplink, which is
+  consistent with the failures but does not say what causes them.

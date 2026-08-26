@@ -246,6 +246,66 @@ so the awk was exercised on synthetic `dpkg -l` input: `notok=0` on clean
 input, `notok=2` when `iF` and `iU` lines are added, and a held package (`hi`)
 correctly not counted as a fault. The check discriminates; it has still never
 run against real damaged dpkg output, and that stays open.
+### The station's throughput, measured for the first time — and the link is 3x asymmetric
+
+`iperf` was installed on the station (2.1.8+dfsg-1, the same version
+`dkmstest` runs, so the two boards are method-identical). The simulate step
+first, because this board is soaking: `0 upgraded, 1 newly installed, 0 to
+remove and 208 not upgraded`, and `dpkg -C` empty afterwards. The 208 pending
+upgrades were deliberately left alone.
+
+One HaLow hop to `10.41.254.1`, checked with `ip route get`, 10 s per
+direction, TCP:
+
+| | station 55:04 (one floor up) | `dkmstest` (beside the AP) |
+|---|---|---|
+| uplink, node → AP | **6.7–7.0 Mbit/s** (steady halves 7.8/7.8, 9.2/6.5) | 9.20 Mbit/s |
+| downlink, AP → node | **1.6–2.7 Mbit/s** over four runs | 8.60–8.81 Mbit/s |
+| ratio | **≈ 3x, uplink favoured** | symmetric |
+
+Every downlink run has the same shape — a fast first half, a slower second,
+then a 5–6 s tail moving 60–128 KB. Four runs, reproducible.
+
+**The mechanism was measured rather than guessed.** AP-side counters read
+immediately before and after a single downlink run:
+
+```
+AP -> station 55:04   tx_packets +2,616   tx_retries +621   tx_failed +261
+                      0.24 retries/packet, 10.0% of frames FAILED
+```
+
+The station's own `tx_failed` across the whole association is 3. The losses
+are on the AP's transmit side, in exactly the direction that is slow.
+
+**The control is what makes that a finding rather than a suspicion.** The same
+command toward `dkmstest`, on the same AP, minutes later:
+
+```
+AP -> dkmstest        tx_packets +9,239   tx_retries +678   tx_failed +0
+                      0.07 retries/packet, 0.0% failed, 8.81 Mbit/s
+```
+
+So the 10% failure rate belongs to the station's path — one floor, −50 dBm —
+and **not** to the AP's transmitter. Without that control the same numbers
+would have read as "the AP transmits badly", a hypothesis this bench has
+already spent a day on once.
+
+**The board is unharmed by any of it.** Through ~40 MB of test traffic the
+association never dropped (12,192 s and counting), `spi_errors 0`,
+`spi_timedout 0`, `dmesg` failures 0, and a 20-ping run afterwards returned
+0% loss at 11.9 ms. Saturating the station's only management path for 20 s at
+a time cost nothing.
+
+**Not established: why those frames fail.** −50 dBm leaves roughly 40 dB of
+headroom on paper, so signal strength alone does not explain a 10% failure
+rate. The rate controller settles on MCS2–MCS3 downlink against MCS6 uplink,
+which is consistent with the failures without explaining them. One floor and a
+wooden ceiling are the obvious candidates and neither is measured.
+
+**A note on the figures this replaces.** The morning table's station column
+(3.56 up / 5.34 down) is asymmetric the *other* way, downlink faster than
+uplink — the opposite of all six runs here. That is one more reason not to use
+it; its provenance was already unknown.
 
 ## 2026-08-26 (midday) — the soak checkpoint tool was failing silently, and the station has no out-of-band path left
 
