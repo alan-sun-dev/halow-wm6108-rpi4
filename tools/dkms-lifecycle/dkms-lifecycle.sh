@@ -167,11 +167,31 @@ preflight() {
 
     # 5. DKMS must report the package installed for THIS kernel, and both
     #    modules must actually be on disk for it.
+    # Distinguish the two cases this check used to conflate. "dkms manages
+    # morse but has no build for the kernel we are about to boot" is the
+    # dangerous one and must FAIL. "dkms does not manage morse on this machine
+    # at all" means the build is hand-installed -- the file and modinfo checks
+    # below are then the authority, and failing the gate for it would make the
+    # gate unusable on every hand-installed board, which trains people to
+    # override it.
+    dkms_any=$(sudo $DKMS status 2>/dev/null | grep -c '^morse/')
     st=$(sudo $DKMS status 2>/dev/null | grep ", $K," | grep -c installed)
-    [ "$st" -gt 0 ] && chk "dkms status for $K" PASS "installed" \
-                    || chk "dkms status for $K" FAIL "no 'installed' line for $K"
+    if [ "$st" -gt 0 ]; then
+        chk "dkms status for $K" PASS "installed"
+    elif [ "$dkms_any" -eq 0 ]; then
+        say "  [N/A ] dkms status for $K -- dkms does not manage morse here (hand-installed build); the file and modinfo checks below are the authority"
+    else
+        chk "dkms status for $K" FAIL "dkms manages morse for other kernels but has no 'installed' line for $K"
+    fi
     for m in morse dot11ah; do
-        f=$(find /lib/modules/"$K"/updates -name "$m.ko*" 2>/dev/null | head -1)
+        # Match the module file exactly, not "$m.ko*": that glob also matches
+        # backups this project leaves beside the live file, e.g.
+        # morse.ko.xz.stale-20260822, and `head -1` can pick one. On 2026-08-26
+        # this check reported PASS on the station naming a .stale- file while
+        # the live module sat next to it -- right answer, wrong evidence.
+        f=$(find /lib/modules/"$K"/updates \
+              \( -name "$m.ko" -o -name "$m.ko.xz" -o -name "$m.ko.gz" -o -name "$m.ko.zst" \) \
+              2>/dev/null | head -1)
         [ -n "$f" ] && chk "$m installed for $K" PASS "$f" \
                     || chk "$m installed for $K" FAIL "not found under /lib/modules/$K/updates"
     done
