@@ -2,6 +2,87 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-26 — the HT-H7608 is an 863-870 MHz unit, and the HaLow segment is routable from the house LAN
+
+### The H7608 is the wrong regional SKU
+
+The label on the back of the HT-H7608 reads **`Region: 863~870MHz V2.0`**. Heltec
+ship the HT-H7608 in two variants — **863-870 MHz** (1 MHz channels, 16 dBm) and
+**902-928 MHz** (1-8 MHz, 28 dBm). This bench runs at **922.0 MHz**, which is in
+the second variant's range and 52 MHz above the first's.
+
+**This corrects an earlier conclusion in this file and in the project notes.** On
+2026-08-24 its antenna was found to be marked 868 MHz and was swapped for a
+900 MHz one, and that was written up as "a wrong-band antenna". The antenna was
+not wrong — **it matched the unit**. The unit is the EU-band SKU.
+
+**What the SKU does not explain.** The product page's "1 MHz only" is an SKU
+specification, not a hardware lock: `morse_cli` on the box reports it operating at
+`922000 kHz`, `Operating BW: 4 MHz`, and it moved **3.27 Mbit/s** uplink under
+iperf with `tx failed 0` while it was working. An earlier claim here that it was
+"specification-incompatible and could only do 1 MHz" was wrong and is withdrawn —
+it was reasoning from a datasheet against a measurement that had not been taken
+yet.
+
+**What actually looks broken is separate.** Across one evening the same box, not
+moved, went:
+
+| | signal | rate | uplink |
+|---|---|---|---|
+| early | −61…−65 dBm | MCS7 tx / MCS1 rx | not measured |
+| later | −73 dBm | MCS0 both | **30.3 Kbit/s**, second half 0 bytes, `tx failed 121` |
+| later still | — | — | **would not associate at all**; the AP logged no attempt from it |
+| after a reboot | −58 dBm | MCS7 tx / MCS3 rx | **3.27 Mbit/s**, `tx failed 0` |
+
+**A front-end band mismatch is a fixed property — it would be consistently poor,
+not intermittently perfect.** Something physical and intermittent is also wrong
+(a loose SMA connector is the obvious candidate). The twoproblems are independent:
+the SKU explains why it is slower than the other nodes even at its best; it does
+not explain the flapping.
+
+The AP's `expected throughput` for it read `14.648 Mbps` before any traffic and
+`0.292 Mbps` after — that figure is a rate-control estimate, and it is worthless
+until traffic has actually flowed. The same trap was recorded on 2026-08-24 with
+the identical `0.292` value.
+
+**Disposition:** its config was backed up (`sysupgrade -b`, 18,217 bytes, sha256
+`850527…`, kept out of git — the archive contains `/etc/config/wireless` with
+PSKs in plaintext), then it was factory reset with `firstboot`. It released its
+DHCP lease and left the AP cleanly. It is no longer part of this bench. Note that
+a reset **re-enables its DHCP server**, so its Ethernet must not go on the house
+switch. None of the driver validation work depended on it.
+
+### The HaLow segment is now reachable from the house LAN
+
+Two changes, so any device on the house network can reach `10.41.0.0/16`:
+
+- **On the AP**, a scoped forward rule — `src=wan dest=lan src_ip=192.168.108.0/24
+  dest_ip=10.41.0.0/16 target=ACCEPT`, rather than opening wan→lan wholesale.
+- **On the UniFi gateway**, a static route: `10.41.0.0/16` via `192.168.108.5`,
+  device *Gateway*, metric 1. Putting it on the gateway rather than on each
+  client means phones and laptops get it too.
+
+**A gotcha worth keeping:** a `uci` firewall rule with no `proto` set produces
+**tcp and udp only**. The first version of that rule passed SSH and blocked ping,
+which is a confusing state to debug. `uci set …proto='all'` fixes it.
+
+### Both nodes now default out over HaLow
+
+`dkmstest` was changed to match the station: `ipv4.never-default no` and
+`ipv4.route-metric 100` against the house Wi-Fi's 601. That also removed an
+asymmetric path — traffic had been arriving over HaLow and leaving over Wi-Fi.
+
+| | station `10.41.0.208` | `dkmstest` `10.41.0.216` |
+|---|---|---|
+| location | one floor up | beside the AP |
+| HaLow signal | −44 dBm | −34 dBm |
+| ping `1.1.1.1` | ~48 ms | 31.7 ms |
+| association held | 43,202 s (12 h) | 41,604 s (11.6 h) before the profile bounce |
+| SPI errors / timedout | 0 / 0 | 0 / 0 |
+
+Both had held a single association for about twelve hours with zero SPI errors
+before either was touched.
+
 ## 2026-08-25 (evening) — the AP became a router, and the HaLow segment got internet
 
 The OpenMANET AP was a LAN appliance with no WAN: `br-lan` bridged `eth0`,
@@ -558,6 +639,14 @@ more than twelve hours unbroken — and then went 2001 s → 189 s → 10 s → 
 starting when the Ethernet cable was connected. That was the wrong suspect.
 
 ### The antenna was for the wrong band, and that was the whole thing
+
+> **Superseded 2026-08-26 — read that heading as wrong.** The antenna was not
+> "for the wrong band"; it was the antenna that came with the unit, and the
+> **unit itself is the 863-870 MHz SKU**, per the label on its back:
+> `Region: 863~870MHz V2.0`. Swapping to a 900 MHz antenna did help, which is why
+> this section concluded what it did — but the conclusion "the antenna was the
+> whole thing" was wrong, and the box was never right for this bench. See
+> 2026-08-26 at the top of this file.
 
 **It is marked 868 MHz.** That is the EU SRD band. This link runs at 922 MHz, which
 is where Taiwan's NCC allocation sits — 920–925 MHz — and the driver has **no `TW`
