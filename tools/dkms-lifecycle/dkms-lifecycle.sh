@@ -110,14 +110,47 @@ preflight() {
     # Settled states are ii (installed), hi (installed and HELD -- a hold is
     # deliberate, e.g. rpi-eeprom here, and is not a fault), rc (removed, config
     # left), pn/un (not installed). Anything else is half-done.
-    broken=$(dpkg -C 2>/dev/null | grep -c .)
+    #
+    # `dpkg -C` NEEDS ROOT. As an ordinary user it prints nothing on stdout and
+    # exits 2 with "unable to check lock file for dpkg database directory
+    # /var/lib/dpkg: Permission denied" on stderr. This check used to run it as
+    # `dpkg -C 2>/dev/null | grep -c .`, which discarded the error, and the
+    # pipeline discarded the exit status as well -- so the audit arm counted 0
+    # broken packages on every board, in every state, and had never once run.
+    # Proven on dkmstest 2026-08-27 against a real dpkg database, not synthetic
+    # input: a package whose files-list was deleted stays `ii`, so the dpkg -l
+    # arm below sees nothing either, and the whole gate reported
+    # "[PASS] dpkg clean -- dpkg -C empty" while `sudo dpkg -C` was saying the
+    # package was missing its list control file and needed reinstalling.
+    # Run the audit under sudo, capture it whole, and test the status BEFORE
+    # any pipeline touches it. `dpkg -C` exits 0 whether or not it finds
+    # problems, so a non-zero status means the audit could not be performed --
+    # which is not the same as clean, and must not be reported as PASS.
+    audit=$(sudo dpkg -C 2>&1); audit_rc=$?
     notok=$(dpkg -l 2>/dev/null | awk 'NR>5 && $1 !~ /^(ii|hi|rc|pn|un)$/ {n++} END{print n+0}')
     held=$(apt-mark showhold 2>/dev/null | tr '\n' ' ')
-    if [ "$broken" -eq 0 ] && [ "$notok" -eq 0 ]; then
-        chk "dpkg clean" PASS "dpkg -C empty, no half-configured packages; held: ${held:-none}"
+    if [ "$audit_rc" -ne 0 ]; then
+        chk "dpkg clean" FAIL "dpkg -C could not run (exit $audit_rc) -- the audit was NOT performed"
+        printf '%s\n' "$audit" | while IFS= read -r l; do say "      $l"; done
     else
-        chk "dpkg clean" FAIL "dpkg -C lines=$broken, half-configured packages=$notok"
-        dpkg -l 2>/dev/null | awk 'NR>5 && $1 !~ /^(ii|hi|rc|pn|un)$/ {print "      " $1, $2}' | while read -r l; do say "$l"; done
+        broken=$(printf '%s' "$audit" | grep -c .)
+        if [ "$broken" -eq 0 ] && [ "$notok" -eq 0 ]; then
+            chk "dpkg clean" PASS "dpkg -C clean, no half-configured packages; held: ${held:-none}"
+        else
+            chk "dpkg clean" FAIL "dpkg -C audit lines=$broken, half-configured packages=$notok"
+            # Both arms report: dpkg -C catches states dpkg -l cannot see (a
+            # missing files-list leaves the status at ii), and dpkg -l names the
+            # package for states dpkg -C summarises. IFS= or read strips the
+            # indentation awk just added.
+            # if/fi, not `[ ... ] && cmd`: every other branch here is an if, and
+            # a bare && list as a statement carries its own exit status out --
+            # harmless mid-function, wrong if it ever ends one.
+            if [ "$broken" -gt 0 ]; then
+                printf '%s\n' "$audit" | while IFS= read -r l; do say "      $l"; done
+            fi
+            dpkg -l 2>/dev/null | awk 'NR>5 && $1 !~ /^(ii|hi|rc|pn|un)$/ {print "      " $1, $2}' |
+                while IFS= read -r l; do say "$l"; done
+        fi
     fi
 
     # 2. modules.dep must exist for the target kernel, with a control entry that
