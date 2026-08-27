@@ -2,6 +2,157 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-27 (night) — the panel USB-C is 5V only, and the board on the bench answers an open hardware question
+
+A product listing prompted this: Signal & Steel sell a Sensecap M1 with the
+WM1302 concentrator swapped for a WM6108 and OpenMANET pre-flashed. The
+question asked of it was narrow — can its USB-C be the gadget port that local
+access was settled on the day before? Answering it turned out to be about
+hardware already on this bench.
+
+**Nothing below was measured.** No probe was run against any board. Everything
+here comes from Seeed's own HAT block diagram and panel drawings, and the one
+inference in it is labelled as one.
+
+### That listing is this hardware
+
+The first line of this file has said `on SenseCAP M1` since 2026-08-19, and
+"Board identity, recorded late" further down records **two** SenseCAP M1 units:
+`E4:5F:01:52:57:E7`, now the AP, and `E4:5F:01:52:55:04`, the station. The
+side-by-side table gives both the same `Carrier / module` row — `SenseCAP M1 +
+Wio-WM6108 (MM6108A1)`. What is for sale is a pre-modded, pre-flashed version of
+what was built here twice by hand. It is not a third platform to evaluate, and
+everything below can be checked on a board already in the building.
+
+### The exposed USB-C carries only power, and that was never the one being used
+
+Seeed's block diagram puts that connector **on the HAT, not on the Pi**, with
+exactly two lines leaving it, both labelled `5V`: one into the 40-pin header to
+feed the Pi, one into a DC/DC. **No D+/D- is drawn at all.** The header carries
+only SPI, GPIO, POWER and I²C, so no USB could reach the SoC through it even if
+the connector had data pins. The panel drawing labels it `USB Type-C (Power)`
+and the silkscreen reads `5V-3A`. Three independent statements of one fact.
+
+So the gadget port in `tools/usb-gadget/` is, and always was, the **Pi 4B's
+own** USB-C on the opposite edge of the board — which is why the entry of
+2026-08-26 could record `otg_mode`, `dwc2` and a working NCM+ACM link on this
+same hardware without any contradiction.
+
+### This closes the hardware item left open on 2026-08-26
+
+That entry ends: *"the Pi 4's USB-C is power and gadget, so plugging in a laptop
+interrupts the board's power unless it is fed over the GPIO header. Acceptable
+on a bench, wrong for a deployed console server."*
+
+**The way to feed it over the GPIO header is already soldered to the board.**
+Power the unit through the HAT's `5V-3A` connector, which reaches the Pi's 5V
+rail through the header, and the Pi's own USB-C stops carrying power. A
+technician's cable then interrupts nothing. No new parts, and it can be tried on
+the station or the AP today.
+
+**Untested.** Both 5V sources still land on the same rail when a laptop is
+attached, which is the ordinary situation for any externally powered Pi in
+peripheral mode but has not been checked here. `vcgencmd get_throttled` is the
+instrument, as it was when the MacBook was measured as an adequate supply.
+
+### What the metal enclosure costs, if a deployed unit is in one
+
+The rear panel exposes RP-SMA, button, LED, USB-C and RJ45, and nothing else.
+Two consequences, neither of which affects a bench board out of its case:
+
+- **The Pi's USB-C is not exposed.** It sits on the Pi's long edge beside the
+  two micro-HDMIs, facing the metal sleeve. Reaching it in a cased unit is
+  mechanical work, not configuration.
+- **No USB-A is exposed either.** *Inference, not observation:* on a Pi 4B the
+  RJ45 and both USB-A stacks share one short edge, so the vent slots beside the
+  ETH cutout should sit over the USB-A ports, and removing that panel should
+  expose all four. If it holds, that is where the console server's USB-serial
+  adapter goes — the item the maturity review counts as never once attempted.
+  USB-A is host-only and can never be a gadget port, so the two capabilities
+  come from two different edges of one board.
+
+### The rest of the HAT, and why the LED is the piece worth taking
+
+The HAT also carries a button, a fan, an LED and a crypto chip, all reaching the
+Pi through the same header, so all of them are ordinary GPIO or I²C devices.
+**Their pins are unknown.** The fast way to find them is not probing but reading
+the shipped HaLow overlay, since what it does not name is the candidate set.
+*Recollection to verify rather than trust:* Seeed's `reset_lgw.sh` for this HAT
+used GPIO 17 / 18 / 5, and a HaLow overlay reusing one of those is a conflict to
+settle before anything else.
+
+The **button** is not a power switch and cuts nothing; it was the Helium
+"long-press five seconds to enter config mode" key. As `dtoverlay=gpio-key` it
+becomes an input event, and a long-press that restores a known-good HaLow
+configuration is a trigger for exactly the unattended recovery this project does
+not have. `gpio-shutdown` is the lesser use.
+
+The **fan** is switched from a header line through a transistor, so
+`dtoverlay=gpio-fan,gpiopin=N,temp=55000` registers it as a thermal cooling
+device and the kernel starts and stops it on temperature with no daemon.
+
+The **LED** is the piece worth acting on soonest. Its four Helium states — off,
+fast flash, slow flash, steady — were painted entirely by a userspace daemon
+that the OpenMANET image no longer carries. The hardware is one unowned
+single-colour LED on a GPIO with no legacy semantics to respect, and it is **the
+only visible light on the box**, since the Pi's own ACT and PWR are sealed
+inside. Registered with `dtoverlay=gpio-led` and bound to the kernel's `netdev`
+trigger on `wlan1`, the panel light *becomes* the HaLow association state: dark
+means not associated, blinking means traffic. That is readable from the front of
+a rack with nothing running, and it is the cheap half of the largest open risk
+here — a node whose radio does not come up currently shows nothing at all.
+`device_name` cannot be set from the overlay, so it needs a small systemd unit
+or udev rule. `active_low` depends on polarity and is unverified.
+
+### The crypto chip, and one instrument that lies by being blank
+
+It is a Microchip ATECC608A holding the Helium swarm key, on I²C at `0x60`. Its
+config and data zones **lock one way, permanently**, and Seeed locked them at the
+factory to provision the miner identity, so the realistic ceiling is a key that
+can sign but cannot be replaced. Establish the lock state before spending
+anything on it, and **issue no write** until then. The kernel's `atmel-ecc`
+exposes only ECDH and is not built on Raspberry Pi OS; the real path is
+CryptoAuthLib in userspace over `/dev/i2c-1`, whose PKCS#11 module lets OpenSSL
+and `ssh` use the chip's key — the interesting use being an mTLS identity for
+the console server with no private key on the SD card.
+
+**A blank `i2cdetect` at `0x60` is inconclusive, never negative.** An ATECC608A
+that has not been woken NACKs its own address, and `i2cdetect` sends no wake
+pulse. This is the same shape as the soak checkpoint that exited 0 with 25 of
+its 30 fields empty: an instrument whose silence reads as an answer.
+
+### The tool
+
+`tools/m1-hat/m1-hat-probe.sh`, committed as `1cc5bfe`. `survey` is read-only —
+model, HAT ID EEPROM, `config.txt` in full, device-tree nodes matching
+gpio/fan/key/led/crypto/morse, `/sys/kernel/debug/gpio`, libgpiod, input
+devices, thermal cooling devices, LED class, every I²C bus, SPI and the morse
+module, and whether `atmel-ecc` exists. It drives no GPIO as an output and
+writes nothing to the crypto chip. `button` does nothing without `--yes`, lists
+the lines it intends to request first, and excludes any pin named by a
+`dtoverlay=` line in `config.txt`, because the HaLow module's reset line is on
+the same gpiochip and may be idle whenever the driver is not loaded.
+
+Every one of the six ways our own tools lied on 2026-08-27 is guarded against:
+absolute paths for `/usr/sbin/i2cdetect` because a non-interactive ssh PATH
+lacks it; `timeout` exit 124 treated as success and anything else as `gpiomon`
+failing; an empty I²C bus list tested as empty rather than falling into
+arithmetic; and a missing tool, a missing file or a non-root run printing a
+`!!!!` line and pushing the exit code to 2 rather than leaving a section blank.
+
+`selftest` exists because a guard that has never fired is not a guard. Six of
+them, all made to fail on purpose, including both libgpiod dialects parsed from
+synthetic v1 and v2 output down to the same line number. It has been run: the
+only FAIL is `timeout present`, on the laptop, which is the guard correctly
+reporting that macOS is not where this belongs. `survey` was also run to
+completion on the laptop — thirteen sections, every one printing something,
+exit 2.
+
+**Next, and it needs no new hardware:** run `sudo m1-hat-probe.sh survey` on the
+station. It is read-only, so it does not disturb the soak — no reboot, no
+module reload, no write. `/sys/kernel/debug/gpio` is the section that matters
+and it is the one that needs root.
+
 ## 2026-08-27 (evening) — a maturity review, and the things the repositories say that the notes do not
 
 A read-only review of both repositories against the target this work actually

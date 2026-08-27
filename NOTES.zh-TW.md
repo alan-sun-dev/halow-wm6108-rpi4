@@ -2,6 +2,128 @@
 
 *[English](NOTES.md)*
 
+## 2026-08-27（深夜）—— 面板上的 USB-C 只有電，而檯面上那片板子回答了一個懸而未決的硬體問題
+
+起因是一則商品頁：Signal & Steel 賣一台把 WM1302 concentrator 換成 WM6108、
+並預燒 OpenMANET 的 Sensecap M1。問題本身很窄 —— 它的 USB-C 能不能當成前一天
+才定案的本機存取 gadget 埠？回答的過程卻繞回了這張工作檯上已經有的硬體。
+
+**以下沒有任何一項是量出來的。** 沒有對任何板子跑過探測。全部來自 Seeed 自己的
+HAT 方塊圖與面板圖，其中唯一一項推論已標明是推論。
+
+### 那則商品頁賣的就是這套硬體
+
+這個檔案的第一行從 2026-08-19 起就寫著 `在 SenseCAP M1 上`，而後面「板子身分，
+補記」那一節記著有**兩台** SenseCAP M1：`E4:5F:01:52:57:E7`（現在是 AP）與
+`E4:5F:01:52:55:04`（站台）。並排比較表裡兩者的 `載板／模組` 欄位相同 ——
+`SenseCAP M1 + Wio-WM6108（MM6108A1）`。在賣的是這裡手工做過兩次的東西的預改、
+預燒版本。它不是第三個要評估的平台，而下面每一項都可以在這棟樓裡現有的板子上查證。
+
+### 外露的那顆 USB-C 只有電，而且從來就不是我們在用的那顆
+
+Seeed 的方塊圖把那顆接頭畫在 **HAT 上，不在 Pi 上**，從它拉出來的線恰好兩條，
+都標 `5V`：一條進 40-pin header 餵給 Pi，一條進 DC/DC。**完全沒有畫 D+/D−。**
+而 header 上只有 SPI、GPIO、POWER、I²C，所以就算那顆接頭有資料腳，USB 也到不了
+SoC。面板圖標的是 `USB Type-C (Power)`，絲印寫 `5V-3A`。同一件事的三個獨立說法。
+
+所以 `tools/usb-gadget/` 用的那顆 gadget 埠，一直都是板子另一側 **Pi 4B 自己的**
+USB-C —— 這也正是為什麼 2026-08-26 那篇能在同一套硬體上記下 `otg_mode`、`dwc2`
+與一條會動的 NCM+ACM 連線，而不構成任何矛盾。
+
+### 這件事把 2026-08-26 留下的硬體問題結掉了
+
+那篇的結尾是：*「Pi 4 的 USB-C 同時是電源與 gadget，所以插上筆電就會中斷板子的
+供電，除非改從 GPIO header 餵電。在工作檯上可以接受，對一台部署出去的 console
+server 是錯的。」*
+
+**而「從 GPIO header 餵電」的那個東西，早就焊在板子上了。** 把電從 HAT 那顆
+`5V-3A` 接頭餵進去，它經 header 到達 Pi 的 5V rail，Pi 自己的 USB-C 就不再承擔
+供電。技師插上的線於是不會中斷任何東西。不需要新零件，今天就能在站台或 AP 上試。
+
+**未經測試。** 筆電接上時兩路 5V 仍然落在同一條 rail 上，這對任何外部供電又跑
+peripheral mode 的 Pi 都是常態，但這裡還沒查過。量測工具是 `vcgencmd
+get_throttled`，跟當初確認 MacBook 供電足夠時用的是同一支。
+
+### 金屬機殼的代價（如果部署出去的機器裝在殼裡）
+
+背板露出的只有 RP-SMA、按鈕、LED、USB-C、RJ45，沒有別的。兩個後果，對拆出機殼在
+檯面上跑的板子都不成立：
+
+- **Pi 的 USB-C 沒有開孔。** 它在 Pi 的長邊、兩個 micro-HDMI 旁邊，朝向金屬套筒。
+  在裝殼的機器上要碰到它是機構工作，不是設定問題。
+- **USB-A 也一個都沒有露出。** *這是推論，不是觀察：*Pi 4B 的 RJ45 與兩組 USB-A
+  疊層共用同一條短邊，所以 ETH 開孔旁邊那片散熱孔應該正蓋在 USB-A 上，拆掉那片
+  端板應該就會露出四個。若成立，那就是 console server 的 USB-serial adapter 該插
+  的地方 —— 也就是成熟度審查裡記為「從來沒有做過一次」的那一項。USB-A 是
+  host-only，永遠不可能當 gadget 埠，所以這兩種能力來自同一片板子的兩條不同邊。
+
+### HAT 上其餘的東西，以及為什麼 LED 是最該先拿下的一個
+
+HAT 上還有按鈕、風扇、LED 和一顆加密晶片，全部經由同一條 header 連到 Pi，所以
+它們都是普通的 GPIO 或 I²C 裝置。**腳位未知。** 找出腳位最快的方式不是探測，而是
+讀預燒映像裡的 HaLow overlay —— 它沒有點名的，就是候選集合。*屬於待驗證的回憶
+而非可信事實：*Seeed 給這張 HAT 的 `reset_lgw.sh` 用的是 GPIO 17／18／5，若 HaLow
+overlay 重用了其中一條，那是要優先解決的衝突。
+
+**按鈕**不是電源開關，它不切任何電；它原本是 Helium「長按五秒進設定模式」那顆。
+掛成 `dtoverlay=gpio-key` 之後它是一個 input event，而「長按還原一份已知可用的
+HaLow 設定」正是這個專案缺的那條無人值守復原路徑的觸發器。`gpio-shutdown` 是比較
+次要的用法。
+
+**風扇**由 header 的一條線經電晶體開關，所以
+`dtoverlay=gpio-fan,gpiopin=N,temp=55000` 會把它註冊成 thermal cooling device，
+由核心依溫度自動啟停，不需要任何 daemon。
+
+**LED** 是最該先動的一個。它的四種 Helium 狀態 —— 熄滅、快閃、慢閃、恆亮 ——
+全部是由一支 userspace daemon 畫出來的，而 OpenMANET 的映像已經不帶那支 daemon。
+硬體只是一顆掛在 GPIO 上、沒有主人的單色 LED，沒有任何既有語意需要相容，而且它是
+**整台機器唯一看得見的燈**，因為 Pi 自己的 ACT 與 PWR 都封在殼裡。用
+`dtoverlay=gpio-led` 註冊、再綁上核心的 `netdev` trigger 到 `wlan1`，面板上那顆燈
+就**成為** HaLow 的關聯狀態：不亮代表沒有 associate，閃爍代表有流量。那是站在機櫃
+正面、不需要任何東西在跑就讀得到的資訊，也是這裡最大未解風險的便宜一半 —— 一個
+無線電起不來的節點，目前什麼都不會顯示。`device_name` 沒辦法在 overlay 裡設完，
+需要一個小的 systemd unit 或 udev rule。`active_low` 取決於極性，尚未驗證。
+
+### 加密晶片，以及一支用空白說謊的儀器
+
+它是一顆存放 Helium swarm key 的 Microchip ATECC608A，I²C 位址 `0x60`。它的
+config 與 data zone **單向、永久上鎖**，而 Seeed 在出廠時為了寫入 miner 身分已經
+鎖了，所以現實上的天花板是一把能簽章但換不掉的金鑰。在花任何力氣之前先確認鎖的
+狀態，而在那之前**不要發出任何寫入**。核心的 `atmel-ecc` 只接出 ECDH，而且
+Raspberry Pi OS 沒有編進去；真正的路徑是 userspace 的 CryptoAuthLib 走
+`/dev/i2c-1`，它的 PKCS#11 module 能讓 OpenSSL 與 `ssh` 直接使用晶片裡的金鑰 ——
+有意思的用途是給 console server 一個私鑰不落在 SD 卡上的 mTLS 身分。
+
+**`i2cdetect` 在 `0x60` 掃到空白是無法判定，不是否定。** 沒有被喚醒的 ATECC608A
+會 NACK 自己的位址，而 `i2cdetect` 不會送出喚醒脈衝。這跟那次 exit 0、30 個欄位
+空了 25 個的 soak checkpoint 是同一種形狀：一支儀器的沉默被當成了答案。
+
+### 工具
+
+`tools/m1-hat/m1-hat-probe.sh`，commit `1cc5bfe`。`survey` 是唯讀的 —— 機型、
+HAT ID EEPROM、`config.txt` 全文、device-tree 上符合 gpio/fan/key/led/crypto/morse
+的節點、`/sys/kernel/debug/gpio`、libgpiod、input device、thermal cooling device、
+LED class、每一條 I²C bus、SPI 與 morse 模組，以及 `atmel-ecc` 存不存在。它不把
+任何 GPIO 當輸出驅動，也不對加密晶片寫入任何東西。`button` 沒有 `--yes` 就什麼都
+不做，會先列出它打算請求哪些線，並排除 `config.txt` 裡任何 `dtoverlay=` 行點名的
+腳位 —— 因為 HaLow 模組的 reset 線就在同一顆 gpiochip 上，而驅動沒載入時它可能
+正好是閒置的。
+
+2026-08-27 那六種自家工具說謊的方式，這裡每一種都設了防：`/usr/sbin/i2cdetect`
+用絕對路徑，因為非互動 ssh 的 PATH 沒有它；`timeout` 回傳 124 視為成功、其他值才
+算 `gpiomon` 失敗；空的 I²C bus 清單以「是否為空」測試，而不是掉進算術；而缺工具、
+缺檔案或非 root 執行，一律印一行 `!!!!` 並把退出碼推到 2，而不是讓某一節空著。
+
+`selftest` 存在的理由是：一個從來沒叫過的守衛不算守衛。六個，全部被刻意弄到失敗
+過，包括用合成的 v1 與 v2 gpioinfo 輸出去驗兩種方言都解析到同一個線號。它跑過了：
+唯一的 FAIL 是 `timeout present`，發生在筆電上，那正是守衛正確地報出「macOS 不是
+這支腳本該待的地方」。`survey` 也在筆電上完整跑過一次 —— 十三節，每一節都有輸出，
+退出碼 2。
+
+**下一步，而且不需要任何新硬體：**在站台上跑 `sudo m1-hat-probe.sh survey`。
+它是唯讀的，所以不會干擾 soak —— 不重開機、不重載模組、不寫入。
+`/sys/kernel/debug/gpio` 是最關鍵的一節，也正是需要 root 的那一節。
+
 ## 2026-08-27（傍晚）—— 一次成熟度審查，以及 repo 說了而筆記沒說的事
 
 對兩個 repo 做的唯讀審查，衡量的基準是這些工作真正要服務的東西：一台以 HaLow
