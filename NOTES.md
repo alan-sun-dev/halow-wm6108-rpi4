@@ -2,6 +2,287 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-27 — a gate that had never run, and the house Wi-Fi ruled out by measurement
+
+### The station's HaLow link degraded overnight, and the driver had nothing to do with it
+
+The A1 station did not reboot: uptime 2771 s, association 2761 s, `boot_id`
+unchanged from the previous evening. What changed is the air. Against the
+previous session's −52…−45 dBm the station read −56 dBm and the AP saw it at
+−60…−65, and the AP's own estimate of the link fell from 4.394 Mbit/s to
+1.410 Mbit/s *within* this session.
+
+Everything on the driver side stayed at zero: `spi_errors 0`, `spi_timedout 0`,
+`dmesg_failures 0`, `sta_tx_failed 0`, `power_save off`. **The degradation is
+entirely in the RF path.** For a console-server backhaul that is the good half
+of the news and the bad half at once — the driver holds, but a link in this
+state makes `ssh` take 20 s at the fifth attempt and starts losing 15 % of a
+20-packet ping.
+
+The comparison that makes it concrete puts both stations under the same load,
+from the AP, one hop, in adjacent minutes:
+
+| | A1 station `9c:04:…:fe` | `dkmstest` `0c:bf:…:91` |
+|---|---|---|
+| tx packets | +64 | +65 |
+| **tx retries** | **+88 (1.38/pkt)** | **+0** |
+| packet loss | 0 % | 0 % |
+| RTT avg / max | **19.3 / 46.6 ms** | 4.8 / 13.7 ms |
+| signal | −60 → −63 dBm | −46 → −41 dBm |
+
+**An earlier reading of `dkmstest` as "0 retries" was not evidence of health.**
+It had carried 58 packets in its whole association. Equal load is what makes
+the two columns comparable, and it had to be created deliberately.
+
+**Narrowed later the same morning — see the last section of this entry.** Eleven
+hours of equal-load rounds show the retry cost never moved; what swung was the
+AP's rate estimate, not the price of moving a packet.
+
+### The house Wi-Fi is not the cause — four paired rounds say so
+
+The obvious suspect was the station's own 2.4/5 GHz radio. The physical
+argument said no (brcmfmac on SDIO, morse on SPI, 922 MHz versus 2.4/5 GHz), but
+the argument had never been measured. `dkmstest` is the control: it shares the
+AP and the medium and is untouched by anything done on the station.
+
+| | A1 retries/pkt | `dkmstest` (control) | A1 RTT avg |
+|---|---|---|---|
+| wlan0 **down**, round 1 | 1.23 | 0.00 | 18.7 ms |
+| wlan0 **down**, round 2 | 1.22 | 0.00 | 16.9 ms |
+| wlan0 **up**, round 3 | 1.20 | 0.00 | 17.0 ms |
+| wlan0 **up**, round 4 | 1.40 | 0.00 | 14.2 ms |
+| wlan0 **up**, baseline | 1.38 | 0.00 | 19.3 ms |
+
+The two "down" samples fall inside the range of the three "up" samples. The
+control reads 0.00 in every round, so neither the AP nor the method drifted.
+**Turning the house Wi-Fi off changes nothing.**
+
+**There is a trap in doing this at all, and it nearly cost the board.** The
+HaLow interface is a mac80211 device, so NetworkManager lists `wlan1` as type
+`wifi` exactly like `wlan0`. Any global "turn off Wi-Fi" — `nmcli radio wifi
+off`, a `rfkill block wlan` — takes the HaLow link down with it, and HaLow is
+this station's only usable path: the USB gadget cable has been removed and the
+house Wi-Fi is the −86 dBm path that answers and then stalls. The interface must
+be named, never a class of interfaces.
+
+`wlan0` was therefore taken down by name (`nmcli device set wlan0 managed no`
+then `ip link set wlan0 down`), which also stops NetworkManager's scan loop —
+a marginal interface retrying forever is *noisier* than a downed one, so an
+interface left "trying" is not the off state anyone means.
+
+**Read retries, not dBm.** Between rounds 3 and 4 the station's reported signal
+wandered from −65 to −54 with nothing moved and no change in retry rate. Given
+that RSSI saturation on this part is already proven, the retry counter is the
+more stable instrument for judging this link. **This turned out not to go far
+enough — `ap_expected_thr` and the idle MCS are no more trustworthy than RSSI.
+See the last section of this entry.**
+
+### The preflight gate's dpkg check had never once run
+
+`tools/dkms-lifecycle/dkms-lifecycle.sh preflight` is what stands between this
+project and rebooting a board into a kernel with no modules. Its "dpkg clean"
+check had only ever been tested against synthetic input. Run against a real
+dpkg database — a throwaway package driven into three genuinely broken states on
+`dkmstest` — it turned out that **one of its two arms had never executed on any
+board, in any state**.
+
+`dpkg -C` (`--audit`) needs root. As an ordinary user it prints nothing on
+stdout and exits 2 with `unable to check lock file for dpkg database directory
+/var/lib/dpkg: Permission denied` on stderr. The check ran
+
+```sh
+broken=$(dpkg -C 2>/dev/null | grep -c .)
+```
+
+with no `sudo`, with stderr discarded, and with the exit status thrown away by
+the pipeline. `broken` was therefore always 0. It went unnoticed because the
+other arm — a `dpkg -l` status filter, which needs no root — catches the same
+states.
+
+**Until it does not.** A package whose files-list is deleted keeps status `ii`,
+so the `dpkg -l` arm sees nothing either. On that board the gate said:
+
+```
+[PASS] dpkg clean -- dpkg -C empty, no half-configured packages
+gate exit=0
+```
+
+while `sudo dpkg -C` was reporting the package missing its list control file and
+needing reinstallation. **A gate that passes a broken system is worse than no
+gate**, and the PASS text asserted "dpkg -C empty" — a claim it had never
+established. This is the same shape as the module-glob defect found on
+2026-08-26: right format, plausible conclusion, check never performed.
+
+The audit now runs under `sudo`, is captured whole, and its status is tested
+*before* any pipeline touches it. `dpkg -C` exits 0 whether or not it finds
+problems, so a non-zero status means the audit could not be performed — which
+is not the same as clean and must not read as PASS. Verified on `dkmstest`
+against a real dpkg database:
+
+| state | before | after |
+|---|---|---|
+| clean | PASS | **PASS** |
+| `iU` — unpacked, postinst never ran | FAIL, evidence `dpkg -C lines=0` | **FAIL**, both arms report |
+| `iF` — postinst ran and failed | FAIL, same false evidence | **FAIL**, both arms report |
+| **`ii` but files-list deleted** | **PASS — a broken system let through** | **FAIL**, audit text quoted |
+| audit cannot run at all | silently counted as clean | **FAIL — "the audit was NOT performed"** |
+
+That last row is new: "could not check" and "checked, found nothing" used to
+produce the same answer. The detail lines also lost their indentation, because
+`while read -r l` strips the leading whitespace `awk` had just added; `IFS=`
+fixes it.
+
+The fixed script is on `dkmstest` only. **The station still runs the old copy**
+(`md5 d75872…`).
+
+### A better instrument for the AP/station MCS asymmetry
+
+The open question of why the AP sits one to two MCS below the station had
+stalled because `iw survey dump` returns empty at both ends, leaving no noise
+floor to compare. debugfs has `mmrc_table` — the rate controller's own per-rate
+success statistics — **at both ends**. From the AP, both peers, the same minute:
+
+```
+Peer dkmstest   selected 4MHz SGI MCS7   117 success / 117 attempts = 100%,
+                                         no other rate ever tried
+Peer A1 station selected 4MHz LGI MCS0   MCS0 30/48=63%   MCS1 45/96=47%
+                                         MCS2 30/102=29%  MCS3 33/102=32%
+                                         MCS4  8/42=19%   MCS5  0/14=0%
+```
+
+The AP has walked all the way down to the bottom rate and still gets 63–75 %
+first-attempt success there, while the station selects MCS2 in the other
+direction with received signal symmetric within a few dB. The algorithm is not
+misbehaving; the channel is. Note the honest limit: the two tables' cumulative
+totals cover different traffic histories, so what compares directly is the
+*currently selected* rate, and the AP's two peers side by side.
+
+### The timed probe guard fired for real, for the first time
+
+Yesterday's fix to `soak-checkpoint.sh` — reject a management path that answers
+but crawls — had only been control-tested with `PROBE_MAX=0`. Today the default
+run failed outright:
+
+```
+!!!! management path 192.168.108.19 answers but took 22s (limit 8s) -- too slow to carry a checkpoint, skipping
+!!!! management path 10.41.0.208 is down: Timeout, server 10.41.0.208 not responding.
+!!!! no management path to the station: tried 192.168.108.19 10.41.0.208
+checkpoint_status  FAILED
+```
+
+Exactly the intended behaviour: it refused to write a checkpoint it could not
+stand behind. `STATION=10.41.0.208` produced a complete one
+(`logs/2026-08-27-a1-soak-checkpoints.txt`).
+
+Also traced while doubting it: `spi_errors` comes from
+`/sys/class/spi_master/spi0/spi0.0/statistics/errors`, the SPI controller's own
+counters, not the morse debugfs tree — which has no such file. The number is
+real.
+
+### Six ways a tool lied today, all of them ours
+
+None were found by reading code. All were found by running it somewhere new.
+
+- **macOS has no `timeout`.** A reachability sweep reported five of five hosts
+  unreachable; it was measuring `command not found`. All five were up.
+- **An empty string in `$(( ))` is 0.** A counter-delta script printed
+  `delta 0` for every field after fetching no data at all. Guard for the empty
+  value *before* the arithmetic, or the absence of data reads as "nothing
+  changed".
+- **A non-interactive ssh PATH has no `/usr/sbin`.** `iw: command not found`
+  left the "power save" and "station dump" headings with nothing under them —
+  the same banner-with-no-content shape `soak-checkpoint.sh` was fixed for last
+  month. That tool writes `/sbin/iw` in full and was right; the hand-typed
+  version was not.
+- **`pkill -f <pattern>` matches its own command line.** `pkill -f "sleep 900"`
+  killed the shell running it, because the pattern is in that shell's argv. The
+  `ps | grep` version of this has now appeared three times; `pkill` is the same
+  bug with a delete key attached.
+- **Killing a watchdog's `sleep` triggers it.** `sh -c "sleep 720; restore"`
+  runs `restore` the moment the sleep dies. To cancel one of these, kill the
+  parent shell. This project arms timed auto-restores routinely, so "disarming"
+  one by killing the visible `sleep` process does the opposite of what it looks
+  like.
+- **`| tail -1` threw away the error and kept the hint.** A restore script
+  logged `Hint: use 'journalctl -xe ...'` and nothing about what actually
+  failed.
+
+### `nmcli connection up` is not a restore path on a weak link
+
+The `wlan0` restore script was proven before being relied on — armed on a 60 s
+timer and made to fire while nothing was broken. It failed, and the way it
+failed matters: `nmcli connection up sun` **deactivates before reactivating**,
+and at −86 dBm the reassociation does not come back. It left `wlan0` `DORMANT`,
+cycling scanning → associating → disconnected for minutes. The first, manual run
+had succeeded — taking 29 s — so a single successful run proved nothing.
+
+The working form hands the device back and lets NetworkManager's own autoconnect
+do the associating:
+
+```sh
+ip link set wlan0 up
+nmcli device set wlan0 managed yes
+```
+
+That restored the link in 10 s, twice. **On a marginal link, "down" is reliable
+and "up" is not** — which is the whole argument for staging changes and for
+timed auto-restore, and the reason to make the restore fire once before
+depending on it.
+
+HaLow was never disturbed: association ran 4803 s unbroken across the whole
+experiment, `spi_errors` and `spi_timedout` both 0, and the station was left
+with both interfaces up, both default routes back, and no background jobs.
+
+### Ten hours later: the retry cost never moved, and three claims above narrow
+
+A checkpoint at 10:19, association unbroken at 39,024 s, showed the link
+apparently recovered: `ap_expected_thr` 1.410 → **7.910 Mbit/s**,
+`sta_tx_bitrate` MCS1 → MCS3, `sta_rx_bitrate` MCS0 → MCS4, `ping_20x` 15 % loss
+→ 0 %. Reported signal went from −56 to −55 dBm. **One dB, and the AP's estimate
+of the link multiplied by 5.6.**
+
+Two more equal-load rounds in that state put the recovery somewhere other than
+where it looked. Every equal-load round run today — same 60 packets, same AP,
+same single hop:
+
+| time | condition | A1 retries/pkt | `dkmstest` |
+|---|---|---|---|
+| 00:10 | wlan0 up (baseline) | 1.38 | 0.00 |
+| 00:39 | wlan0 **down** | 1.23 | 0.00 |
+| 00:41 | wlan0 **down** | 1.22 | 0.00 |
+| 00:45 | wlan0 up | 1.20 | 0.00 |
+| 00:47 | wlan0 up | 1.40 | 0.00 |
+| 10:20 | after "recovery" | **1.64** | 0.00 |
+| 10:22 | after "recovery" | **1.17** | 0.02 |
+
+Range 1.17–1.64, mean ≈ 1.32. Across eleven hours, a house radio switched off
+and back on, a 10 dB swing in reported RSSI and a 5.6× swing in the AP's
+throughput estimate, **the cost of actually moving a packet did not change.**
+The control column stays at zero throughout.
+
+Three statements earlier in this entry are therefore narrower than they were
+written:
+
+- **"The link degraded overnight" is too strong.** What degraded was the AP's
+  rate estimate and the idle MCS. The load-bearing number — retries per packet —
+  reads the same before, during and after. What is durable is that this station
+  costs ~1.3 retries per packet while `dkmstest` costs none. **That standing
+  difference, not the swing, is the finding.**
+- **The 15 % ping loss at 00:14 is confounded.** `mgmt_medium` said plainly that
+  the checkpoint was riding the link under test, so that ping shared a medium
+  with the ssh carrying it. The 10:19 checkpoint ran out-of-band over house
+  Wi-Fi, which had become usable again. 15 % → 0 % compares two different
+  measurements. **The tool labelled this correctly; the reading of it did not.**
+- **"Read retries, not dBm" was not broad enough.** `ap_expected_thr` and the
+  idle MCS deserve the same distrust as RSSI — all three moved while the retry
+  cost held. Under load, retries per packet is the only one of the four that
+  stayed still.
+
+The management path also chose itself differently: at 10:19 the timed probe
+accepted `192.168.108.19`, so `mgmt_medium` reads `out-of-band (house Wi-Fi)`.
+The −86 dBm path is not permanently unusable — it is intermittently unusable,
+which is why the probe has to be timed on every run rather than decided once.
+
 ## 2026-08-26 (evening) — local access over USB-C, and three of our own tools caught lying
 
 This project's driver work exists to serve something else: a **console server**

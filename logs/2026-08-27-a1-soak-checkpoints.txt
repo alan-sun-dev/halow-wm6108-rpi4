@@ -1,0 +1,94 @@
+================ SOAK CHECKPOINT: 2026-08-27-degraded-link ================
+taken(laptop)      2026-08-27T00:14:22+08:00
+mgmt_path          10.41.0.208
+mgmt_medium        halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent
+taken(station)     2026-08-27T00:14:29+08:00
+uptime_seconds     2771
+uptime_human       up 46 minutes
+boot_id            2ea29cc0-0e74-4830-af3b-4c23284afc5f
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     382
+sta_tx_failed      0
+sta_rx_drop_misc   12
+sta_signal_dbm     -56
+sta_tx_bitrate     65.0 MBit/s VHT-MCS 1
+sta_rx_bitrate     15.0 MBit/s VHT-MCS 0
+assoc_uptime_s     2761
+spi_messages       235374
+spi_bytes          68187287
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      87
+ap_rx_bytes        111026
+ap_rx_packets      470
+ap_tx_bytes        163245
+ap_tx_packets      744
+ap_tx_retries      694
+ap_tx_failed       1
+ap_expected_thr    1.410Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  2760
+ap_uptime          16:14:30 up  8:08,  load average: 0.00, 0.00, 0.00
+ping_20x           20 packets transmitted, 17 packets received, 15.0% packet loss round-trip min/avg/max/stddev = 9.711/22.825/47.766/10.536 ms 
+checkpoint_status  OK
+
+================ SOAK CHECKPOINT: 2026-08-27-morning-after-10h ================
+taken(laptop)      2026-08-27T10:18:48+08:00
+mgmt_path          192.168.108.19
+mgmt_medium        out-of-band (house Wi-Fi)
+taken(station)     2026-08-27T10:18:52+08:00
+uptime_seconds     39034
+uptime_human       up 10 hours, 50 minutes
+boot_id            2ea29cc0-0e74-4830-af3b-4c23284afc5f
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     1042
+sta_tx_failed      11
+sta_rx_drop_misc   20
+sta_signal_dbm     -55
+sta_tx_bitrate     117.0 MBit/s VHT-MCS 3
+sta_rx_bitrate     175.5 MBit/s VHT-MCS 4
+assoc_uptime_s     39024
+spi_messages       3258743
+spi_bytes          936410796
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      87
+ap_rx_bytes        265045
+ap_rx_packets      1198
+ap_tx_bytes        307165
+ap_tx_packets      1404
+ap_tx_retries      1594
+ap_tx_failed       26
+ap_expected_thr    7.910Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  39024
+ap_uptime          02:18:54 up 18:13,  load average: 0.11, 0.02, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 6.808/24.872/89.559/21.654 ms 
+checkpoint_status  OK
+
