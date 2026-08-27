@@ -2,6 +2,113 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-27 (evening) — a maturity review, and the things the repositories say that the notes do not
+
+A read-only review of both repositories against the target this work actually
+serves: a HaLow-backhauled out-of-band console server. Nothing was changed, no
+node was rebooted, and the soak node was not disturbed. The rule applied
+throughout was that a claim with no artefact behind it is **not present**, not
+done.
+
+Full review, with the scoring table and the sequence:
+<https://claude.ai/code/artifact/74bc6d49-96bb-4957-ae60-a0c30efff6a6>
+
+### Where it actually is
+
+| | area | classification |
+|---|---|---|
+| A | driver portability | **established** |
+| B | DKMS / kernel lifecycle | usable but incomplete |
+| C | wireless link — function | **established** |
+| C | wireless link — reliability | **experimental** |
+| D | test / observability tooling | usable but incomplete |
+| E | out-of-band recovery | usable but incomplete |
+| F | console-server productization | **not started** |
+| G | mesh / OpenMANET readiness | **not started** |
+
+Splitting C is the point of the table. Association, DHCP, bidirectional traffic
+and zero SPI counters are proven on two boards and two kernels. *Reliability* is
+a different claim and rests on **ten checkpoints across three files, with a
+longest recorded association of about 16.5 hours**, sampled rather than
+monitored, with no reconnect counter. "No reproducible driver failure" is true
+and is bounded by that.
+
+### Four things reading the repositories established that the notes had not
+
+**Mesh capability is already there, and one command showed it.** The morse phy
+lists `mesh point` among its supported interface modes, `mesh.c`/`mesh.h` are in
+the driver, and the loaded module carries 284 mesh symbols. So the first two
+bullets of any "mesh phase 1" are answered for free. The same output also bounds
+what mesh could add: `#{managed, AP, mesh point} <= 2, total <= 2, #channels <= 1`.
+**The open question was never *can it*. It is *is it worth it*, and nothing in
+the current deployment argues yes.**
+
+**The console server has never been executed once.** Not a judgement — a count.
+References to `ser2net`, `conserver`, `ttyUSB`, WireGuard, rsyslog or Prometheus
+across both repositories: **zero**. No USB serial adapter has ever been attached
+to any node; `ser2net` is not installed. Every result this project has produced
+so far is infrastructure for an application that has not been run.
+
+**The Ethernet recovery that saved a broken upgrade is not reproducible.** The
+nodes carry an `eth0-bench` autoconnect profile, so the capability is real. But
+there is **no configuration, no procedure and no artefact in either repository**,
+which means it exists as experience and cannot be recreated on a new board. That
+is the gap to close on paper, and it is more urgent than it looks, because the
+other local path — USB-C — needs a person at the rack *and* interrupts board
+power on a Pi 4.
+
+**The pre-reboot gate's verified surface is smaller than its size.** One of its
+ten checks was found this morning to have never executed on any board. How many
+of the other nine are in the same state is not known, and that uncertainty is
+now part of the deployment risk rather than a tooling footnote.
+
+### The biggest deployment risk, stated plainly
+
+**There is no tested unattended recovery for a node whose HaLow does not come
+up.** The gate is manual and runs before the reboot; USB-C needs physical
+presence and cuts power; Ethernet recovery is not reproducible. The missing test
+is specific: *make the module fail to load at boot on a node you may not
+physically touch, then prove you can still get in and roll back.*
+
+Related uncertainty, not resolved: `apt-daily-upgrade.timer` is enabled and
+active on the DKMS board, but `unattended-upgrades` could not be confirmed
+present. The risk of a kernel installing and rebooting with nobody running the
+gate is therefore probably lower than assumed — **probably is not established**,
+and confirming it belongs inside that same test.
+
+### Proposed sequence, awaiting approval
+
+```
+NOW    1 console-server functional prototype -- real adapter, real console
+       2 boot-failure remote recovery and rollback + Ethernet rescue as an artefact
+       3 long soak with reconnect counting (parallel, near-zero cost)
+NEXT   4 formal OOB management design incl. rescue procedure
+       5 observability / health telemetry, driven by the prototype
+       6 security model for the parts that now exist
+LATER  7 AP/STA deployment architecture (needs >2 nodes)
+       8 automated regression framework
+       9 release / packaging quality, closing the A1 / 6.12.96 cell
+DEFER  10 mesh phase 1 -- research branch, never a dependency
+       11 OpenMANET reference analysis
+       12 central server / LLM integration
+```
+
+Two departures from the ordering as it was proposed: the formal OOB design moves
+**later**, because most of it is already built and merely unwritten while the
+part that remains cannot be written correctly until the prototype shows what a
+node needs when it goes dark; and the longer soak moves **earlier**, because it
+costs almost no engineering time and currently backs the thinnest evidence here.
+
+A `.deb` is not worth building yet. DKMS plus an install script is right for this
+stage: a package is a distribution promise made to nobody, against a matrix that
+still has a hole in it.
+
+**Nothing has been started.** Three decisions are open: whether the ordering
+holds, which board hosts the prototype (recommendation: the DKMS board or a third
+card — **not the A1 soak node**, which is the only thing accumulating reliability
+evidence), and when to run the destructive recovery test, which needs the
+dedicated card and someone present.
+
 ## 2026-08-27 — a gate that had never run, and the house Wi-Fi ruled out by measurement
 
 ### The station's HaLow link degraded overnight, and the driver had nothing to do with it
