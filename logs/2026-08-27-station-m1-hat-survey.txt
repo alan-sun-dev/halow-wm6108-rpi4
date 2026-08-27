@@ -1,0 +1,185 @@
+Please note that SSH may not work until a valid user has been set up.
+
+See http://rptl.io/newuser for details.
+m1-hat-probe survey  2026-08-27T16:35:15+08:00
+
+===== board and OS =====
+Raspberry Pi 4 Model B Rev 1.4
+kernel  6.6.51+rpt-rpi-v8
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+
+===== HAT EEPROM  (names the HAT outright if one is fitted) =====
+(no /proc/device-tree/hat -- this HAT has no ID EEPROM, or it is not being read)
+
+===== config.txt  (the HaLow overlay here names its own GPIOs) =====
+-- /boot/firmware/config.txt
+dtparam=spi=on
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=1
+auto_initramfs=1
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+disable_fw_kms_setup=1
+arm_64bit=1
+disable_overscan=1
+arm_boost=1
+[cm4]
+otg_mode=1
+[cm5]
+dtoverlay=dwc2,dr_mode=host
+[all]
+dtoverlay=mm610x-spi-sensecap
+gpio=18=op,dh
+dtoverlay=dwc2,dr_mode=peripheral
+-- /proc/cmdline
+coherent_pool=1M 8250.nr_uarts=0 snd_bcm2835.enable_headphones=0 snd_bcm2835.enable_headphones=1 snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_hdmi=0  smsc95xx.macaddr=E4:5F:01:52:55:04 vc_mem.mem_base=0x3ec00000 vc_mem.mem_size=0x40000000  console=ttyS0,115200 console=tty1 root=PARTUUID=d698d7c7-02 rootfstype=ext4 fsck.repair=yes rootwait
+
+===== device-tree nodes that claim GPIOs =====
+leds
+
+===== who currently owns each GPIO line =====
+gpiochip0: GPIOs 512-569, parent: platform/fe200000.gpio, pinctrl-bcm2711:
+ gpio-512 (ID_SDA              )
+ gpio-513 (ID_SCL              )
+ gpio-514 (GPIO2               )
+ gpio-515 (GPIO3               )
+ gpio-516 (GPIO4               )
+ gpio-517 (GPIO5               |mm610x_spi_irq_gpio ) in  hi IRQ 
+ gpio-518 (GPIO6               )
+ gpio-519 (GPIO7               |spi0 CS1            ) out hi ACTIVE LOW
+ gpio-520 (GPIO8               |spi0 CS0            ) out hi ACTIVE LOW
+ gpio-521 (GPIO9               )
+ gpio-522 (GPIO10              )
+ gpio-523 (GPIO11              )
+ gpio-524 (GPIO12              )
+ gpio-525 (GPIO13              )
+ gpio-526 (GPIO14              )
+ gpio-527 (GPIO15              )
+ gpio-528 (GPIO16              )
+ gpio-529 (GPIO17              )
+ gpio-530 (GPIO18              |halow-slot-power    ) out hi 
+ gpio-531 (GPIO19              )
+ gpio-532 (GPIO20              )
+ gpio-533 (GPIO21              )
+ gpio-534 (GPIO22              )
+ gpio-535 (GPIO23              |morse-wakeup-ctrl   ) out hi 
+ gpio-536 (GPIO24              |morse-async-wakeup-c) in  lo IRQ 
+ gpio-537 (GPIO25              )
+ gpio-538 (GPIO26              )
+ gpio-539 (GPIO27              )
+ gpio-540 (RGMII_MDIO          )
+ gpio-541 (RGMIO_MDC           )
+ gpio-542 (CTS0                )
+ gpio-543 (RTS0                )
+ gpio-544 (TXD0                )
+ gpio-545 (RXD0                )
+ gpio-546 (SD1_CLK             )
+ gpio-547 (SD1_CMD             )
+ gpio-548 (SD1_DATA0           )
+ gpio-549 (SD1_DATA1           )
+ gpio-550 (SD1_DATA2           )
+ gpio-551 (SD1_DATA3           )
+ gpio-552 (PWM0_MISO           )
+ gpio-553 (PWM1_MOSI           )
+ gpio-554 (STATUS_LED_G_CLK    |ACT                 ) out lo 
+ gpio-555 (SPIFLASH_CE_N       )
+ gpio-556 (SDA0                )
+ gpio-557 (SCL0                )
+ gpio-558 (RGMII_RXCLK         )
+ gpio-559 (RGMII_RXCTL         )
+ gpio-560 (RGMII_RXD0          )
+ gpio-561 (RGMII_RXD1          )
+ gpio-562 (RGMII_RXD2          )
+ gpio-563 (RGMII_RXD3          )
+ gpio-564 (RGMII_TXCLK         )
+ gpio-565 (RGMII_TXCTL         )
+ gpio-566 (RGMII_TXD0          )
+ gpio-567 (RGMII_TXD1          )
+ gpio-568 (RGMII_TXD2          )
+ gpio-569 (RGMII_TXD3          )
+
+gpiochip1: GPIOs 570-577, parent: platform/soc:firmware:gpio, raspberrypi-exp-gpio, can sleep:
+ gpio-570 (BT_ON               |shutdown            ) out hi 
+ gpio-571 (WL_ON               )
+ gpio-572 (PWR_LED_OFF         |PWR                 ) out lo ACTIVE LOW
+ gpio-573 (GLOBAL_RESET        )
+ gpio-574 (VDD_SD_IO_SEL       |vdd-sd-io           ) out hi 
+ gpio-575 (CAM_GPIO            |cam1_regulator      ) out lo 
+ gpio-576 (SD_PWR_ON           |regulator-sd-vcc    ) out hi 
+ gpio-577 (SD_OC_N             )
+
+===== libgpiod view  (claimed lines only) =====
+gpiochip0 - 58 lines:
+	line   5:      "GPIO5" "mm610x_spi_irq_gpio" input active-high [used]
+	line   7:      "GPIO7"   "spi0 CS1"  output   active-low [used]
+	line   8:      "GPIO8"   "spi0 CS0"  output   active-low [used]
+	line  18:     "GPIO18" "halow-slot-power" output active-high [used]
+	line  23:     "GPIO23" "morse-wakeup-ctrl" output active-high [used]
+	line  24:     "GPIO24" "morse-async-wakeup-ctrl" input active-high [used]
+	line  42: "STATUS_LED_G_CLK" "ACT" output active-high [used]
+gpiochip1 - 8 lines:
+	line   0:      "BT_ON"   "shutdown"  output  active-high [used]
+	line   2: "PWR_LED_OFF" "PWR" output active-low [used]
+	line   4: "VDD_SD_IO_SEL" "vdd-sd-io" output active-high [used]
+	line   5:   "CAM_GPIO" "cam1_regulator" output active-high [used]
+	line   6:  "SD_PWR_ON" "regulator-sd-vcc" output active-high [used]
+gpiochip0 - 58 lines:
+	line   5:      "GPIO5" "mm610x_spi_irq_gpio" input active-high [used]
+	line   7:      "GPIO7"   "spi0 CS1"  output   active-low [used]
+	line   8:      "GPIO8"   "spi0 CS0"  output   active-low [used]
+	line  18:     "GPIO18" "halow-slot-power" output active-high [used]
+	line  23:     "GPIO23" "morse-wakeup-ctrl" output active-high [used]
+	line  24:     "GPIO24" "morse-async-wakeup-ctrl" input active-high [used]
+	line  42: "STATUS_LED_G_CLK" "ACT" output active-high [used]
+
+===== input devices  (a button already wired as gpio-key shows up here) =====
+N: Name="vc4-hdmi-0"
+P: Phys=vc4-hdmi-0/input0
+H: Handlers=kbd event0 
+N: Name="vc4-hdmi-0 HDMI Jack"
+P: Phys=ALSA
+H: Handlers=event1 
+N: Name="vc4-hdmi-1"
+P: Phys=vc4-hdmi-1/input0
+H: Handlers=kbd event2 
+N: Name="vc4-hdmi-1 HDMI Jack"
+P: Phys=ALSA
+H: Handlers=event3 
+
+===== thermal cooling devices  (a fan already on gpio-fan shows up here) =====
+(none -- the fan is unmanaged, hard-wired, or on a bare GPIO)
+/sys/class/thermal/thermal_zone0/temp = 45277
+throttled: throttled=0x0
+
+===== LED class =====
+ACT
+default-on
+mmc0
+mmc0::
+PWR
+
+===== I2C  -- see the wake-up caveat in this script's header =====
+!!!! NO /dev/i2c-* AT ALL -- the header I2C bus is off, so the crypto chip
+!!!!      cannot be reached, scanned or ruled out from here.
+     config.txt says:
+       6:#dtparam=i2c_arm=on
+     Enabling it means editing config.txt and REBOOTING. On the soak
+     node that ends the soak -- decide before you do it.
+
+===== SPI and the HaLow driver =====
+/dev/spidev0.1
+morse                 491520  0
+dot11ah               114688  1 morse
+crc7                   12288  1 morse
+mac80211             1032192  1 morse
+cfg80211              983040  4 dot11ah,brcmfmac,mac80211,morse
+phy0
+phy1
+
+===== crypto driver availability  (informational -- userspace is the real path) =====
+atmel-ecc not built for this kernel -- expected. Use CryptoAuthLib in
+userspace over /dev/i2c-1, and its PKCS#11 module for OpenSSL/ssh.
+
+===== verdict =====
+survey INCOMPLETE -- see the !!!! lines above. Do not read the gaps as zeroes.

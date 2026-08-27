@@ -75,7 +75,7 @@ survey() {
     fi
 
     rule "config.txt  (the HaLow overlay here names its own GPIOs)"
-    CFG=/boot/firmware/config.txt
+    CFG=/boot/firmware/config.txt          # also read by the I2C section below
     [ -r "$CFG" ] || CFG=/boot/config.txt
     if [ -r "$CFG" ]; then
         say "-- $CFG"
@@ -141,11 +141,21 @@ survey() {
     ls /sys/class/leds/ 2>/dev/null || say "(none registered)"
 
     rule "I2C  -- see the wake-up caveat in this script's header"
-    if have "$I2CDETECT"; then
-        buses=$(ls /dev/i2c-* 2>/dev/null)
-        if [ -z "$buses" ]; then
-            miss "no /dev/i2c-* at all -- I2C is off. Add dtparam=i2c_arm=on and reboot."
-        else
+    # Establish whether the bus EXISTS before worrying about the scanning tool.
+    # 2026-08-27: an earlier version put `have i2cdetect` first, so on a board
+    # with i2c-tools absent it reported the missing tool and never said that the
+    # header bus was switched off entirely -- the bigger and more useful fact.
+    buses=$(ls /dev/i2c-* 2>/dev/null)
+    if [ -z "$buses" ]; then
+        miss "NO /dev/i2c-* AT ALL -- the header I2C bus is off, so the crypto chip"
+        miss "     cannot be reached, scanned or ruled out from here."
+        say  "     config.txt says:"
+        grep -nE 'i2c' "$CFG" 2>/dev/null | sed 's/^/       /' || say "       (no i2c line at all)"
+        say  "     Enabling it means editing config.txt and REBOOTING. On the soak"
+        say  "     node that ends the soak -- decide before you do it."
+    else
+        say "buses: $buses"
+        if have "$I2CDETECT"; then
             for b in $buses; do
                 n=${b#/dev/i2c-}
                 say "-- bus $n"
@@ -155,6 +165,8 @@ survey() {
             say ""
             say "0x60 = ATECC608A (Helium swarm key).  0x50 on bus 0 = HAT ID EEPROM."
             say "A blank grid is INCONCLUSIVE, not negative: the ATECC608A NACKs until woken."
+        else
+            say "     the bus exists but cannot be scanned from here: install i2c-tools."
         fi
     fi
 

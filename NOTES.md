@@ -2,6 +2,88 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-27 (night, later) — the pin map is measured, and all four HAT devices are undeclared
+
+`m1-hat-probe.sh survey` was run on the station. Read-only throughout: no
+reboot, no module reload, nothing written. The soak was unharmed and is the
+check that says so — `wlan1` `up`, `spi_errors` 0, uptime 17 h 04 m across the
+run. Output in `logs/2026-08-27-station-m1-hat-survey.txt`.
+
+`selftest` was run on the station first, before the survey, because a guard
+verified only on the laptop is verified on the wrong machine. **All seven fired,
+including `timeout present`** — the one that legitimately FAILs on macOS.
+
+### The pin map, no longer a recollection
+
+`/sys/kernel/debug/gpio` settles it:
+
+| GPIO | consumer |
+|---|---|
+| 5 | `mm610x_spi_irq_gpio` — the HaLow interrupt |
+| 7 / 8 | `spi0 CS1` / `spi0 CS0` |
+| **18** | **`halow-slot-power`** — mPCIe slot power, also forced high at firmware time by `gpio=18=op,dh` in `config.txt` |
+| 23 | `morse-wakeup-ctrl` |
+| 24 | `morse-async-wakeup-ctrl`, input with an IRQ |
+
+The recollection recorded a few hours ago — that Seeed's `reset_lgw.sh` used
+GPIO 17 / 18 / 5, and that a HaLow overlay reusing one would be a conflict — is
+**half right and the half that mattered is wrong**. 18 and 5 are indeed in use,
+and the interesting part is *how*: Seeed's LoRa slot power-enable and interrupt
+lines were inherited by the HaLow module in the same socket. **GPIO 17 is
+claimed by nothing. There is no conflict.** Recorded because a guess that half
+survives contact is the kind that gets trusted next time.
+
+`config.txt` also confirms in passing what was corrected on 2026-08-26:
+`otg_mode=1` sits under `[cm4]` and `dtoverlay=dwc2,dr_mode=host` under `[cm5]`,
+neither applying here, while the working `dtoverlay=dwc2,dr_mode=peripheral`
+sits under `[all]`.
+
+### Nothing in software declares the button, fan, LED or crypto chip
+
+- No HAT ID EEPROM: `/proc/device-tree/hat` does not exist.
+- `/sys/class/leds` holds `ACT`, `PWR`, `mmc0` — **every one of them internal to
+  the Pi.** The HAT's panel LED is registered nowhere.
+- The only input devices are the two HDMI jacks. No `gpio-key`.
+- No thermal cooling device at all. No `gpio-fan`. The board was at 44.8 °C with
+  `throttled=0x0`.
+- **The header I²C bus is switched off.** `dtparam=i2c_arm=on` is present in
+  `config.txt` but **commented out**, and there is no `/dev/i2c-*`. The only
+  I²C adapters registered are the SoC's own `fef04500` and `fef09500`.
+
+**Undeclared is not absent.** This says that nothing in software touches those
+four devices; it says nothing about whether the hardware is fitted. They sit on
+the unclaimed lines — 2, 3, 4, 6, 9–17, 19–22, 25–27.
+
+### An eighth way one of our tools lied by being quiet
+
+The I²C section originally tested for `i2cdetect` first, found it missing on
+this board, printed that, and stopped. Which meant it never reported the larger
+and more useful fact underneath: **the bus is not enabled at all.** A missing
+scanner had masked a switched-off bus.
+
+Fixed in place — existence of the bus is now established first and
+independently, the scanner second, and when the bus is absent the section prints
+the `config.txt` i²c line verbatim and says plainly that enabling it costs a
+reboot. Re-run on the station to prove the new path reports correctly, which it
+does. This is the eighth instrument of our own caught saying nothing when it had
+something to say, and the first one where the silence was structural rather than
+a shell trap.
+
+### Both remaining questions are now blocked on hardware, not on knowledge
+
+- **The crypto chip cannot be reached, scanned, or ruled out** without
+  `dtparam=i2c_arm=on` and a **reboot** — which ends the soak.
+- **The button, fan and LED pins** need `button` mode, which requests GPIO lines
+  on the same gpiochip as the HaLow interrupt. It **must not** run on the soak
+  node.
+
+`dkmstest` cannot answer either question: it is the RAK chassis with a Heltec
+HAT and does not carry this hardware. The AP is a SenseCAP M1 and does, but it
+is the infrastructure the station depends on, and it runs OpenWrt.
+
+So both questions unblock when the two additional M1s arrive, and that is now a
+concrete use for them rather than a general argument for a uniform fleet.
+
 ## 2026-08-27 (night) — the panel USB-C is 5V only, and the board on the bench answers an open hardware question
 
 A product listing prompted this: Signal & Steel sell a Sensecap M1 with the
