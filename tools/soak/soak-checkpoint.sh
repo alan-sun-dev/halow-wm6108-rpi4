@@ -10,6 +10,13 @@
 # The measurement set is fixed. Do not add or remove fields between runs, or
 # the checkpoints stop being comparable.
 #
+# One amendment, 2026-08-28: three reconnect-history fields were APPENDED
+# (disconnects_boot, beacon_loss_boot, longest_outage_s). Appending is the only
+# change this rule allows, and only because none of the thirty existing fields
+# moved or changed meaning -- every checkpoint already in the logs still compares
+# against every checkpoint taken after it, and the older ones simply lack the
+# three. Removing or redefining a field is still forbidden.
+#
 # The framing lines -- mgmt_path, mgmt_medium, checkpoint_status and any line
 # starting `!!!!` -- are not measurements. They say whether the measurements
 # below them can be trusted, and they may change without breaking anything.
@@ -136,6 +143,36 @@ P=/sys/class/spi_master/spi0/spi0.0/statistics
 for f in messages bytes errors timedout; do printf "%-18s %s\n" "spi_$f" "$(cat $P/$f)"; done
 printf "%-18s %s\n" "dmesg_failures" "$(sudo dmesg | grep -icE "cmd63|eproto|crc error|read fail|write fail|probe fail")"
 printf "%-18s %s\n" "dmesg_control"  "$(sudo dmesg | grep -c morse_spi)"
+# Reconnect history. A checkpoint says how long the CURRENT association has
+# lasted; it cannot say how many earlier ones ended. That history was sitting in
+# the station journal unread through the whole soak, and the maturity review of
+# 2026-08-27 called out a missing reconnect counter while the counter existed.
+# These three are reads of that journal. They add no traffic to the link under
+# test beyond the ssh already carrying this block.
+#
+# Field names are kept at or under 18 characters on purpose -- the column width
+# of every other field in this checkpoint.
+#
+# `-o short-unix` is not a style choice. It makes the timestamp an epoch second
+# so the outage arithmetic needs no date parsing: the first attempt at this used
+# `date -j -f` on macOS, which failed on every line and printed eleven outages of
+# "0 s" with no error anywhere. A zero that means "not measured" must never be
+# printable, so an unreadable journal prints UNREADABLE and a genuine zero prints 0.
+JU=$(sudo journalctl -b --no-pager -o short-unix -u wpa_supplicant 2>/dev/null | grep "$IF: CTRL-EVENT-")
+if [ -z "$JU" ]; then
+  for f in disconnects_boot beacon_loss_boot longest_outage_s; do
+    printf "%-18s %s\n" "$f" "UNREADABLE -- no wpa_supplicant journal for this boot"
+  done
+else
+  printf "%-18s %s\n" "disconnects_boot" "$(printf "%s\n" "$JU" | grep -c "CTRL-EVENT-DISCONNECTED")"
+  printf "%-18s %s\n" "beacon_loss_boot" "$(printf "%s\n" "$JU" | grep -c "CTRL-EVENT-BEACON-LOSS")"
+  printf "%s\n" "$JU" | grep -E "CTRL-EVENT-(DISCONNECTED|CONNECTED)" | awk "
+    { e=int(\$1)
+      if (\$0 ~ /CTRL-EVENT-DISCONNECTED/) { if (!open) { open=1; d=e } }
+      else if (\$0 ~ /CTRL-EVENT-CONNECTED/ && open) { g=e-d; if (g>max) max=g; open=0 } }
+    END { if (open) printf \"%-18s %s\n\", \"longest_outage_s\", max+0\" -- STILL DOWN at capture\"
+          else       printf \"%-18s %s\n\", \"longest_outage_s\", max+0 }"
+fi
 echo "__station_block_end__"
 ' > "$OUT"
 rc=$?
