@@ -2,6 +2,120 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-28 — the association record is broken, and the reconnect history the checkpoints could not see
+
+A status pass over all three nodes. Read-only throughout: nothing was written to
+any board, no reload, no reboot, no change to power save or to the AP. Logs in
+`logs/2026-08-28-a1-soak-checkpoints.txt` and
+`logs/2026-08-28-station-reconnect-history.txt`.
+
+### All three nodes are up, and the A1/A2 retry gap reproduced again
+
+| node | state |
+|---|---|
+| AP (M1 #1 `57:E7`, OpenWrt) | up 2 d 6 h 35 m — no reboot since it was moved on 2026-08-26 |
+| station (M1 #2 `55:04`, the soak node) | up 1 d 23 h 10 m, same `boot_id`. `spi_errors` 0, `spi_timedout` 0, `dmesg_failures` 0. 14.09 M SPI messages, 4.04 GB |
+| `dkmstest` / HC01P (RAK + Heltec, A2) | up 1 d 22 h 39 m, kernel 6.12.96, DKMS `installed`, associated, −36 dBm |
+
+Both stations were on the same AP at the same moment, which makes the retry
+comparison a controlled one for once: **A2 showed 4 tx retries and 0 failed; A1
+showed 278 and 0.** That is the same durable asymmetry recorded on 2026-08-27,
+observed here without setting anything up to observe it.
+
+### The association record: 16.5 h → 28.6 h
+
+`assoc_uptime_s` was **102865 — 28 h 34 m of unbroken association**, against the
+16.5 h that the maturity review of 2026-08-27 recorded as the longest ever seen.
+The thinnest evidence in that review is now 73 % thicker.
+
+### What the checkpoints could not see, and the journal could
+
+A checkpoint reports how long the current association has lasted. It cannot
+report how many earlier ones ended, which is exactly the "sampled rather than
+monitored, with no reconnect counter" gap the maturity review named. The station's
+journal has been recording it all along. For this boot — 47 hours, 2026-08-26
+23:28 to now:
+
+- **17 `wlan1` disconnect events**, collapsing into **11 outage windows** (several
+  fire twice before the next reconnect completes).
+- **Total down 1466 s — 24 m 26 s. Longest single outage 426 s, 7 m 06 s.**
+  Association uptime **99.14 %**.
+- The distribution is the striking part: **2 in the 15:00 hour, 14 in the 17:00
+  hour, 1 in the 18:00 hour, all on 2026-08-27, and not one in the other 45
+  hours.**
+- Every disconnect is preceded by `CTRL-EVENT-BEACON-LOSS`. There have been
+  **33** of those this boot.
+- The kernel printed **`wlan1: associating to AP … with corrupt beacon` 12
+  times**. That string appears nowhere else in either repository.
+- Recovery is not clean. The cluster produced
+  `CTRL-EVENT-SSID-TEMP-DISABLED … auth_failures=2 duration=20 reason=CONN_FAILED`
+  and `aborting authentication … by local choice`, so the station spent minutes
+  backing off and retrying rather than reconnecting on the first attempt.
+- The AP's `hostapd_s1g` log records the same events from the other side (it
+  timestamps in UTC, +8 from the station), including
+  `did not acknowledge authentication response`. The AP did not reboot: its
+  uptime spans the whole cluster.
+
+**The most useful single fact is the negative one.** Beacon loss continued after
+the cluster ended — 22:02, 00:43, 07:53 — and **none of those cost an
+association.** So beacon loss is routine and mostly survivable, and what breaks
+the link is beacon loss arriving in a burst. That is a different failure to look
+for than "the link drops occasionally".
+
+For the console-server target this is the first hard number on the requirement
+that actually matters: **worst observed outage 7 minutes, with an hour of
+flapping around it.** Whatever started that hour stopped on its own and has not
+returned in the 28 hours since.
+
+### Two suspects eliminated
+
+**The HAT survey did not cause it.** The obvious worry, given that the survey ran
+on the soak node the same afternoon. The station's own `sudo` log dates the three
+`m1-hat-probe.sh survey` runs at **16:33:48, 16:33:49 and 16:35:15**, while
+beacon loss had already begun at 16:24 and the disconnect cluster did not start
+until **17:07**. The claim of 2026-08-27 that the soak was unharmed stands.
+
+It should be recorded that it stands for a weaker reason than the one written
+down. The check offered then — `wlan1` up, `spi_errors` 0, uptime unbroken —
+would not have detected flapping that began half an hour after the survey ended,
+because none of those three fields can see a reconnect. The conclusion was right;
+the instrument behind it was not measuring what the sentence implied.
+
+**The regulatory domain did not cause it either.** Every disconnect in the
+cluster is accompanied, in the same second, by `wlan0: CTRL-EVENT-REGDOM-CHANGE
+init=CORE`, and the laptop's first reading of the global domain was
+`country 00`. The obvious hypothesis is that the house-Wi-Fi interface, flapping
+at −86 dBm, was resetting a domain the HaLow radio shares. It is wrong:
+`iw reg get` reports **`phy#1 (self-managed) country SG`**. The morse phy manages
+its own regulatory state and the global domain does not reach it. The causal
+arrow points the other way — the core resets the domain *because* the last
+country-advertising association went away.
+
+### A parser that lied, in the same shape as the other eight
+
+The outage arithmetic was done twice. The first attempt used `date -j -f` on
+macOS, which failed on **every** line; awk read the empty result as 0, and the
+table printed `outage 0 s` eleven times with no error anywhere on stdout. It
+looked like a clean answer to a real question.
+
+The rewrite uses no `date(1)` at all, and it was pointed at a hand-made pair with
+a known answer — `17:27:46 → 17:33:01 = 315 s` — **before** it was pointed at the
+real data. That is the ninth instrument of ours caught this way, and the fourth
+where the lie was a zero rather than a blank.
+
+### The checkpoint tool now carries the history
+
+Three fields added to `tools/soak/soak-checkpoint.sh`: `disconnects_boot`,
+`beacon_loss_boot` and `longest_outage_s`. They are reads of the station's
+journal, they add no traffic to the link under test beyond the ssh already
+running, and the thirty existing fields are untouched, so every checkpoint
+already in the logs stays comparable with every checkpoint taken after this.
+
+The reason for putting them in the tool rather than leaving them as a one-off
+capture: this history was available on 2026-08-26 and on 2026-08-27 and was not
+read on either day, and the review that called out the missing reconnect counter
+was written while the counter existed.
+
 ## 2026-08-27 (night, later) — the pin map is measured, and all four HAT devices are undeclared
 
 `m1-hat-probe.sh survey` was run on the station. Read-only throughout: no

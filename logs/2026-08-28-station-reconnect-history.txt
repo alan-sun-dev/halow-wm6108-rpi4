@@ -1,0 +1,291 @@
+=== station reconnect history, captured from the laptop 2026-08-28T22:46:39+08:00 ===
+Read-only. Nothing was written to the station; no reload, no reboot, no
+change to power save or to the AP. Every command below is a read.
+Host: alan@10.41.0.208 (HaLow, the only working management path).
+
+===== boot and identity =====
+2026-08-28T22:46:40+08:00
+boot: 2026-08-26 23:28:17
+up 1 day, 23 hours, 18 minutes
+2ea29cc0-0e74-4830-af3b-4c23284afc5f
+6.6.51+rpt-rpi-v8
+===== wlan1 disconnect events, WHOLE BOOT =====
+Aug 26 23:28:14 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 15:50:34 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 15:57:27 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=15
+Aug 27 15:57:40 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:07:19 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:07:36 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+Aug 27 17:08:45 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:08:49 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:14:45 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:15:06 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:15:44 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+Aug 27 17:15:54 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:21:21 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:23:14 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+Aug 27 17:23:21 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:24:49 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:25:23 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=15
+Aug 27 17:26:10 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:26:21 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:26:23 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:26:38 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:26:42 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:26:55 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+Aug 27 17:27:14 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 17:27:46 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 17:28:00 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+Aug 27 17:33:01 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+Aug 27 18:03:50 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+Aug 27 18:03:59 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+===== wlan1 BEACON-LOSS events, WHOLE BOOT =====
+Aug 27 00:42:06 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 11:21:01 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 11:21:04 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 11:21:10 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 11:21:13 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 11:21:22 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 15:50:34 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 16:24:47 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 16:26:00 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 16:28:39 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:07:19 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:08:48 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:15:06 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:16:32 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:20:51 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:21:20 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:24:49 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:26:17 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:26:20 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:26:38 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 17:27:46 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 18:03:50 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 22:02:19 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 22:02:23 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 22:02:26 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 27 22:02:29 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 00:43:12 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 07:53:01 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 07:53:04 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 07:53:07 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 07:53:10 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 07:53:13 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+Aug 28 13:34:38 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+===== kernel: corrupt beacon =====
+Aug 26 23:28:14 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 15:57:23 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:07:32 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:08:44 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:14:45 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:15:32 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:15:54 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:23:20 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:25:59 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:27:13 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:27:46 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+Aug 27 17:27:51 Sensecap kernel: wlan1: associating to AP 3c:1a:cc:70:3f:ca with corrupt beacon
+===== auth failures / backoff during the cluster =====
+Aug 26 23:29:04 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 26 23:29:06 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 26 23:29:23 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid="Unifi"
+Aug 26 23:29:23 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 26 23:29:38 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 26 23:29:55 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid="Unifi"
+Aug 26 23:29:55 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 00:36:35 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 00:36:38 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 00:36:55 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid="Unifi"
+Aug 27 00:36:55 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 00:37:10 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:50:39 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:50:50 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:51:01 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 15:51:01 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 15:51:19 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:51:34 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 15:51:34 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 15:51:34 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:51:46 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid="Unifi"
+Aug 27 15:51:46 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:51:53 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:52:03 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid="Unifi"
+Aug 27 15:52:03 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 15:52:04 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 15:52:04 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 15:52:16 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:52:33 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid="Unifi"
+Aug 27 15:52:33 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Unifi" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 15:57:12 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 15:57:23 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 15:57:27 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 16:01:55 Sensecap wpa_supplicant[579]: wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="Sun" auth_failures=1 duration=10 reason=WRONG_KEY
+Aug 27 17:07:58 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:08:02 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:08:13 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:08:13 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:08:28 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:08:38 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:08:59 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:09:10 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:09:11 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:14:34 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:14:45 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:15:11 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:15:20 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:15:21 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:15:44 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:15:54 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:21:31 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:21:43 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:21:53 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:21:59 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:22:02 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:22:13 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:22:13 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:22:28 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:22:38 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:22:39 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:22:53 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:23:04 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:23:14 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:25:00 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:25:06 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:25:16 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:25:23 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:25:32 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:25:45 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+Aug 27 17:25:45 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+Aug 27 17:25:59 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+Aug 27 17:26:09 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+===== what ran under sudo on 2026-08-27 (does the survey coincide?) =====
+Aug 26 23:30:51 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b -u usb-gadget-oob.service --no-pager
+Aug 26 23:45:14 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo morse
+Aug 26 23:45:15 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo dot11ah
+Aug 26 23:45:15 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 26 23:45:15 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 00:12:18 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/sh -c 'ls -d /sys/kernel/debug/morse* 2>/dev/null; for f in /sys/kernel/debug/morse/*/spi_errors /sys/kernel/debug/morse/*/spi_timedout /sys/kernel/debug/ieee80211/*/morse/*/spi_errors; do [ -r "$f" ] && echo "$f = $(cat $f)"; done'
+Aug 27 00:12:18 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 00:12:48 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/true
+Aug 27 00:12:48 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/find /sys/kernel/debug -maxdepth 4 -iname *morse*
+Aug 27 00:12:49 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/sh -c 'find /sys/kernel/debug -name spi_errors -o -name spi_timedout 2>/dev/null'
+Aug 27 00:12:58 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/ls /sys/kernel/debug/ieee80211/phy1/morse/
+Aug 27 00:13:17 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/cat /sys/kernel/debug/ieee80211/phy1/morse/mmrc_table
+Aug 27 00:13:17 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/cat /sys/kernel/debug/ieee80211/phy1/morse/mcs_stats
+Aug 27 00:13:17 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/cat /sys/kernel/debug/ieee80211/phy1/morse/sta_tx_count_table
+Aug 27 00:14:29 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo morse
+Aug 27 00:14:29 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo dot11ah
+Aug 27 00:14:30 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 00:14:30 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 00:31:47 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/true
+Aug 27 00:34:11 alan : PWD=/home/alan ; USER=root ; COMMAND=/home/alan/halow-test/wlan0-restore.sh
+Aug 27 00:34:40 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/nohup sh -c 'sleep 60; /home/alan/halow-test/wlan0-restore.sh >> /home/alan/halow-test/wlan0-restore.log 2>&1'
+Aug 27 00:36:30 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -u NetworkManager --since '-4 min' --no-pager
+Aug 27 00:37:19 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/nmcli device set wlan0 managed no
+Aug 27 00:37:19 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/nohup sh -c 'sleep 720; /home/alan/halow-test/wlan0-restore.sh >> /home/alan/halow-test/wlan0-restore.log 2>&1'
+Aug 27 00:37:19 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/ip link set wlan0 down
+Aug 27 00:42:26 alan : PWD=/home/alan ; USER=root ; COMMAND=/home/alan/halow-test/wlan0-restore.sh
+Aug 27 00:48:08 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/kill 2191
+Aug 27 10:18:52 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo morse
+Aug 27 10:18:52 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo dot11ah
+Aug 27 10:18:52 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 10:18:52 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 10:31:08 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dpkg -C
+Aug 27 10:31:08 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dpkg -C
+Aug 27 10:31:08 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/cmp -s /boot/initrd.img-6.6.51+rpt-rpi-v8 /boot/firmware/initramfs8
+Aug 27 10:31:09 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo -k 6.6.51+rpt-rpi-v8 morse
+Aug 27 10:31:10 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo -k 6.6.51+rpt-rpi-v8 dot11ah
+Aug 27 16:33:48 alan : PWD=/home/alan ; USER=root ; COMMAND=/home/alan/halow-test/m1-hat-probe.sh survey
+Aug 27 16:33:49 alan : PWD=/home/alan ; USER=root ; COMMAND=/home/alan/halow-test/m1-hat-probe.sh survey
+Aug 27 16:34:41 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 27 16:34:41 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/cat /sys/kernel/debug/gpio
+Aug 27 16:35:15 alan : PWD=/home/alan ; USER=root ; COMMAND=/home/alan/halow-test/m1-hat-probe.sh survey
+Aug 28 22:38:21 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo morse
+Aug 28 22:38:22 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/sbin/modinfo dot11ah
+Aug 28 22:38:22 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 28 22:38:22 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg
+Aug 28 22:39:43 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:39:44 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager
+Aug 28 22:40:11 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:40:11 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:40:11 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/dmesg -T
+Aug 28 22:40:39 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager --since '2026-08-27 16:00' --until '2026-08-27 18:30'
+Aug 28 22:40:39 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager --since '2026-08-27 16:00' --until '2026-08-27 18:30'
+Aug 28 22:40:39 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager --since '2026-08-27 17:05' --until '2026-08-27 17:30'
+Aug 28 22:41:08 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager
+Aug 28 22:41:09 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:41:09 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:41:09 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -k
+Aug 28 22:41:09 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager
+Aug 28 22:41:35 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:46:40 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:46:40 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:46:40 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -k
+Aug 28 22:46:40 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager -u wpa_supplicant
+Aug 28 22:46:40 alan : PWD=/home/alan ; USER=root ; COMMAND=/usr/bin/journalctl -b --no-pager
+===== regulatory domain: the morse phy is self-managed =====
+global
+country 00: DFS-UNSET
+phy#1 (self-managed)
+country SG: DFS-invalid
+phy#0
+country 99: DFS-UNSET
+morse country module parameter: SG
+===== REGDOM-CHANGE events (effect, not cause -- see above) =====
+Aug 26 23:30:03 wlan0: CTRL-EVENT-REGDOM-CHANGE init=COUNTRY_IE type=COUNTRY alpha2=TW
+Aug 27 15:50:53 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 15:52:41 wlan0: CTRL-EVENT-REGDOM-CHANGE init=COUNTRY_IE type=COUNTRY alpha2=TW
+Aug 27 15:53:31 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 15:55:39 wlan0: CTRL-EVENT-REGDOM-CHANGE init=COUNTRY_IE type=COUNTRY alpha2=TW
+Aug 27 15:56:26 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 15:57:27 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 16:01:53 wlan0: CTRL-EVENT-REGDOM-CHANGE init=COUNTRY_IE type=COUNTRY alpha2=TW
+Aug 27 17:07:19 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:07:36 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:08:49 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:15:06 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:15:44 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:21:21 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:23:14 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:24:49 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:25:23 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:26:21 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:26:38 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:26:55 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:27:46 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 17:28:00 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+Aug 27 18:03:50 wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD
+
+===== DERIVED: outage windows =====
+Computed on the laptop from the DISCONNECTED/CONNECTED pairs above. 17 disconnect
+events collapse into 11 outage windows, because several fire twice before the
+next reconnect completes.
+
+The first attempt at this arithmetic was wrong and is worth recording. `date -j
+-f` on macOS failed on every line, awk read the empty result as 0, and the table
+printed "outage 0 s" eleven times without a single error reaching stdout. The
+parser below uses no date(1) at all, and it was run against a hand-made pair with
+a known answer (17:27:46 -> 17:33:01 = 315 s) BEFORE being pointed at real data.
+A parser that has not produced a known answer is not an instrument.
+
+Aug 27 15:50:34  -> 15:57:40   outage   426 s   <- longest
+Aug 27 17:07:19  -> 17:08:45   outage    86 s
+Aug 27 17:08:49  -> 17:14:45   outage   356 s
+Aug 27 17:15:06  -> 17:15:54   outage    48 s
+Aug 27 17:21:21  -> 17:23:21   outage   120 s
+Aug 27 17:24:49  -> 17:26:10   outage    81 s
+Aug 27 17:26:21  -> 17:26:23   outage     2 s
+Aug 27 17:26:38  -> 17:26:42   outage     4 s
+Aug 27 17:26:55  -> 17:27:14   outage    19 s
+Aug 27 17:27:46  -> 17:33:01   outage   315 s
+Aug 27 18:03:50  -> 18:03:59   outage     9 s
+
+outage windows       11
+disconnect events    17
+beacon loss events   33
+corrupt beacon (kernel) 12
+total down           1466 s  (24 m 26 s)
+longest outage        426 s  (7 m 06 s)
+boot length at capture 169804 s
+association uptime    99.14 %   (1 - 1466/169804)

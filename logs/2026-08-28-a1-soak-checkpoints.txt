@@ -1,0 +1,107 @@
+Soak checkpoints for the A1 station, 2026-08-28. Continues
+logs/2026-08-27-a1-soak-checkpoints.txt. Same boot as that file's last entry
+(boot_id 2ea29cc0), so the soak is unbroken across the two.
+
+The reconnect history behind the analysis of this day is a separate capture:
+logs/2026-08-28-station-reconnect-history.txt.
+
+================ SOAK CHECKPOINT: 2026-08-28-status-check ================
+taken(laptop)      2026-08-28T22:38:10+08:00
+!!!! management path 192.168.108.19 is down: ssh: connect to host 192.168.108.19 port 22: Operation timed out
+mgmt_path          10.41.0.208
+mgmt_medium        halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent
+taken(station)     2026-08-28T22:38:21+08:00
+uptime_seconds     169804
+uptime_human       up 1 day, 23 hours, 10 minutes
+boot_id            2ea29cc0-0e74-4830-af3b-4c23284afc5f
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     278
+sta_tx_failed      0
+sta_rx_drop_misc   8
+sta_signal_dbm     -46
+sta_tx_bitrate     325.0 MBit/s VHT-MCS 7
+sta_rx_bitrate     195.0 MBit/s VHT-MCS 4
+assoc_uptime_s     102865
+spi_messages       14085740
+spi_bytes          4043134503
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      0
+ap_rx_bytes        56241
+ap_rx_packets      716
+ap_tx_bytes        30985
+ap_tx_packets      290
+ap_tx_retries      175
+ap_tx_failed       0
+ap_expected_thr    8.789Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  102865
+ap_uptime          14:38:22 up 2 days,  6:32,  load average: 0.00, 0.00, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 5.633/8.899/30.385/5.716 ms
+checkpoint_status  OK
+
+================ SOAK CHECKPOINT: 2026-08-28-first-checkpoint-with-reconnect-fields ================
+taken(laptop)      2026-08-28T22:52:21+08:00
+!!!! management path 192.168.108.19 is down: ssh: connect to host 192.168.108.19 port 22: Operation timed out
+!!!! management path 192.168.108.19 is down: ssh: connect to host 192.168.108.19 port 22: Operation timed out
+mgmt_path          10.41.0.208
+mgmt_medium        halow -- SAME MEDIUM AS THE LINK UNDER TEST, ping_20x is not independent
+taken(station)     2026-08-28T22:52:32+08:00
+uptime_seconds     170655
+uptime_human       up 1 day, 23 hours, 24 minutes
+boot_id            2ea29cc0-0e74-4830-af3b-4c23284afc5f
+kernel             6.6.51+rpt-rpi-v8
+morse_filename     /lib/modules/6.6.51+rpt-rpi-v8/updates/morse.ko.xz
+morse_version      0-rel_mm8108_2_0_0_2026_Apr_21
+morse_srcversion   89A7C1DAC9B51F941EFC8F2
+morse_vermagic     6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+dot11ah_filename   /lib/modules/6.6.51+rpt-rpi-v8/updates/dot11ah/dot11ah.ko.xz
+dot11ah_version    0-rel_mm8108_2_0_0_2026_Apr_21
+dot11ah_srcversion 866E8BB32C387B0B3D846EC
+dot11ah_vermagic   6.6.51+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64
+halow_iface        wlan1
+halow_mac          9c:04:b6:ff:df:fe
+halow_ip           10.41.0.208/16
+power_save         off
+sta_tx_retries     328
+sta_tx_failed      0
+sta_rx_drop_misc   9
+sta_signal_dbm     -51
+sta_tx_bitrate     325.0 MBit/s VHT-MCS 7
+sta_rx_bitrate     175.5 MBit/s VHT-MCS 4
+assoc_uptime_s     103716
+spi_messages       14156254
+spi_bytes          4063504760
+spi_errors         0
+spi_timedout       0
+dmesg_failures     0
+dmesg_control      0
+disconnects_boot   17
+beacon_loss_boot   33
+longest_outage_s   426
+ap_rx_bytes        180501
+ap_rx_packets      1098
+ap_tx_bytes        112463
+ap_tx_packets      713
+ap_tx_retries      476
+ap_tx_failed       0
+ap_expected_thr    7.910Mbps
+ap_mfp             yes
+ap_assoc_uptime_s  103716
+ap_uptime          14:52:33 up 2 days,  6:46,  load average: 0.00, 0.00, 0.00
+ping_20x           20 packets transmitted, 20 packets received, 0.0% packet loss round-trip min/avg/max/stddev = 5.869/15.336/42.303/9.349 ms 
+checkpoint_status  OK
+
