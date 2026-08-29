@@ -2,6 +2,79 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-08-29 — a lab inventory that says SPI five times, and the SDIO impression traced to its source
+
+`HARDWARE.md` / `HARDWARE.zh-TW.md` are new: the inventory of what is actually on
+the bench, the Wio-WM6108 versus HT-HC01P platform comparison, and the validation
+matrix. Documentation only — no node was rebooted, no driver touched, and the two
+new boards were not started.
+
+### There is no SDIO platform here, and there never was one in scope
+
+The correction that prompted this was that the lab does **not** run both SPI and
+SDIO. It does not. Everything in scope is `morse,mm610x-spi` on `spi-bcm2835` as
+`spi0.0`. Where the other impression comes from is worth recording, because all
+three sources are individually correct:
+
+- the Pi's **own** `brcmfmac` 2.4/5 GHz radio is on SDIO (`fe300000.mmc`) and has
+  nothing to do with HaLow;
+- the **HT-H7608** genuinely is an SDIO Morse device
+  (`platform/10130000.mmc/mmc_host/mmc0/…`), and it is the wrong regional SKU,
+  factory-reset off the bench on 2026-08-26;
+- `rmmod mm6108_sdio` in TESTING.md is defensive, for unknown vendor images.
+
+The trap is the second one, and it is sharper than it looks: **the H7608 and the
+HT-HC01P carry the same HT-HC01 V2 module and the same BCF, one wired SDIO and
+one wired SPI.** So "same module, two buses" is a true sentence about Heltec's
+product line and a false one about this bench. No file claimed a current SDIO
+platform; the H7608 entries are simply undated in places and can read as present
+tense.
+
+### The comparison is not bus-versus-bus, and the differences are larger for it
+
+Both platforms are MM6108 on the same SPI controller at the same 50 MHz, and they
+are not interchangeable. The two overlays share the SPI four and **nothing else**:
+reset 17 vs 5, IRQ 5 vs 25, wake 23 vs 3, busy 24 vs 7. Two of those differences
+are load-bearing rather than cosmetic:
+
+- **Reset needs opposite device-tree treatment for identical driver code.**
+  `morse_hw_reset()` floats the line on release rather than driving it high, so
+  the release level comes from a pull-up. On the M1 that pull-up has to be forced
+  in the overlay, because BCM2711 defaults GPIO 9–27 to pull-down and the radio
+  would sit in reset forever. On the Heltec HAT the correct setting is no bias at
+  all, because the HAT supplies it.
+- **A second chip select is harmless on one board and destructive on the other.**
+  `dtparam=spi=on` gives GPIO 8 and GPIO 7. The station runs with both and does
+  not care. On the Heltec HAT **GPIO 7 is MM_BUSY**, so the stock group has to be
+  narrowed to `<8>` or the power-save handshake line is muxed away.
+
+Two more differences are worth having in a table rather than in anyone's memory:
+the HC01P **invents a random MAC on every load** without `macaddr_suffix=`, and
+its shipped image pointed at `bcf_mf08551.bin`, Morse's EKH01-03 evaluation-board
+BCF, which cost the module its transmitter until 2026-08-24. The Wio-WM6108 needs
+neither correction.
+
+### What the matrix makes visible that prose did not
+
+The A1 column's kernel row had been carrying a quiet ambiguity. A1 has run on
+`6.12.93` and `6.18.34` — and both **failed**, before the fix series existed.
+Those are defect reproductions, not validations, and writing them in the same
+table as `6.6.51 ✅` forces the distinction. **The A1 / 6.12.96 cell is empty and
+now says so.** Closing it needs a board that is not the soak node, which is
+exactly what new node #3 is for.
+
+### The two new boards are in the inventory as rows, not as facts
+
+Nodes 3 and 4 — reproducibility/fresh-install validation, and the console-server
+prototype — are listed with hostname, both MACs and serial as **TBD**. Nothing
+was installed and nothing was guessed. The prototype landing on a new board
+rather than on the soak node was the recommendation of the 2026-08-27 review, and
+this is the first document that records it as the plan.
+
+The older side-by-side table from 2026-08-23 stays where it is. It compares the
+station against the AP at 10 MHz and is still true of that day; the new file is
+the current lab and reads 50 MHz, from the live device tree.
+
 ## 2026-08-28 — the association record is broken, and the reconnect history the checkpoints could not see
 
 A status pass over all three nodes. Read-only throughout: nothing was written to
