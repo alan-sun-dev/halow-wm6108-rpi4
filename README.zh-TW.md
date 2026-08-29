@@ -141,14 +141,18 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 > 以及 NOTES.md 的 2026-08-25。
 
 
-## 硬體
+## 硬體：當初 bring-up 的環境
+
+**這張表是歷史紀錄。** 它記的是當初 bring-up 與缺陷調查所使用的板子與 OS 映像——
+時間點在 `patches/upstream/` 的修正系列存在**之前**。它**不是**目前平台狀態的陳述。
+目前狀態請看 [HARDWARE.zh-TW.md](HARDWARE.zh-TW.md)，那份才是權威。
 
 | | |
 |---|---|
 | 主機 | Raspberry Pi 4 Model B rev 1.4（BCM2711，`spi-bcm2835`）|
 | 模組 | Seeed Wio-WM6108，chip ID `0x0306` = MM6108A1 |
 | 載板 | SenseCAP M1 的 mPCIe 插槽，佈線沿用 WM1302 Pi HAT |
-| 作業系統 | Raspberry Pi OS Trixie，原廠核心 6.18.34+rpt-rpi-v8 |
+| 作業系統 | Raspberry Pi OS Trixie，原廠核心 6.18.34+rpt-rpi-v8 —— **歷史紀錄，修正前。** 這是 bring-up **失敗**的映像之一，結果保留作為證據，它不是已驗證的 OS。要注意它並不特殊：在上面同一組四路測試裡，原廠的 `6.6.51` 與 `6.12.93` 也以逐位元組相同的指紋失敗。讓 `6.6.51` 從 ❌ 變成 ✅ 的是那組 patch，不是核心 |
 | 驅動 | MorseMicro/morse_driver 的 `mm6108-2.0.1` 與 `1.17.9` |
 
 腳位對應（WM1302 Pi HAT，M1 插槽沿用同一套）：
@@ -160,6 +164,19 @@ Seeed **Wio-WM6108** Wi-Fi HaLow mini-PCIe 模組（Quectel FGH100M-H，Morse Mi
 | SPI_INT | 5 | 模組輸出 |
 | WAKE / BUSY | 23 / 24 | 實測在這片載板上是浮接 |
 | 插槽電源致能 | 18 | SenseCAP M1 特有，不屬於 HAT 的腳位定義 |
+
+上面的腳位對應對 SenseCAP M1 載板仍然有效——2026-08-27 在運行中的站台上從
+`/sys/kernel/debug/gpio` 重新量測過。作業系統那一列則否。
+
+**目前已驗證的狀態**，權威版本在 [HARDWARE.zh-TW.md](HARDWARE.zh-TW.md)，該檔同時
+收錄完整的五節點實驗室清單（每一個節點都走 SPI）以及 Wio-WM6108 對 HT-HC01P 的
+平台比較：
+
+| 平台 | 核心 | 狀態 |
+|---|---|---|
+| A1 —— Wio-WM6108 / SenseCAP M1，參考站台 | `6.6.51+rpt-rpi-v8`（RPi OS Lite bookworm） | **已驗證** |
+| A1 —— 同一片板子 | `6.12.96+rpt-rpi-v8` | **TBD —— 尚未測試** |
+| A2 —— Heltec HT-HC01P / RAK Hotspot v2 | `6.6.51+rpt-rpi-v8` 與 `6.12.96+rpt-rpi-v8` | **已驗證** |
 
 ## 核心發現：晶片的回應固定晚 2 個 bit
 

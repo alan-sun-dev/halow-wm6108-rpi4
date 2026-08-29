@@ -1,5 +1,8 @@
 # HT-HC01P hardware / driver / device-tree inventory
 
+*This file is the HT-HC01P's own inventory. The lab-wide inventory and the
+validation matrix across all five nodes are in [HARDWARE.md](HARDWARE.md).*
+
 **Subject:** Raspberry Pi 4B + Heltec HT-HC01P Pi HAT (Morse Micro MM6108**A2**), running
 Heltec's OpenWrt image with Morse driver 1.15.3. This is the machine that currently
 works, and it was not modified.

@@ -164,14 +164,19 @@ hardware (Raspberry Pi 4 + genuine Seeed WM1302 Pi HAT + a Morse-patched kernel)
 
 Published in the hope that the measurements save someone else the same week.
 
-## Hardware
+## Hardware: the original bring-up environment
+
+**This table is historical.** It records the board and the OS image the original
+bring-up and the defect investigation ran on — *before* the fix series in
+`patches/upstream/` existed. It is **not** a statement of the current platform
+state. For that, see [HARDWARE.md](HARDWARE.md), which is authoritative.
 
 | | |
 |---|---|
 | Host | Raspberry Pi 4 Model B rev 1.4 (BCM2711, `spi-bcm2835`) |
 | Module | Seeed Wio-WM6108, chip ID `0x0306` = MM6108A1 |
 | Carrier | SenseCAP M1 mPCIe slot, wired to the WM1302 Pi HAT pin map |
-| OS | Raspberry Pi OS Trixie, stock kernel 6.18.34+rpt-rpi-v8 |
+| OS | Raspberry Pi OS Trixie, stock kernel 6.18.34+rpt-rpi-v8 — **historical, pre-fix.** This is one of the images the bring-up **failed** on, and the result is kept as evidence. It is not the validated OS. Note it was not special: in the same four-way test above, stock `6.6.51` and `6.12.93` failed with a byte-identical fingerprint. What changed `6.6.51` from ❌ to ✅ was the patch series, not the kernel |
 | Driver | `mm6108-2.0.1` and `1.17.9`, both from MorseMicro/morse_driver |
 
 Pin map (WM1302 Pi HAT, which the M1 slot follows):
@@ -183,6 +188,20 @@ Pin map (WM1302 Pi HAT, which the M1 slot follows):
 | SPI_INT | 5 | module output |
 | WAKE / BUSY | 23 / 24 | measured floating on this carrier |
 | slot power enable | 18 | SenseCAP M1 specific, not part of the HAT map |
+
+The pin map above is still current for the SenseCAP M1 carrier — it was
+re-measured on the running station on 2026-08-27 from `/sys/kernel/debug/gpio`.
+The OS row is not.
+
+**Current validated state**, authoritative in [HARDWARE.md](HARDWARE.md), which
+also carries the full five-node lab inventory — every node SPI — and the
+Wio-WM6108 versus HT-HC01P platform comparison:
+
+| platform | kernel | state |
+|---|---|---|
+| A1 — Wio-WM6108 / SenseCAP M1, reference station | `6.6.51+rpt-rpi-v8` (RPi OS Lite bookworm) | **validated** |
+| A1 — same board | `6.12.96+rpt-rpi-v8` | **TBD — not yet tested** |
+| A2 — Heltec HT-HC01P / RAK Hotspot v2 | `6.6.51+rpt-rpi-v8` and `6.12.96+rpt-rpi-v8` | **validated** |
 
 ## The main finding: the chip's responses are 2 bits late
 
