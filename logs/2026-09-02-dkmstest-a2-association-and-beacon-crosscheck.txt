@@ -1,0 +1,222 @@
+=== dkmstest (A2) association record, and a cross-station beacon-loss comparison ===
+Captured from the laptop 2026-09-02T20:30+08:00. Read-only on both stations and
+on the AP: no reload, no reboot, no change to power save, no write of any kind.
+Hosts: alan@192.168.108.13 (A2, house LAN) and alan@10.41.0.208 (A1, over HaLow).
+
+===== part 1: the A2 board's association =====
+node:              RAK Hotspot v2 / Heltec HT-HC01P, MM6108A2, SPI, spi0.0
+kernel:            6.12.96+rpt-rpi-v8
+morse:             0-rel_mm8108_2_0_0_2026_Apr_21, /lib/modules/.../updates/dkms/morse.ko.xz
+                   (the DKMS-installed fork build, not a hand-copied module)
+uptime:            6 d 20 h 28 m
+boot_id:           169f03c5-be20-4fa3-ae2f-4e6cd256e0a2
+connected time:    592080 s = 6 d 20 h 28 m
+signal:            -46 dBm
+tx/rx bitrate:     325.0 / 325.0 MBit/s VHT-MCS 7 -- symmetric
+tx retries:        313      tx failed: 0     rx drop misc: 33
+spi:               49904106 messages, 14325323090 bytes, errors 0, timedout 0
+dmesg write/read/probe failures: 0
+
+wpa_supplicant, whole boot: 103 CTRL-EVENT lines --
+  64 SIGNAL-CHANGE, 37 BEACON-LOSS, 1 SUBNET-STATUS-UPDATE, 1 CONNECTED.
+  ZERO DISCONNECTED. One CONNECTED, at 08-26 23:58:29, and it never broke.
+
+connected time equals uptime, and there is exactly one CONNECTED event in the
+journal, so the association is unbroken since boot: 6 d 20 h 28 m on A2 against
+the A1 station's new record of 5 d 3 h 23 m. This is the longest association
+either board has produced.
+
+Two things this is NOT evidence of. It is not a comparison of A1 against A2 as
+radios: the two boards sit in different places (A2 -46 dBm, A1 -50 to -57 dBm)
+and carry different kernels, so location is not held constant. And it is not a
+DKMS claim beyond the obvious one -- what it does show is that the DKMS-installed
+module on 6.12.96 has now run 6.8 days of continuous association with zero SPI
+errors, which is the longest unattended run the packaging has ever had.
+
+Note the bitrate symmetry: A2 reports MCS7 in both directions, while the A1
+station continues to show the asymmetry recorded on 2026-08-26 (tx MCS5 /
+rx MCS4 at this capture). Different positions, so this is an observation, not a
+result.
+
+===== part 2: the beacon losses are mostly NOT station-local =====
+Both stations are associated to the same AP (3c:1a:cc:70:3f:ca, SSID
+BCM2711-57e7) and both journals cover the same wall-clock period -- A1 booted
+08-26 23:28, A2 08-26 23:58. Both report `System clock synchronized: yes` with
+`NTP service: active`, and at capture their clocks and the laptop's agreed to
+within 2 s, most of which is ssh round-trip. Second-level alignment between the
+two journals is therefore meaningful, and a +/-5 s window is generous.
+
+Method: extract every CTRL-EVENT-BEACON-LOSS from each station with
+`journalctl -b -o short-unix`, keep the integer unix seconds, and match each A1
+event against the A2 set with a +/-5 s tolerance (and the reverse).
+
+  A1 BEACON-LOSS total                                  52
+  A2 BEACON-LOSS total                                  37
+  A2 events with an A1 counterpart within +/-5 s        37   (all of them)
+  A1 events with an A2 counterpart within +/-5 s        37
+  A1-only events                                        15
+  A2-only events                                         0
+
+So every beacon loss the A2 board saw, the A1 station saw too, in the same
+second. Two different chip revisions, two different kernels, two different
+positions, one AP. A beacon loss common to both is the AP's beacons genuinely
+missing from the air, or the channel being unusable -- it is not the receiving
+station's doing.
+
+Now cross those two classes against A1's disconnects (18 this boot):
+
+  common-mode beacon losses (37):  37 clean, 0 within +/-5 s of a disconnect
+  A1-only beacon losses     (15):  12 within +/-5 s of an A1 disconnect
+                                    3 not (08-27 00:42:06, 17:16:32, 17:20:51)
+  A1 disconnects            (18):  12 with a co-timed A1-only beacon loss
+                                    6 with no beacon loss at all
+
+The A1-only list:
+
+  08-27 00:42:06   no disconnect
+  08-27 15:50:34   DISCONNECT within 5 s
+  08-27 17:07:19   DISCONNECT within 5 s
+  08-27 17:08:48   DISCONNECT within 5 s
+  08-27 17:15:06   DISCONNECT within 5 s
+  08-27 17:16:32   no disconnect
+  08-27 17:20:51   no disconnect
+  08-27 17:21:20   DISCONNECT within 5 s
+  08-27 17:24:49   DISCONNECT within 5 s
+  08-27 17:26:17   DISCONNECT within 5 s
+  08-27 17:26:20   DISCONNECT within 5 s
+  08-27 17:26:38   DISCONNECT within 5 s
+  08-27 17:27:46   DISCONNECT within 5 s
+  08-27 18:03:50   DISCONNECT within 5 s
+  09-01 21:27:00   DISCONNECT within 5 s
+
+===== what this changes =====
+The 2026-08-28 entry read the record as "beacon loss is routine and survivable,
+a BURST of it is what breaks the link". Both halves need replacing:
+
+1. Count is not the discriminator. Bursts of four and five beacon losses inside
+   fifteen seconds occurred on 08-28, 08-30 and 08-31 and the association
+   survived every one; the single disconnect of the quiet period arrived with
+   exactly one beacon loss.
+
+2. The discriminator that does separate them cleanly is whether the event is
+   common to both stations. 37 of 37 common-mode beacon losses were harmless.
+   Every beacon loss that coincided with a disconnect was one only A1 saw.
+
+What "A1-only" is evidence of is narrower than it sounds. The two stations are
+in different rooms, so an event only A1 sees may be A1's local RF environment
+rather than anything about the A1 board, its driver or its kernel. What is
+excluded is the AP: the AP was beaconing normally at 09-01 21:27:00, because the
+A2 station a few metres from it logged nothing at all that day until 23:37. The
+survey and regulatory-domain explanations were already eliminated on 2026-08-28.
+
+NOT ESTABLISHED, and worth stating so it is not read as settled:
+ - the mechanism behind an A1-local beacon loss;
+ - whether the 6 disconnects with no beacon loss share a cause with the 12 that
+   have one -- reason=4 locally_generated=1 covers both;
+ - whether any of this is position, board, or kernel, which needs the two
+   stations swapped or a third station added. Node 3 exists for exactly this.
+
+===== raw: every CTRL-EVENT line from dkmstest this boot =====
+1787759908.476903 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787759909.948439 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787759910.343007 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-50 noise=9999 txrate=234000
+1787759913.619835 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-45 noise=9999 txrate=234000
+1787759919.457692 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-40 noise=9999 txrate=325000
+1787762839.434135 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-35 noise=9999 txrate=325000
+1787800861.312665 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800864.385750 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800870.866065 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800873.968151 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800882.749290 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787801522.919544 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-30 noise=9999 txrate=325000
+1787807866.239476 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-76 noise=9999 txrate=325000
+1787807866.342968 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-58 noise=9999 txrate=325000
+1787807866.957210 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-53 noise=9999 txrate=325000
+1787807869.005241 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-47 noise=9999 txrate=325000
+1787807878.117948 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-39 noise=9999 txrate=325000
+1787814084.644790 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=325000
+1787814084.748141 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-65 noise=9999 txrate=325000
+1787814084.849204 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-52 noise=9999 txrate=325000
+1787814086.692798 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-47 noise=9999 txrate=325000
+1787814092.632140 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-37 noise=9999 txrate=325000
+1787814101.132464 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-32 noise=9999 txrate=325000
+1787819087.051761 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787819160.185843 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787819319.202772 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787823063.559130 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=325000
+1787823063.662724 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=325000
+1787823063.763507 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=325000
+1787823064.992718 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-51 noise=9999 txrate=325000
+1787823081.581692 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-46 noise=9999 txrate=325000
+1787823379.876595 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-41 noise=9999 txrate=325000
+1787823911.852345 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-35 noise=9999 txrate=234000
+1787824930.848335 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=325000
+1787824930.949648 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-63 noise=9999 txrate=325000
+1787824931.052747 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-55 noise=9999 txrate=325000
+1787824933.101105 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-50 noise=9999 txrate=325000
+1787824935.968356 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-43 noise=9999 txrate=325000
+1787825469.272895 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-38 noise=9999 txrate=325000
+1787828665.098278 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-33 noise=9999 txrate=325000
+1787833122.399738 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-28 noise=9999 txrate=325000
+1787836819.373669 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=325000
+1787836819.475228 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-64 noise=9999 txrate=325000
+1787836819.578344 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-56 noise=9999 txrate=325000
+1787836820.499027 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-48 noise=9999 txrate=325000
+1787836820.807217 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-39 noise=9999 txrate=325000
+1787838991.187606 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-34 noise=9999 txrate=325000
+1787839339.914477 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787839342.996509 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787839346.104906 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787839349.259505 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787848992.598425 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787852247.494657 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-29 noise=9999 txrate=325000
+1787874781.372390 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874784.457427 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874787.562478 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874790.665240 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874793.748563 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787895278.218712 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787992544.992970 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-75 noise=9999 txrate=15000
+1787992545.094542 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-60 noise=9999 txrate=15000
+1787992545.503793 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-50 noise=9999 txrate=15000
+1787992545.913461 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-45 noise=9999 txrate=15000
+1787992553.900874 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-39 noise=9999 txrate=15000
+1787994355.239204 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-34 noise=9999 txrate=32600
+1787995075.938105 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=58500
+1787995076.039377 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-59 noise=9999 txrate=58500
+1787995076.347505 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-53 noise=9999 txrate=58500
+1787995077.063406 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-48 noise=9999 txrate=58500
+1787995151.305226 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-39 noise=9999 txrate=58500
+1787995516.364076 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-34 noise=9999 txrate=65000
+1788007845.018330 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=325000
+1788007845.122041 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-60 noise=9999 txrate=325000
+1788007845.632704 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-52 noise=9999 txrate=325000
+1788007846.042637 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-44 noise=9999 txrate=325000
+1788007846.964943 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-39 noise=9999 txrate=325000
+1788009667.664744 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-34 noise=9999 txrate=325000
+1788019545.334180 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-29 noise=9999 txrate=325000
+1788056236.714988 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788056239.817009 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788056242.980635 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788056246.119078 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091432.601064 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091478.448398 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091517.477105 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091548.109819 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788154180.797045 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182361.740719 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182364.843265 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182367.946352 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182371.050243 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182374.152409 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186740.133414 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186827.452520 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186857.452627 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186913.894671 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788277040.289027 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-79 noise=9999 txrate=234000
+1788277040.390431 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-59 noise=9999 txrate=234000
+1788277040.698461 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-53 noise=9999 txrate=234000
+1788277041.004738 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-48 noise=9999 txrate=234000
+1788277043.360977 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-43 noise=9999 txrate=234000
+1788277047.047349 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-38 noise=9999 txrate=234000
+1788277258.909334 dkmstest wpa_supplicant[576]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-33 noise=9999 txrate=260000

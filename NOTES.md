@@ -2,6 +2,139 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-02 — a five-day association record, and the beacon-loss reading replaced by a two-station comparison
+
+The soak had not been read since 2026-08-28. Nothing was written to any node
+today: one checkpoint, two journal pulls and a set of `iw` reads, all from the
+laptop.
+
+### Getting back in, and a routing gotcha worth keeping
+
+The first attempts from the laptop failed, and the way they failed says which
+wall you are standing at. `192.168.108.5` timed out entirely while the laptop
+sat on a foreign subnet with no route to the lab segment. Once a route existed,
+the same address answered ICMP at 33–45 ms and **refused** TCP 22, 80, 443 and
+53 — RST, not silence. That pair is the AP's OpenWrt `wan` zone: input policy
+REJECT plus the default Allow-Ping rule. Reject means you are on the WAN face of
+your own router; timeout means you have no path at all. Worth reading them apart
+before concluding a node is down. Both nodes were reachable normally the moment
+the laptop was back on `192.168.108.0/24`.
+
+### The A1 station's association record is now 123 h 23 m
+
+Same boot as 2026-08-28 — `boot_id 2ea29cc0` in both captures — so every counter
+compares directly across the five-day gap.
+
+| | 08-28 22:52 | 09-02 20:09 |
+|---|---|---|
+| uptime | 170655 s (47 h) | 592900 s (6 d 20 h 41 m) |
+| `disconnects_boot` | 17 | 18 |
+| `beacon_loss_boot` | 33 | 52 |
+| `longest_outage_s` | 426 | 426 |
+| `spi_messages` | 14.1 M | 49.5 M |
+| `spi_bytes` | 4.04 GB | 14.2 GB |
+| `spi_errors` / `timedout` | 0 / 0 | 0 / 0 |
+
+One disconnect in four days and twenty-one hours. The association that stood at
+28 h 49 m on 08-28 ran on until **09-01 21:27:00**, having begun 08-27 18:03:59:
+**123 h 23 m 01 s, five days three hours**, against a previous record of 28 h
+34 m. It came back twelve seconds later, and `longest_outage_s` is still the
+426 s from 08-27. Between 08-27 18:04 and 09-01 21:27 wpa_supplicant logged
+nothing at all.
+
+The record is a lower bound on nothing in particular: it ended when the link
+happened to break, not when the observation did.
+
+### The A2 board has been associated for 6 d 20 h 28 m without a single break
+
+`dkmstest` — HT-HC01P, MM6108A2, 6.12.96, running the **DKMS-installed** fork
+module — has one `CTRL-EVENT-CONNECTED` in its whole journal, at 08-26 23:58:29,
+and no `DISCONNECTED` at all. `connected time` equals uptime at 592080 s. SPI:
+49.9 M messages, 14.3 GB, `errors 0`, `timedout 0`, zero dmesg failures.
+
+That is the longest association either board has produced, and it is also the
+longest unattended run the DKMS packaging has ever had. It is **not** a
+comparison of A1 against A2 as radios: different rooms, different signal
+(−46 dBm against −50…−57), different kernels. Nothing here holds position
+constant.
+
+### The 2026-08-28 beacon-loss reading is wrong, and the replacement is sharper
+
+That entry proposed that beacon loss is routine and survivable and that a
+**burst** of it is what breaks the link. The first half survives; the second is
+refuted by its own instrument, and by a comparison it did not have available.
+
+By count, over the quiet five days: bursts of five beacon losses inside twelve
+seconds occurred on 08-28, 08-30 and 08-31 and the association survived every
+one, while the single disconnect of the period arrived with **exactly one**.
+Count does not separate them.
+
+What does separate them is having a second station. Both boards are associated
+to the same AP, both journals cover the same period, both report
+`System clock synchronized: yes` with NTP active, and at capture the two clocks
+and the laptop's agreed to within 2 s — so matching the two beacon-loss series
+second by second is meaningful, and a ±5 s window is generous.
+
+```
+A1 BEACON-LOSS                                  52
+A2 BEACON-LOSS                                  37
+A2 events with an A1 counterpart within ±5 s    37   <- all of them
+A1-only events                                  15
+A2-only events                                   0
+```
+
+Every beacon loss the A2 board saw, the A1 station saw in the same second. Two
+chip revisions, two kernels, two positions, one AP: a beacon loss common to both
+is the AP's beacons genuinely absent from the air, not the receiver's doing.
+
+Cross that split against A1's eighteen disconnects and it comes apart cleanly:
+
+```
+common-mode beacon losses (37):  37 clean, 0 within ±5 s of a disconnect
+A1-only beacon losses     (15):  12 within ±5 s of an A1 disconnect
+A1 disconnects            (18):  12 with a co-timed A1-only beacon loss
+                                  6 with no beacon loss at all
+```
+
+**Every beacon loss that coincided with a disconnect was one only A1 saw. Not
+one of the thirty-seven common-mode losses ever cost either station its link.**
+That includes 09-01 21:27:00: A1 lost a beacon and disassociated
+(`reason=4 locally_generated=1`) with its signal at −57 dBm and rising twenty
+seconds earlier, while A2 — metres from the AP — logged nothing at all that day
+until 23:37.
+
+What "A1-only" is evidence of is narrower than it sounds. The stations are in
+different rooms, so an event only A1 sees may be A1's local RF environment
+rather than anything about the A1 board, its driver or its kernel. What it does
+exclude is the AP.
+
+Not established, and it should not be read as settled: the mechanism behind an
+A1-local beacon loss; whether the six disconnects with no beacon loss share a
+cause with the twelve that have one, since `reason=4 locally_generated=1` covers
+both; and whether any of this is position, board or kernel. Separating those
+needs the two stations swapped, or a third station — which is what node 3 is
+for.
+
+### The tenth instrument failure, and it was mine again
+
+The clock-synchronisation check that this whole comparison rests on was first
+run inside a `for` loop using `set -- $h` to split a host/label pair. **zsh does
+not word-split unquoted parameters**, so `$1` became the entire string, ssh was
+handed a nonsense host — and because the probe carried `2>/dev/null`, it printed
+two empty headers and no error. The same `/dev/null` that hid the 2026-08-26
+checkpoint failure, in a five-line loop written to verify something else. Rerun
+with the redirect removed, both stations answered: synchronised, NTP active,
+within 2 s.
+
+### Artefacts
+
+- `logs/2026-09-02-a1-soak-checkpoints.txt` — the checkpoint, `status OK`, 40 fields
+- `logs/2026-09-02-station-reconnect-history.txt` — A1 timeline, event totals, raw journal
+- `logs/2026-09-02-dkmstest-a2-association-and-beacon-crosscheck.txt` — A2 record, the matching method and its output, raw journal
+
+`HARDWARE.md` gains an association row and loses the claim that node 2 is the
+only board accumulating reliability evidence: node 5 now holds the longer figure.
+
 ## 2026-08-29 — a lab inventory that says SPI five times, and the SDIO impression traced to its source
 
 `HARDWARE.md` / `HARDWARE.zh-TW.md` are new: the inventory of what is actually on

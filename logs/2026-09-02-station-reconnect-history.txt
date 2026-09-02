@@ -1,0 +1,342 @@
+=== station reconnect history, captured from the laptop 2026-09-02T20:15+08:00 ===
+Read-only. Nothing was written to the station; no reload, no reboot, no
+change to power save or to the AP. Every command below is a read.
+Host: alan@10.41.0.208 (HaLow; 192.168.108.19 was probed first and timed out).
+
+This capture continues the same boot as 2026-08-28-station-reconnect-history.txt
+-- boot_id 2ea29cc0-0e74-4830-af3b-4c23284afc5f in both -- so the two files are
+directly comparable and the counters never reset between them.
+
+Timestamps below were produced with `journalctl -o short-unix` and converted
+with `date -r <unix>`. The three-line SSH login banner that the station prints
+is not a journal line and converts to epoch 0 (1970/01-01) when it is fed
+through the same converter; it is excluded here rather than shown as a
+measurement.
+
+===== boot and identity =====
+boot:              2026-08-26 23:28
+uptime at capture: 592900 s = 6 d 20 h 41 m
+boot_id:           2ea29cc0-0e74-4830-af3b-4c23284afc5f
+kernel:            6.6.51+rpt-rpi-v8
+morse:             0-rel_mm8108_2_0_0_2026_Apr_21
+spi:               49476066 messages, 14200156368 bytes, errors 0, timedout 0
+
+===== association segments, WHOLE BOOT =====
+  08-26 23:28:14  CONNECTED
+  08-27 15:50:34  DISCONNECTED     segment 1: 16 h 22 m 20 s
+  08-27 15:50 - 18:04               the 2026-08-27 cluster: 17 disconnects in 2 h 13 m
+  08-27 18:03:59  CONNECTED
+  09-01 21:27:00  DISCONNECTED     segment 2: 123 h 23 m 01 s  <-- NEW RECORD
+  09-01 21:27:12  CONNECTED        outage 12 s
+  (still associated at capture, 22 h 43 m)
+
+The previous recorded maximum was 28 h 34 m (2026-08-28). The new maximum is
+123 h 23 m -- 5 d 3 h 23 m, 4.3x the old one -- and it is bounded below only by
+when the link happened to break, not by when the observation started.
+
+Between 08-27 18:04 and 09-01 21:27 wpa_supplicant logged no DISCONNECTED and no
+CONNECTED at all: five days with the association untouched.
+
+===== event totals, whole boot (242 CTRL-EVENT lines) =====
+  79 SIGNAL-CHANGE
+  52 BEACON-LOSS
+  34 SSID-TEMP-DISABLED
+  18 SUBNET-STATUS-UPDATE
+  18 DISCONNECTED
+  17 SSID-REENABLED
+  13 CONNECTED
+  11 DSCP-POLICY
+
+===== every BEACON-LOSS outside the 08-27 cluster, and what followed it =====
+  08-28 00:43:12  single                       -> no disconnect
+  08-28 07:53:01,04,07,10,13  FIVE in 12 s     -> no disconnect
+  08-28 13:34:38  single                       -> no disconnect
+  08-30 10:17:16,19,22,26     FOUR in 10 s     -> no disconnect
+  08-30 20:03:52 20:04:38 20:05:17 20:05:48    -> no disconnect
+  08-31 13:29:40  single                       -> no disconnect
+  08-31 21:19:21,24,27,31,34  FIVE in 13 s     -> no disconnect
+  08-31 22:32:20 22:33:51 22:34:17 22:35:13    -> no disconnect
+  09-01 21:27:00  SINGLE                       -> DISCONNECTED, same second
+
+per day: 08-27 26, 08-28 7, 08-29 0, 08-30 8, 08-31 10, 09-01 1.
+
+THIS REFUTES THE COUNTING FORM OF THE 2026-08-28 READING. That entry proposed
+that beacon loss is routine and survivable and that a *burst* of it is what
+breaks the link. Over these five days a burst of five in twelve seconds occurred
+three times and the association survived every one of them, while the single
+disconnect of the whole period arrived with exactly one beacon loss. The number
+of beacon losses is not the discriminator. What was true on 08-27 was true of
+08-27; it does not generalise into a rule about counts.
+
+What the 09-01 event actually looks like:
+
+  09-01 21:26:12  SIGNAL-CHANGE above=0 signal=-72 txrate=195000
+  09-01 21:26:14  SIGNAL-CHANGE above=1 signal=-67
+  09-01 21:26:21  SIGNAL-CHANGE above=1 signal=-62
+  09-01 21:26:37  SIGNAL-CHANGE above=1 signal=-57
+  09-01 21:27:00  BEACON-LOSS
+  09-01 21:27:00  DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+  09-01 21:27:12  CONNECTED
+
+The signal 23 s earlier was -57 dBm and rising, the rate was 195 Mbit/s as the
+dot11ah shim reports it, and the disconnect is locally generated with reason 4.
+The beacon loss and the disconnect share a second, which is consistent with the
+beacon loss being logged as part of the same decision rather than as its cause.
+NOT ESTABLISHED: what triggered it. One event is not a mechanism.
+
+The recurring SIGNAL-CHANGE pattern -- a drop to about -72 dBm (above=0)
+recovering to better than -60 dBm within seconds, many times a day -- is present
+throughout the quiet five days as well, so it is not associated with disconnects
+either. noise reads 9999 on every line.
+
+===== raw: every CTRL-EVENT line of this boot, journalctl -o short-unix =====
+1787758094.598470 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787758094.916892 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787758095.321149 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-54 noise=9999 txrate=195000
+1787758153.381081 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-49 noise=9999 txrate=195000
+1787762526.045184 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800861.283566 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800864.357719 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800870.842874 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800873.945382 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787800882.720578 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787817034.194515 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787817034.479325 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787817039.366699 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787817050.279564 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787817061.072775 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787817061.326417 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787817079.727064 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787817094.142764 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787817094.323441 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787817113.376841 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787817124.060763 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787817124.241831 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787817432.602059 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787817443.284763 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787817444.572580 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787817447.950082 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=15
+1787817447.950202 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787817459.923078 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787817460.084016 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787817460.796986 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-64 noise=9999 txrate=32600
+1787817637.029931 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-59 noise=9999 txrate=32600
+1787817644.299352 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-54 noise=9999 txrate=32600
+1787819087.054440 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787819160.183632 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787819319.205978 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787819608.763427 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-49 noise=9999 txrate=58500
+1787821639.567187 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787821639.825715 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787821656.243991 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+1787821656.244546 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787821678.789169 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787821682.365010 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787821693.048708 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787821693.355558 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787821708.284109 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787821718.964558 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787821724.743720 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787821725.911992 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787821728.966554 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787821729.210851 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787821739.545009 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787821750.960589 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787821751.136343 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787821771.371481 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822074.442581 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822085.124786 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822085.228165 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822085.299948 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822086.145968 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-69 noise=9999 txrate=292600
+1787822106.411408 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822106.658795 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787822111.126759 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822120.814497 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822121.031904 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822130.371903 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822133.939695 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822144.117231 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+1787822144.117367 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822144.118664 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822154.576611 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822154.647348 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822154.723949 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822155.470356 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-68 noise=9999 txrate=292600
+1787822192.637850 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822451.906130 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822480.989256 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822481.219026 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787822491.376954 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822496.392554 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822503.093906 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822513.776621 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822519.671286 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822522.344040 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822522.480086 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822533.168606 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822533.366398 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822548.278090 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822558.960777 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822559.167934 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822573.343861 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822573.618554 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822584.332760 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822584.657211 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822594.854744 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+1787822594.854876 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822594.856298 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822600.580853 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822601.744008 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822602.347978 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-66 noise=9999 txrate=292600
+1787822689.686304 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822689.914542 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787822700.040433 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822705.388589 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822706.129074 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822716.808760 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822720.134713 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822723.530993 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=15
+1787822723.531131 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822732.296557 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822745.760752 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822745.958327 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=2 duration=20 reason=CONN_FAILED
+1787822759.204926 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid="BCM2711-57e7" auth_failures=1 duration=10 reason=CONN_FAILED
+1787822769.888788 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SSID-REENABLED id=0 ssid="BCM2711-57e7"
+1787822769.966230 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822770.027928 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822770.593412 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-68 noise=9999 txrate=292600
+1787822777.141622 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822780.827674 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822781.066516 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787822783.268495 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822783.347979 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822783.905422 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-68 noise=9999 txrate=292600
+1787822798.543760 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822798.797056 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787822800.995425 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822802.292001 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822804.282180 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-68 noise=9999 txrate=260000
+1787822815.552014 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+1787822815.553577 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787822833.770723 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822834.948008 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787822836.026466 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-68 noise=9999 txrate=292600
+1787822866.086821 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787822866.093436 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787822871.604875 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787822880.563441 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=3 locally_generated=1
+1787822880.564882 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DSCP-POLICY clear_all
+1787823181.183077 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787823181.251926 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787823181.630009 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-57 noise=9999 txrate=97600
+1787823246.142801 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-52 noise=9999 txrate=130000
+1787823736.744286 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-47 noise=9999 txrate=65000
+1787825030.159005 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787825030.401413 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1787825038.157107 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1787825039.328004 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1787825039.695711 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-62 noise=9999 txrate=97600
+1787825127.146557 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-57 noise=9999 txrate=97600
+1787825127.454713 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-52 noise=9999 txrate=97600
+1787825341.473575 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-47 noise=9999 txrate=130000
+1787839339.928462 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787839343.010434 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787839346.113501 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787839349.273446 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787848992.595582 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874781.383179 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874784.464506 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874787.567533 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874790.670708 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787874793.759296 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787895278.210488 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1787915438.098425 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-42 noise=9999 txrate=325000
+1788056236.719340 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788056239.821313 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788056242.987270 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788056246.128619 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788072535.623194 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=130000
+1788072535.724700 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=130000
+1788072536.237551 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-62 noise=9999 txrate=130000
+1788072538.490326 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-55 noise=9999 txrate=130000
+1788072541.254172 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-50 noise=9999 txrate=130000
+1788072603.207523 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=32600
+1788072603.412309 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=32600
+1788072603.718469 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-60 noise=9999 txrate=32600
+1788072609.556403 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-54 noise=9999 txrate=32600
+1788072642.324571 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-49 noise=9999 txrate=32600
+1788074620.810188 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=117000
+1788074621.323171 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-62 noise=9999 txrate=117000
+1788074624.291710 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-57 noise=9999 txrate=117000
+1788074665.092289 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-68 noise=9999 txrate=117000
+1788074665.092685 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-68 noise=9999 txrate=117000
+1788074669.246230 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-62 noise=9999 txrate=117000
+1788074725.872230 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-57 noise=9999 txrate=117000
+1788074736.726583 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-51 noise=9999 txrate=117000
+1788074773.284407 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=117000
+1788074773.590543 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-58 noise=9999 txrate=117000
+1788074795.504151 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-53 noise=9999 txrate=117000
+1788074816.598433 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-47 noise=9999 txrate=117000
+1788091432.596814 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091478.444194 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091517.478072 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788091548.105856 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788151108.327053 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-42 noise=9999 txrate=325000
+1788154180.811480 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182361.736386 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182364.841639 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182367.946973 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182371.051145 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788182374.153889 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186740.140870 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186831.086934 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186857.465696 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788186913.908524 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788188469.242993 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=195000
+1788188469.447759 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-64 noise=9999 txrate=195000
+1788188471.290961 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-58 noise=9999 txrate=195000
+1788188476.615593 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-52 noise=9999 txrate=195000
+1788189810.262762 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-47 noise=9999 txrate=97600
+1788267237.255232 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-73 noise=9999 txrate=130000
+1788267240.941702 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=130000
+1788267246.367944 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-74 noise=9999 txrate=130000
+1788267246.880988 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-69 noise=9999 txrate=130000
+1788267247.290516 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-64 noise=9999 txrate=130000
+1788267259.783479 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-58 noise=9999 txrate=130000
+1788267443.081650 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-53 noise=9999 txrate=130000
+1788267520.393485 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=175500
+1788267520.701789 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-66 noise=9999 txrate=175500
+1788267522.544924 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=175500
+1788267523.670303 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-65 noise=9999 txrate=175500
+1788267524.079946 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-60 noise=9999 txrate=175500
+1788267533.705620 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-54 noise=9999 txrate=175500
+1788267594.840166 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-49 noise=9999 txrate=175500
+1788267627.095450 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=175500
+1788267629.656528 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-66 noise=9999 txrate=175500
+1788267635.901956 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-59 noise=9999 txrate=175500
+1788267698.265240 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-54 noise=9999 txrate=175500
+1788268442.718357 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-48 noise=9999 txrate=130000
+1788269172.015123 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=195000
+1788269174.983892 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=195000
+1788269181.436008 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-62 noise=9999 txrate=195000
+1788269197.820155 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-57 noise=9999 txrate=195000
+1788269220.694051 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-BEACON-LOSS
+1788269220.795545 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-DISCONNECTED bssid=3c:1a:cc:70:3f:ca reason=4 locally_generated=1
+1788269232.090112 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SUBNET-STATUS-UPDATE status=0
+1788269232.163932 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-CONNECTED - Connection to 3c:1a:cc:70:3f:ca completed [id=0 id_str=]
+1788269232.532933 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-54 noise=9999 txrate=97600
+1788269345.072301 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=0 signal=-72 noise=9999 txrate=195000
+1788269345.277353 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-67 noise=9999 txrate=195000
+1788269347.325185 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-61 noise=9999 txrate=195000
+1788269348.963536 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-56 noise=9999 txrate=195000
+1788269363.914061 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-50 noise=9999 txrate=195000
+1788270479.574211 Sensecap wpa_supplicant[579]: wlan1: CTRL-EVENT-SIGNAL-CHANGE above=1 signal=-45 noise=9999 txrate=195000
+
+===== ADDENDUM, same session: the count reading is replaced, not just refuted =====
+After this file was written the same period was pulled from the A2 station
+(dkmstest, 192.168.108.13) and the two beacon-loss series were matched against
+each other. 37 of A1's 52 beacon losses appear on A2 in the same second, every
+one of those 37 is clean, and every beacon loss co-timed with an A1 disconnect
+is one only A1 saw. The discriminator is common-mode versus local, not count.
+See logs/2026-09-02-dkmstest-a2-association-and-beacon-crosscheck.txt.
