@@ -53,6 +53,69 @@ here until the boards report one themselves.
 Node 5 is one machine with two names in the older notes: `dkmstest` and
 `hc01p` are the same RAK chassis carrying the Heltec HAT and module.
 
+## Reaching the nodes from another subnet
+
+The lab answers on three address families and each one is governed by something
+different. This matters because "I cannot reach the node" has had three separate
+causes here, and they are told apart by *how* the attempt fails.
+
+| node | address | what governs access from outside `192.168.108.0/24` |
+|---|---|---|
+| 1 — AP | `192.168.108.5` | its own OpenWrt firewall: `wan` zone `input REJECT`, plus `Allow-Ping` with **no source restriction** — so ICMP has always worked from anywhere routable, and TCP has always been rejected |
+| 1 — AP, HaLow side | `10.41.254.1` | `br-lan` only; not reachable from the house LAN |
+| 2 — station | `10.41.0.208` | **the only way in.** `wlan0` is dormant and `eth0` is down, so the station has no house-LAN address at all. Traffic is forwarded by the AP's `wan → lan` rules |
+| 5 — dkmstest | `192.168.108.13` (wlan0) and `10.41.0.216` (HaLow) | no firewall on the node; access is decided by **return routing**, see below |
+
+**Reject and timeout mean different things.** A TCP RST from `192.168.108.5` is
+the AP's `wan` zone doing its job and says you are on the WAN face of your own
+router. A total timeout says you have no path at all. Neither means the node is
+down.
+
+**The trap is the return path, not the firewall.** Both Pis take their default
+route over HaLow (`default via 10.41.254.1 dev wlan1`, metric 100). A node that
+answers on the house LAN therefore sends its reply back out through the AP,
+which masquerades it on `eth0` — the client sees a reply from `192.168.108.5`
+for a connection it opened to `192.168.108.13`, and drops it. The symptom is a
+node that is up, unfirewalled and completely silent. The station is exempt
+because it has no house-LAN interface and its gateway *is* the AP.
+
+The fix is a static route per management subnet on any node that answers on the
+house LAN. Node 5 carries them on the `sun` (wlan0) NetworkManager profile.
+
+### Management subnets permitted, 2026-09-02
+
+`192.168.200.0/24` and `192.168.101.0/24`, for ping and SSH only. Three uci
+rules on the AP, backup at `/etc/config/firewall.bak-20260902`:
+
+| rule | zone | effect |
+|---|---|---|
+| `Allow-SSH-mgmt-subnets` | `wan` input | TCP 22 to the AP itself |
+| `Allow-mgmt-subnets-ping-halow` | `wan → lan` | ICMP echo-request into `10.41.0.0/16` |
+| `Allow-mgmt-subnets-ssh-halow` | `wan → lan` | TCP 22 into `10.41.0.0/16` |
+
+plus two static routes on node 5, live and persisted:
+`192.168.200.0/24` and `192.168.101.0/24` `via 192.168.108.1 dev wlan0`.
+
+The pre-existing `192.168.108.0/24` rules are unchanged. Note the asymmetry:
+the house LAN has `Allow-house-to-halow` with `proto all`, while the two new
+subnets are restricted to ICMP echo and TCP 22 — anything else, `iperf`
+included, will be dropped.
+
+**Verified: the rules exist. NOT verified: that anything can use them.** They
+were installed from a laptop on `192.168.108.202`, so no packet has ever matched
+them and all three counters read 0. What remains unknown is upstream, on the
+UniFi and not on any node here: whether those two subnets have a route to
+`192.168.108.0/24`, whether the house-wide `10.41.0.0/16 → 192.168.108.5` static
+route applies to them, and whether inter-VLAN policy permits either. The check,
+run from the AP while someone tries from one of those subnets:
+
+```
+nft list ruleset | grep mgmt-subnets
+```
+
+A counter leaving 0 means the packet reached the AP and the remaining problem is
+not here. A counter staying at 0 means it never arrived.
+
 ## Wio-WM6108 versus HT-HC01P: two SPI implementations
 
 Node 2 (the soak station) is the reference for column one; node 5 for column two.
@@ -130,6 +193,7 @@ which is what node 3 exists for.
 | A1 on 6.12.96 | 2, 3 | never run; node 2 has only 6.6.51 kernels |
 | Ethernet rescue procedure | 2, 5 | the capability is real, the procedure is unwritten |
 | HAT button / fan / LED pins | 1–4 | undeclared in software; needs a board that is not the soak node |
+| reachability from `192.168.200.0/24` and `192.168.101.0/24` | 1, 2, 5 | rules and routes installed 2026-09-02 and verified present in the live ruleset; never exercised from those subnets, all three counters still 0, and upstream UniFi routing for those VLANs is unknown |
 | ATECC608A crypto chip | 1–4 | header I²C is off; scanning it costs a reboot |
 
 Undeclared is not absent. Every TBD above says nothing has been *measured*, not

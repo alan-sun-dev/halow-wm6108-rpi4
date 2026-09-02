@@ -2,6 +2,87 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-02 (evening) — two management subnets opened, and the half of it that was not a firewall
+
+`192.168.200.0/24` and `192.168.101.0/24` should be able to ping and SSH the AP,
+the station and `dkmstest`. It reads like a firewall change on one box. It is
+two changes on two boxes, and the second one is the one that had already been
+observed failing this morning without being recognised.
+
+### The firewall half
+
+The AP is the only node with a firewall, and it already had the shape of the
+answer in it: `Allow-SSH-house` and `Allow-house-to-halow`, both pinned to
+`192.168.108.0/24`. Three new uci rules, backed up first to
+`/etc/config/firewall.bak-20260902`:
+
+| rule | zone | effect |
+|---|---|---|
+| `Allow-SSH-mgmt-subnets` | `wan` input | TCP 22 to the AP itself |
+| `Allow-mgmt-subnets-ping-halow` | `wan → lan` | ICMP echo-request into `10.41.0.0/16` |
+| `Allow-mgmt-subnets-ssh-halow` | `wan → lan` | TCP 22 into `10.41.0.0/16` |
+
+Restricted to ICMP echo and TCP 22, deliberately, where the house LAN's
+equivalent rule is `proto all`. Nothing about ping to the AP needed changing:
+`Allow-Ping-mgmt` never had a source restriction, which is why `192.168.108.5`
+answered ICMP from a foreign subnet this morning while rejecting every TCP port.
+
+Confirmed by reading the **live ruleset** rather than the config that produced
+it — `fw4` collapsed the two `src_ip` entries into one set, and the three rules
+are on lines 78, 92 and 93 of `nft list ruleset`.
+
+### The half that was not a firewall
+
+`dkmstest` has no firewall at all and was still unreachable, and this morning's
+capture already contained the reason without it being read: `192.168.108.5`
+answered ICMP from `192.168.1.159` while `192.168.108.13` timed out completely
+and `traceroute` died after the hop before it.
+
+Both Pis default out over HaLow — `default via 10.41.254.1 dev wlan1`, metric
+100, against metric 601 for the house Wi-Fi. So a node that *answers* on the
+house LAN sends its reply back out through the AP, which masquerades it on
+`eth0`. The client opened a connection to `192.168.108.13` and gets a reply from
+`192.168.108.5`, so it drops it. **A node that is up, unfirewalled, correctly
+addressed and completely silent to everyone off its own subnet.** No firewall
+rule anywhere would have fixed it.
+
+Two static routes on node 5, `192.168.200.0/24` and `192.168.101.0/24`
+`via 192.168.108.1 dev wlan0`, added live with `ip route add` and separately
+persisted with `nmcli connection modify sun +ipv4.routes`. Deliberately not
+`nmcli connection up`: that deactivates before reactivating, it would have cut
+the ssh session carrying the change, and node 5 is holding a 6.8-day unbroken
+association. Both boards were re-checked afterwards — `dkmstest` still at zero
+`DISCONNECTED`, the station untouched.
+
+The station needs no route of its own. It has no house-LAN interface at all
+(`wlan0` dormant, `eth0` down), so `10.41.0.208` over HaLow is the only way in
+and its gateway already *is* the AP.
+
+### What this is not
+
+**The rules exist; nothing has used them.** All three counters read 0, because
+they were installed from a laptop sitting on `192.168.108.202` — inside the
+subnet that was already allowed. This is a configuration, not a reachability
+result, and it should not be recorded as one.
+
+What remains unknown is upstream and not on any node here: whether those two
+subnets route to `192.168.108.0/24` at all, whether the house-wide
+`10.41.0.0/16 → 192.168.108.5` static route covers them, and whether inter-VLAN
+policy permits either. The discriminator, run on the AP while someone tries from
+one of those subnets:
+
+```
+nft list ruleset | grep mgmt-subnets
+```
+
+A counter leaving 0 means the packet reached the AP and the remaining problem is
+upstream of it. A counter staying at 0 means it never arrived, and nothing on
+the AP needs touching again.
+
+`HARDWARE.md` gains a "Reaching the nodes from another subnet" section with the
+per-node access table and the return-path trap, and a TBD row for the
+reachability that has not been demonstrated.
+
 ## 2026-09-02 — a five-day association record, and the beacon-loss reading replaced by a two-station comparison
 
 The soak had not been read since 2026-08-28. Nothing was written to any node

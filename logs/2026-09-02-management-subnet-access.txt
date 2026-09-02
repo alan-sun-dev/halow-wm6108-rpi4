@@ -1,0 +1,45 @@
+=== management-subnet access change, applied from the laptop 2026-09-02T21:00+08:00 ===
+Opened 192.168.200.0/24 and 192.168.101.0/24 for ping and SSH to the AP,
+the station (10.41.0.208) and dkmstest. AP config backed up to
+/etc/config/firewall.bak-20260902 before any change.
+
+===== AP 192.168.108.5: the three rules as uci stored them =====
+firewall.@rule[12].name='Allow-SSH-mgmt-subnets'
+firewall.@rule[13].name='Allow-mgmt-subnets-ping-halow'
+firewall.@rule[14].name='Allow-mgmt-subnets-ssh-halow'
+
+===== AP: the same rules as nftables actually built them =====
+		ip saddr { 192.168.101.0/24, 192.168.200.0/24 } tcp dport 22 counter packets 0 bytes 0 accept comment "!fw4: Allow-SSH-mgmt-subnets"
+		ip saddr { 192.168.101.0/24, 192.168.200.0/24 } ip daddr 10.41.0.0/16 icmp type echo-request counter packets 0 bytes 0 jump accept_to_lan comment "!fw4: Allow-mgmt-subnets-ping-halow"
+		ip saddr { 192.168.101.0/24, 192.168.200.0/24 } ip daddr 10.41.0.0/16 tcp dport 22 counter packets 0 bytes 0 jump accept_to_lan comment "!fw4: Allow-mgmt-subnets-ssh-halow"
+
+Counters read 0 at capture. The change was made from 192.168.108.202, which
+is inside the already-permitted 192.168.108.0/24, so no packet has ever
+matched these rules. Rules present is not reachability demonstrated.
+
+===== node 5 dkmstest: return routes, live and persisted =====
+--- ip route ---
+default via 10.41.254.1 dev wlan1 proto dhcp src 10.41.0.216 metric 100 
+default via 192.168.108.1 dev wlan0 proto dhcp src 192.168.108.13 metric 601 
+10.41.0.0/16 dev wlan1 proto kernel scope link src 10.41.0.216 metric 100 
+192.168.101.0/24 via 192.168.108.1 dev wlan0 
+192.168.108.0/24 dev wlan0 proto kernel scope link src 192.168.108.13 metric 601 
+192.168.200.0/24 via 192.168.108.1 dev wlan0 
+--- NetworkManager profile sun ---
+192.168.200.0/24 192.168.108.1, 192.168.101.0/24 192.168.108.1
+
+===== node 2 station: unchanged, and why it needs no route =====
+eth0             DOWN           
+wlan0            DORMANT        
+usb0             DOWN           
+wlan1            UP             10.41.0.208/16 fe80::935c:d842:6b2e:83b8/64 
+default via 10.41.254.1 dev wlan1 proto dhcp src 10.41.0.208 metric 100 
+10.41.0.0/16 dev wlan1 proto kernel scope link src 10.41.0.208 metric 100 
+
+wlan0 dormant and eth0 down: the station has no house-LAN address, so its
+only entry is 10.41.0.208 over HaLow and its gateway is already the AP.
+
+===== neither board disturbed =====
+dkmstest connected time: 	connected time:	594221 seconds
+dkmstest DISCONNECTED events this boot: 0
+station 	connected time:	85013 seconds
