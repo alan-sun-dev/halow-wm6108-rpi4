@@ -1,0 +1,73 @@
+=== management-subnet reachability, measured from inside both subnets, 2026-09-03 ===
+The laptop was moved into 192.168.200.0/24 (as .151) and then 192.168.101.0/24
+(as .159). Read-only throughout; no node was written to and no config changed.
+This file is the measurement that 2026-09-02's access change did not have.
+
+laptop at capture:
+192.168.101.159
+    gateway: 192.168.101.1
+  interface: en0
+
+===== ping, from 192.168.101.159 =====
+  192.168.108.5    0.0% packet loss
+  192.168.108.13   0.0% packet loss
+  10.41.0.208      100.0% packet loss
+  10.41.0.216      100.0% packet loss
+
+===== ssh =====
+  AP  192.168.108.5   direct : OK
+  A2  192.168.108.13  direct : OK
+  A1  10.41.0.208     direct : ssh: connect to host 10.41.0.208 port 22: Operation timed out
+  A1  10.41.0.208     -J AP  : OK
+
+===== traceroute: the working destination and the failing one, same gateway =====
+--- 192.168.108.5 (works) ---
+traceroute to 192.168.108.5 (192.168.108.5), 5 hops max, 40 byte packets
+ 1  192.168.101.1  2.851 ms
+ 2  192.168.0.3  45.974 ms
+ 3  192.168.108.5  93.991 ms
+--- 10.41.0.208 (fails) ---
+ 1  192.168.101.1  2.881 ms
+ 2  *
+ 3  *
+ 4  *
+ 5  *
+
+The gateway answers hop 1 for both and forwards only one of them. Silence at
+hop 2 for 10.41.0.208 means the VLAN gateway discarded it rather than
+forwarding it, so no packet ever reaches 192.168.0.1 or the AP.
+
+===== AP rule counters =====
+		ip saddr { 192.168.101.0/24, 192.168.200.0/24 } tcp dport 22 counter packets 20 bytes 1268 accept comment "!fw4: Allow-SSH-mgmt-subnets"
+		ip saddr { 192.168.101.0/24, 192.168.200.0/24 } ip daddr 10.41.0.0/16 icmp type echo-request counter packets 0 bytes 0 jump accept_to_lan comment "!fw4: Allow-mgmt-subnets-ping-halow"
+		ip saddr { 192.168.101.0/24, 192.168.200.0/24 } ip daddr 10.41.0.0/16 tcp dport 22 counter packets 0 bytes 0 jump accept_to_lan comment "!fw4: Allow-mgmt-subnets-ssh-halow"
+
+The input rule is carrying traffic. The two forward rules into 10.41.0.0/16
+remain at zero: nothing addressed to the HaLow segment has ever arrived.
+Earlier the same test from 192.168.200.151 produced an identical result, and
+a tcpdump on the AP's eth0 saw the control ping to 192.168.108.5 in the same
+window while seeing no packet at all for 10.41.0.208.
+
+===== link state of both boards during the test =====
+--- A1 station, via the AP jump ---
+ 17:14:58 up 7 days, 17:46, 0 user, load average: 0.08, 0.04, 0.00
+	signal:  	-49 dBm
+	tx bitrate:	292.6 MBit/s VHT-MCS 6 80MHz short GI VHT-NSS 1
+	rx bitrate:	195.0 MBit/s VHT-MCS 4 80MHz short GI VHT-NSS 1
+	connected time:	157672 seconds
+wlan1 DISCONNECTED: 18
+wlan0 DISCONNECTED (dormant house wifi, NOT the link under test): 8
+wlan1 BEACON-LOSS: 52
+spi errors/timedout: 0/0/
+--- A2 dkmstest ---
+ 17:15:00 up 7 days, 17:14, 0 user, load average: 0.00, 0.00, 0.00
+	signal:  	-35 dBm
+	tx bitrate:	325.0 MBit/s VHT-MCS 7 80MHz short GI VHT-NSS 1
+	rx bitrate:	325.0 MBit/s VHT-MCS 7 80MHz short GI VHT-NSS 1
+	connected time:	666882 seconds
+wlan1 DISCONNECTED: 0
+spi errors/timedout: 0/0/
+
+Counting note: an unfiltered 'grep -c CTRL-EVENT-DISCONNECTED' on the station
+returns 26, not 18. Eight of those are the DORMANT wlan0 retrying and have
+nothing to do with HaLow. Use the committed tool's filter, 'wlan1: CTRL-EVENT-'.

@@ -101,20 +101,56 @@ the house LAN has `Allow-house-to-halow` with `proto all`, while the two new
 subnets are restricted to ICMP echo and TCP 22 — anything else, `iperf`
 included, will be dropped.
 
-**Verified: the rules exist. NOT verified: that anything can use them.** They
-were installed from a laptop on `192.168.108.202`, so no packet has ever matched
-them and all three counters read 0. What remains unknown is upstream, on the
-UniFi and not on any node here: whether those two subnets have a route to
-`192.168.108.0/24`, whether the house-wide `10.41.0.0/16 → 192.168.108.5` static
-route applies to them, and whether inter-VLAN policy permits either. The check,
-run from the AP while someone tries from one of those subnets:
+### Measured from inside both subnets, 2026-09-03
+
+The laptop was moved into `192.168.200.0/24` and then `192.168.101.0/24`. Both
+behave identically.
+
+| target | ping | ssh |
+|---|---|---|
+| AP `192.168.108.5` | 0 % loss | yes |
+| `dkmstest` `192.168.108.13` | 0 % loss | yes |
+| station `10.41.0.208` | 100 % loss | no, direct — **yes via the AP as a jump host** |
+| `dkmstest` `10.41.0.216` | 100 % loss | same gap |
+
+```
+ssh -J root@192.168.108.5 alan@10.41.0.208     # works today, needs no upstream change
+```
+
+The AP's input rule is carrying real traffic (counter at 14 packets); the two
+`→ 10.41.0.0/16` forward counters are still 0. Three instruments agree on where
+the HaLow-bound packets die: the counters stay at 0, `tcpdump` on the AP's
+`eth0` sees a control ping to `192.168.108.5` in the same window and not one
+packet for `10.41.0.208`, and `traceroute` stops at hop 1 while the same gateway
+forwards to `192.168.108.5` through hop 2. **The packets never leave the VLAN
+gateway. Nothing on the AP is involved.**
+
+Why the obvious fix does not take:
+
+```
+192.168.200.151 → 192.168.200.1 → 192.168.0.1 → 192.168.108.5
+192.168.101.159 → 192.168.101.1 → 192.168.0.3 → 192.168.108.5
+```
+
+The VLAN gateway is **not adjacent** to `192.168.108.0/24`, so a static route
+`10.41.0.0/16 → 192.168.108.5` installed there has an unreachable next hop: it
+is accepted and does nothing. The route has to be split — the VLAN gateway sends
+`10.41.0.0/16` toward the `192.168.0.0/24` router on its path, and that router
+carries `10.41.0.0/16 → 192.168.108.5`. **The two subnets do not use the same
+one**: `.200` goes through `192.168.0.1`, `.101` through `192.168.0.3`, so both
+need the route.
+
+Reading the failure: `!X` from a public address means the destination leaked to
+the WAN and an ISP router refused it — no route anywhere. Silence at hop 1 means
+the VLAN gateway swallowed it — a route exists and is wrong. The check, run on
+the AP while someone tries from one of those subnets:
 
 ```
 nft list ruleset | grep mgmt-subnets
 ```
 
 A counter leaving 0 means the packet reached the AP and the remaining problem is
-not here. A counter staying at 0 means it never arrived.
+upstream of it. A counter staying at 0 means it never arrived.
 
 ## Wio-WM6108 versus HT-HC01P: two SPI implementations
 
@@ -138,7 +174,7 @@ Node 2 (the soak station) is the reference for column one; node 5 for column two
 | Firmware | `morse/mm6108.bin`, 468304 B, crc32 `0xbe7b5c8f` | **byte-identical**: `morse/mm6108.bin`, 468304 B, crc32 `0xbe7b5c8f` |
 | MAC provisioning | **Keeps its own address with no parameter.** `options morse country=SG bcf=bcf_fgh100mhaamd.bin`, and `wlan1` is stably `9c:04:b6:ff:df:fe` | **Requires `macaddr_suffix=40:8e:91`.** Without it the driver invents a *random* MAC at every load (first probe came up `c2:d2:3d:87:dd:cd`), churning the AP station table and the DHCP lease |
 | Validated kernels | **`6.6.51+rpt-rpi-v8`** (RPi OS Lite bookworm). `6.12.93` and `6.18.34` were exercised **before** the fix series and failed identically — defect reproduction, not validation. **`6.12.96` on A1 is untested: TBD** | **`6.6.51+rpt-rpi-v8` and `6.12.96+rpt-rpi-v8`**, same board, same DT, same firmware, same BCF, only the kernel changed |
-| Longest unbroken association | **123 h 23 m** (5 d 3 h 23 m), 2026-08-27 18:03:59 → 2026-09-01 21:27:00, ended by a station-local beacon loss and restored 12 s later. Previous record 28 h 34 m | **6 d 20 h 28 m and still running** at 2026-09-02 — one `CTRL-EVENT-CONNECTED` in the whole journal and no `DISCONNECTED` at all, on the DKMS-installed module under 6.12.96. The longest association either board has produced |
+| Longest unbroken association | **123 h 23 m** (5 d 3 h 23 m), 2026-08-27 18:03:59 → 2026-09-01 21:27:00, ended by a station-local beacon loss and restored 12 s later. Previous record 28 h 34 m | **7 d 17 h and still running** at 2026-09-03 — one `CTRL-EVENT-CONNECTED` in the whole journal and no `DISCONNECTED` at all, on the DKMS-installed module under 6.12.96. The longest association either board has produced |
 | Local recovery path | USB-C gadget (NCM + ACM) on the **Pi's own** USB-C, `192.168.45.0/24`. The M1's panel USB-C is HAT **5 V only** and carries no D+/D−. House Wi-Fi `wlan0` exists but is **`disconnected`**, and `192.168.108.19` did not answer on 2026-08-28, 2026-08-29 or 2026-09-02 — when it has associated it did so at −86 dBm and was too slow to carry a checkpoint. **HaLow is the only remote path.** An `eth0-bench` profile exists but is **not documented or reproducible: TBD** | USB-C gadget on `192.168.44.0/24`, currently cabled to the MacBook, **plus a real USB serial console** (`/dev/cu.usbmodem*` on the Mac). Also reachable on house Wi-Fi and over HaLow |
 | Role in the lab | node 1 is the AP; node 2 is the long-running reliability reference and the board carrying the soak instrument. It is no longer the only source of reliability evidence — node 5 has held the longer association since 2026-09-02 | second SPI platform: DKMS and kernel-regression bed, and the board destructive recovery testing is meant to run on |
 
@@ -193,7 +229,7 @@ which is what node 3 exists for.
 | A1 on 6.12.96 | 2, 3 | never run; node 2 has only 6.6.51 kernels |
 | Ethernet rescue procedure | 2, 5 | the capability is real, the procedure is unwritten |
 | HAT button / fan / LED pins | 1–4 | undeclared in software; needs a board that is not the soak node |
-| reachability from `192.168.200.0/24` and `192.168.101.0/24` | 1, 2, 5 | rules and routes installed 2026-09-02 and verified present in the live ruleset; never exercised from those subnets, all three counters still 0, and upstream UniFi routing for those VLANs is unknown |
+| reachability from `192.168.200.0/24` and `192.168.101.0/24` | 2 | **closed for nodes 1 and 5** — both confirmed by ping and SSH from inside each subnet, 2026-09-03. **Open for node 2**: `10.41.0.0/16` never leaves the VLAN gateway, so the station is reachable only through the AP as a jump host until the `192.168.0.0/24` router on each path — `.1` for the `.200` subnet, `.3` for the `.101` subnet — carries `10.41.0.0/16 → 192.168.108.5` |
 | ATECC608A crypto chip | 1–4 | header I²C is off; scanning it costs a reboot |
 
 Undeclared is not absent. Every TBD above says nothing has been *measured*, not

@@ -2,6 +2,122 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-03 — the two subnets tested from inside them, and the failure localised to one hop
+
+Yesterday's access change was configuration with no traffic behind it: rules
+present, counters at 0, installed from a laptop inside the subnet that was
+already permitted. Today the laptop was moved into each permitted subnet in turn
+— `192.168.200.151` and then `192.168.101.159` — so the claim could be measured
+instead of asserted.
+
+### What works, from both subnets
+
+| target | ping | ssh |
+|---|---|---|
+| AP `192.168.108.5` | 0 % loss | yes |
+| `dkmstest` `192.168.108.13` | 0 % loss | yes |
+| station `10.41.0.208` | 100 % loss | no, direct — **yes via the AP as a jump host** |
+| `dkmstest` `10.41.0.216` | 100 % loss | same gap |
+
+`192.168.200.0/24` and `192.168.101.0/24` behave identically. The AP's
+`Allow-SSH-mgmt-subnets` counter is up to 14 packets, so the input rule is
+carrying real traffic; the two `→ 10.41.0.0/16` forward counters are still 0.
+
+```
+ssh -J root@192.168.108.5 alan@10.41.0.208     # verified from both subnets
+```
+
+### Node 5's return-route fix is now proven, not argued
+
+`192.168.108.13` was unreachable from an off-subnet source yesterday morning and
+is reachable from one now, with nothing changed on it but two static routes.
+That is a positive control for the masquerade diagnosis: a node whose default
+route leaves over HaLow answers through the AP, which rewrites the reply's
+source, and the client discards it. The node looks up, unfirewalled and silent.
+
+### Where the HaLow packets die, and how that was established
+
+Not by inference. Three instruments agree:
+
+1. **`nft` counters on the AP stay at 0** while ping and ssh to `10.41.0.208`
+   are running.
+2. **`tcpdump` on the AP's `eth0`, with a positive control in the same window**:
+   `IP 192.168.200.151 > 192.168.108.5: ICMP echo request` appears, and not one
+   packet addressed to `10.41.0.208` does. The capture and its filter work; the
+   traffic is absent.
+3. **`traceroute` stops at hop 1** — the VLAN's own gateway — while the same
+   gateway forwards to `192.168.108.5` through hop 2 in the same minute.
+
+So the packets never leave the VLAN gateway. Nothing on the AP is involved, and
+no further change on the AP can affect it.
+
+### The topology explains why the obvious fix did not take
+
+```
+192.168.200.151 → 192.168.200.1 → 192.168.0.1 → 192.168.108.5
+192.168.101.159 → 192.168.101.1 → 192.168.0.3 → 192.168.108.5
+192.168.1.159   → 192.168.1.1   → 192.168.0.3 → 192.168.108.5   (2026-09-02)
+```
+
+**The VLAN gateway is not adjacent to `192.168.108.0/24`.** A static route
+`10.41.0.0/16 → 192.168.108.5` installed *there* has a next hop it cannot reach,
+so it is accepted and then does nothing. The route has to be split: the VLAN
+gateway sends `10.41.0.0/16` toward the `192.168.0.0/24` router on its path, and
+that router — the one that *is* adjacent — carries
+`10.41.0.0/16 → 192.168.108.5`.
+
+**And it is not the same router for both subnets.** `192.168.200.0/24` reaches
+the lab through `192.168.0.1`; `192.168.101.0/24` reaches it through
+`192.168.0.3`, as did `192.168.1.0/24` yesterday. Whether those are two devices
+or one device with two addresses was not established, but the route is needed on
+whichever of them serves the subnet being opened — so on both, if both subnets
+are to work.
+
+The failure signature moved as the attempts went on, and the movement is the
+evidence: at first `traceroute` reached `168.95.94.150` and returned `!X`, an
+ISP router administratively prohibiting an RFC1918 destination that had leaked
+to the WAN. After the first change it became silence at hop 1. **`!X` means the
+packet arrived somewhere and was refused; `*` means it was never forwarded.**
+Reading those two apart is what located the problem.
+
+### A stale claim, corrected
+
+The notes have recorded that the HaLow segment is "reachable house-wide via a
+UniFi static route `10.41.0.0/16 → 192.168.108.5`". On this path it is not:
+`10.41.0.0/16` traffic was being forwarded to the ISP, which is what a router
+with no route for it does. Whatever that route is attached to, it does not cover
+`192.168.0.1`, and the claim should not be relied on for a new subnet.
+
+### Link state while all this was going on
+
+| | A1 station | A2 `dkmstest` |
+|---|---|---|
+| uptime | 7 d 17 h 33 m | 7 d 17 h 01 m |
+| association | 43 h 34 m, unbroken since 09-01 21:27 | **7 d 17 h 01 m — unbroken since boot** |
+| `wlan1` disconnects | 18, unchanged since 09-02 | 0 |
+| beacon loss | 52, unchanged since 09-02 | — |
+| signal | −49 dBm | −34 dBm (was −46) |
+| rate | tx MCS6 / rx MCS4 | MCS7 / MCS7 |
+| SPI errors / timedout | 0 / 0 | 0 / 0 |
+
+**In the twenty-one hours since yesterday's capture the station logged no
+`wlan1` event of any kind** — no disconnect, no beacon loss. A2's unbroken
+association is now 7 d 17 h, up from 6 d 20 h yesterday and still the longest
+either board has produced.
+
+### The eleventh instrument failure, caught before it was written down
+
+A status check ran `journalctl -u wpa_supplicant | grep -c CTRL-EVENT-DISCONNECTED`
+and printed **26**, against 18 the day before — eight new disconnects on a link
+that had in fact been silent. The committed tool greps `wlan1: CTRL-EVENT-`; this
+one dropped the interface prefix and counted the **dormant `wlan0`** retrying
+alongside it. Re-measured with the tool's own filter: `wlan1` 18, `wlan0` 8, and
+zero `wlan1` events since 09-02 20:00.
+
+**When comparing against a number a committed tool produced, use that tool's
+filter, not one written fresh.** A count is not a measurement until it says what
+it counted.
+
 ## 2026-09-02 (evening) — two management subnets opened, and the half of it that was not a firewall
 
 `192.168.200.0/24` and `192.168.101.0/24` should be able to ping and SSH the AP,
