@@ -1,0 +1,107 @@
+=== common-mode disconnects: the two stations compared, 2026-09-18 ===
+Captured from the laptop (on 192.168.108.200, inside the lab LAN). Read-only on
+both stations and on the AP: journal reads, `iw` reads and `logread`. Nothing was
+written, reloaded or rebooted.
+
+Both stations are on the same boot as every capture since 2026-08-26 --
+A1 boot_id 2ea29cc0 (uptime 22 d 21 h 54 m), A2 boot 08-26 23:58 (22 d 21 h 22 m)
+-- and the AP has been up 23 d 5 h. Nothing restarted in the fifteen days since
+the 2026-09-03 capture, so every counter below compares directly with it.
+
+Timestamps come from `journalctl -o short-unix` on each station and are converted
+with `date -r`. Both stations report `System clock synchronized: yes`. The AP
+logs in UTC, +8 from the stations; the promiscuous-mode lines from the 2026-09-02
+tcpdump session appear at `Sep 2 14:37 UTC` against 22:37 local, which confirms
+the offset on this very buffer rather than by assumption.
+
+===== association segments, whole boot =====
+A1 station (9c:04:b6:ff:df:fe)
+  08-26 23:28:14 -> 08-27 15:50:34    0 d 16 h 22 m
+  08-27 15:57:40 -> 08-27 17:07:19    0 d  1 h 09 m
+  08-27 18:03:59 -> 09-01 21:27:00    5 d  3 h 23 m
+  09-01 21:27:12 -> 09-05 02:00:33    3 d  4 h 33 m
+  09-05 02:00:39 -> 09-05 10:56:38    0 d  8 h 55 m
+  09-05 10:56:48 -> 09-05 13:16:02    0 d  2 h 19 m
+  09-05 13:16:20 -> 09-15 21:44:29   10 d  8 h 28 m   <-- NEW RECORD (894489 s)
+  09-15 21:44:38 -> still up          2 d 23 h 38 m
+
+A2 dkmstest (0c:bf:74:40:8e:91)
+  08-26 23:58:29 -> 09-05 02:00:33    9 d  2 h 02 m   (its unbroken-since-boot run)
+  09-05 02:00:35 -> 09-05 10:56:38    0 d  8 h 56 m
+  09-05 10:56:47 -> 09-15 21:44:28   10 d 10 h 47 m   <-- NEW RECORD (902861 s)
+  09-15 21:45:27 -> still up          2 d 23 h 37 m
+
+The previous recorded maximum was 123 h 23 m (5 d 3 h), set 2026-09-01. Both
+boards have now produced an unbroken association of more than ten days, and both
+of those runs ended at the same instant.
+
+===== every disconnect since 2026-09-03, cross-matched between the boards =====
+Method: extract `wlan1: CTRL-EVENT-DISCONNECTED` from each station, keep integer
+unix seconds, match each against the other station's set with +/-10 s tolerance.
+
+  09-05 02:00:33   A1 + A2    BOTH BOARDS
+  09-05 02:00:38   A1 + A2    BOTH BOARDS   (second event of the same recovery)
+  09-05 10:56:38   A1 + A2    BOTH BOARDS
+  09-05 13:16:02   A1 only    A1-LOCAL
+  09-15 21:44:28   A1 + A2    BOTH BOARDS
+  09-15 21:45:23   A2 only    A2-LOCAL      (55 s after the common event)
+
+  A1 disconnects this boot: 23 (was 18 on 09-03) -- 4 of the 5 new ones common-mode
+  A2 disconnects this boot:  4 (was  0 on 09-03) -- 3 of the 4 common-mode
+  A1 beacon loss: 78 (was 52)      A2 beacon loss: 62 (was 37)
+
+All of them are `reason=4 locally_generated=1` except one A1 event with
+`reason=2` and the A2-local one with `reason=3`: the stations decided, not the AP.
+
+===== what the AP has to say, and what it does not =====
+The AP did not reboot (23 d 5 h), did not deauthenticate anyone, and its log
+contains NOTHING in the ten minutes before the 09-15 event -- the first line is
+the stations coming back. There is no morse, stall, watchdog or reset message
+anywhere in a buffer that reaches back to 08-27. The only kernel events in the
+whole buffer are `bcmgenet ... eth0: Link is Down/Up` on Sep 9 19:04-19:08 UTC
+(local Sep 10 03:04-03:08), which is the house-LAN side and coincides with no
+disconnect on either station.
+
+What the AP does show is the recovery, and it is the same shape at 09-05 10:56
+and 09-15 21:44:
+
+    hostapd_s1g: authentication: STA=... auth_transaction=1 status_code=126 rssi=-47
+    hostapd_s1g: wlh0: STA 0c:bf:74:40:8e:91 IEEE 802.11: did not acknowledge
+                 authentication response
+    hostapd_s1g: wlh0: STA 9c:04:b6:ff:df:fe IEEE 802.11: did not acknowledge
+                 authentication response
+    ... repeating for several seconds, then both associate
+
+Both stations, at healthy RSSI (-47 and -51), fail to acknowledge the AP's
+authentication responses for several seconds before recovering. At 09-05 02:00
+the re-association was clean, with no unacknowledged responses at all.
+
+===== what this establishes, and what it does not =====
+ESTABLISHED: disconnects on this link come in two kinds, and the 2026-09-02
+common-mode/local split applies to them as it did to beacon loss. Six disconnect
+events in fifteen days: four seen by both boards in the same second, two seen by
+one board only. Two chip revisions, two kernels, two rooms, one AP.
+
+**And the polarity is the opposite of 2026-09-02's.** There, all 37 common-mode
+beacon losses were harmless and every loss co-timed with a disconnect was local.
+Here the common-mode events are the ones that cost both boards their link,
+including the one that ended A2's 9-day unbroken run. Common-mode is not a
+synonym for harmless; it is a statement about where the cause is, not how bad it
+is.
+
+NOT ESTABLISHED: the cause. The AP logged nothing before any of them, so an AP
+software fault is not evidenced -- but nor is it excluded, because a transmitter
+that stops radiating without saying so would look exactly like this. External
+interference on the channel would look the same from here as well. Separating
+those needs an instrument neither board has: a spectrum capture, or a third
+station in a different position.
+
+Also not established: whether `longest_outage_s` is still meaningful. It reads
+426 s, unchanged since 08-27, because every outage since has been about ten
+seconds. The 09-15 event took 9 s on A1 (21:44:29 -> 21:44:38) and 59 s on A2
+(21:44:28 -> 21:45:27, including its own second disconnect).
+
+===== soak checkpoint taken in the same session =====
+See logs/2026-09-18-a1-soak-checkpoints.txt -- status OK, 40 fields, same boot.
+SPI on the station after 22.9 days: 165454883 messages, 47484733281 bytes,
+errors 0, timedout 0. dmesg write/read/probe failures 0.

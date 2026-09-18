@@ -2,6 +2,115 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-18 — two ten-day associations, and a common-mode event that is nothing like the last one
+
+Fifteen days since the last capture. Nothing restarted in between: the AP has
+been up 23 d 5 h, both stations are on the same boots they have carried since
+2026-08-26, and the station's `boot_id` is still `2ea29cc0`. Every counter
+compares directly across the gap.
+
+`soak-checkpoint.sh` ran clean — `status OK`, 40 fields. The station's SPI after
+22.9 days: **165,454,883 messages, 47.5 GB, `errors 0`, `timedout 0`**, dmesg
+failures 0.
+
+### Both boards have now held an association for more than ten days
+
+| | from | to | length |
+|---|---|---|---|
+| A1 station | 09-05 13:16:20 | 09-15 21:44:29 | **10 d 8 h 28 m** |
+| A2 `dkmstest` | 09-05 10:56:47 | 09-15 21:44:28 | **10 d 10 h 47 m** |
+
+The record set on 2026-09-01 was 123 h 23 m — 5 d 3 h. Both boards have now
+roughly doubled it, and both of those runs ended at the same instant. A2's
+earlier unbroken-since-boot run reached **9 d 2 h 2 m** before it ended on 09-05.
+Current associations, both running: 2 d 23 h 38 m.
+
+### A2's zero-disconnect record ended, and it was not A2's doing
+
+Six disconnects in the fifteen days, cross-matched between the two boards at
+±10 s:
+
+```
+09-05 02:00:33   A1 + A2    BOTH BOARDS   <- ends A2's 9-day run
+09-05 02:00:38   A1 + A2    BOTH BOARDS
+09-05 10:56:38   A1 + A2    BOTH BOARDS
+09-05 13:16:02   A1 only    A1-LOCAL
+09-15 21:44:28   A1 + A2    BOTH BOARDS   <- both current associations start here
+09-15 21:45:23   A2 only    A2-LOCAL
+```
+
+A1 is at 23 disconnects this boot (was 18), A2 at 4 (was 0). **Four of the six
+are common-mode**: the same second on two chip revisions, two kernels and two
+rooms. Every one of them is `reason=4 locally_generated=1` bar two — the
+stations decided they had lost the AP; the AP never deauthenticated anyone.
+
+### The polarity is the opposite of 2026-09-02, and that is the finding
+
+On 09-02 the two-station comparison said: **all 37 common-mode beacon losses
+were harmless, and every beacon loss co-timed with a disconnect was one only A1
+saw.** Common-mode read as benign.
+
+This capture inverts it. The common-mode events here are precisely the ones that
+cost both boards their link, including the one that ended A2's nine-day run.
+
+So the split is not a severity scale. **Common-mode says where the cause is, not
+how bad it is.** A beacon the AP never sent is survivable; whatever happened on
+09-05 and 09-15 was not. Both are common-mode and they are not the same
+phenomenon.
+
+### What the AP has to say, and what it does not
+
+It did not reboot, did not deauthenticate anyone, and logged **nothing** in the
+ten minutes before the 09-15 event — the first line in that window is the
+stations coming back. No morse, stall, watchdog or reset message anywhere in a
+buffer reaching back to 08-27. The only kernel events in the whole buffer are
+`bcmgenet eth0: Link is Down/Up` on Sep 9 19:04–19:08 UTC, which is the
+house-LAN side and coincides with no disconnect on either station.
+
+What it does show is the recovery, identical in shape at 09-05 10:56 and
+09-15 21:44:
+
+```
+hostapd_s1g: authentication: STA=… auth_transaction=1 status_code=126 rssi=-47
+hostapd_s1g: wlh0: STA 0c:bf:74:40:8e:91 … did not acknowledge authentication response
+hostapd_s1g: wlh0: STA 9c:04:b6:ff:df:fe … did not acknowledge authentication response
+… repeating for several seconds, then both associate
+```
+
+Both stations, at −47 and −51 dBm, fail to acknowledge the AP's authentication
+responses for several seconds. At 09-05 02:00 the re-association was clean, with
+no unacknowledged responses at all — so the recoveries are not all the same
+either.
+
+**Not established: the cause.** The AP logging nothing is not evidence that the
+AP is innocent — a transmitter that stops radiating without saying so looks
+exactly like this, and so does external interference on the channel. Separating
+them needs an instrument neither board has: a spectrum capture, or a third
+station in a third position. Node 3 is still uninstalled.
+
+Worth noting for the console-server target: the outages themselves were short.
+`longest_outage_s` still reads 426 s, unchanged since 08-27, because 09-15 cost
+A1 nine seconds and A2 fifty-nine.
+
+### Two instrument notes
+
+**`systime()` is a gawk function.** The segment script called it to print the
+still-running association and macOS awk answered `calling undefined function
+systime` — loudly, and without printing a number. A failure that prints an error
+instead of a plausible zero is the good kind; the figure came from
+`connected time` instead.
+
+**The AP's UTC offset was confirmed from the buffer, not assumed.** Its log
+carries `Sep 2 14:37 UTC — eth0 entered promiscuous mode`, which is the tcpdump
+run from this project's own 09-02 session at 22:37 local. The +8 used to align
+the AP against the stations is checked against a known event in the same file it
+is applied to.
+
+### Artefacts
+
+- `logs/2026-09-18-a1-soak-checkpoints.txt` — checkpoint, `status OK`
+- `logs/2026-09-18-common-mode-disconnects.txt` — segments, the cross-match, the AP excerpts
+
 ## 2026-09-03 — the two subnets tested from inside them, and the failure localised to one hop
 
 Yesterday's access change was configuration with no traffic behind it: rules
