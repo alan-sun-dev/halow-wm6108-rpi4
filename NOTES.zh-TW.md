@@ -2,6 +2,129 @@
 
 *[English](NOTES.md)*
 
+## 2026-09-18（晚間）—— 風扇讀不到、按鈕有腳位了，而 GPIO 17 從來就不是空的
+
+`HARDWARE.md` 從寫下那天起就掛著一列 TBD：HAT 的按鈕、風扇與 LED 腳位。2026-08-27
+的 survey 只確立了四個 HAT 裝置在**軟體上未宣告**，就停在那裡。這次擷取問的是另一個
+問題——不是軟體宣告了什麼，而是**那些腳位實際上在做什麼**——它回答了那一列的三分之
+二，同時更正了先前 survey 弄錯的一件事。
+
+全程在 station 上唯讀：沒有寫入任何 GPIO、沒有載入 overlay、沒有重開機，soak 未受
+影響。
+
+### GPIO 17 就是 RESET_N，2026-08-27 說它空著的那句話撤回
+
+那一篇寫的是：*「**GPIO 17 沒有任何人佔用，不存在衝突。**」* 它之所以被記下來，正是
+因為它推翻了一條回憶——而它本身是錯的。
+
+實機 device tree，`/proc/device-tree/soc/spi@7e204000/mm610x@0/`：
+
+```
+reset-gpios   = <&gpio 17 1>      RESET_N，低態有效
+spi-irq-gpios = <&gpio  5 0>
+power-gpios   = <&gpio 23 0>, <&gpio 24 0>
+cs-gpios      = <&gpio  8 1>, <&gpio  7 1>
+```
+
+`HARDWARE.md` 一直都寫著 `reset-gpios = <&gpio 17 1>`，所以這個 repo 已經自我矛盾了
+三個星期。
+
+兩邊的讀數都解釋得通。`raspi-gpio` 顯示 pin 17 是 `INPUT pull=UP level=1`，debugfs
+上也沒有任何 consumer——而這正是本專案早就確立過的驅動事實：**`morse_driver` 2.0.1
+裡完全沒有 `gpiod_` 呼叫**。它是透過舊版整數 API（`gpio_direction_output` /
+`_input`）驅動 RESET_N 的，那不會註冊具名 consumer；而 `morse_hw_reset()` 在釋放時
+讓線腳浮接，由 overlay 裡的上拉把它維持在高電位。
+
+**所以建立在 debugfs 上的腳位 survey 看不見舊版 API 的使用者，會把一支要命的腳位報成
+空的。** 08-27 的結論不是讀得草率，而是正確地讀了一個回答不了這個問題的儀器。把
+GPIO 17 指派給風扇、按鈕或 LED，會把無線電打進重置狀態。
+
+### 風扇在軟體上根本觀測不到，而那才是障礙
+
+station 上被驅動為**輸出**的線只有四條，而且全部有主：
+
+```
+GPIO  7  OUTPUT hi   spi0 CS1
+GPIO  8  OUTPUT hi   spi0 CS0
+GPIO 18  OUTPUT hi   halow-slot-power  （由 gpio=18=op,dh 強制）
+GPIO 23  OUTPUT hi   morse-wakeup-ctrl
+```
+
+其餘全部是輸入。**沒有任何一條線在驅動風扇，也沒有任何一條被設定成轉速輸入。** AP
+——另一台 SenseCAP M1、同款機殼、完全不同的映像——同樣沒有宣告風扇、按鈕或 HAT LED；
+它多出來的具名腳位只有 GPIO 12 和 25 上的 `gps-wm1302`，是 WM1302 LoRa 的殘留。
+
+所以風扇如果在轉，是因為 HAT 把它接在某條電源軌上，不是因為 Pi 叫它轉，而且**兩台
+M1 的軟體都讀不到它的狀態**。
+
+這重新定義了這個未結項目。問題不在於找風扇腳位有風險——而在於**風扇自己就是讀數**。
+從這裡驅動一支候選腳位什麼也證明不了，因為這裡沒有任何東西能判斷風扇有沒有開始轉。
+無論在哪片板子上跑，這個試錯都需要一個人在機器旁邊。
+
+### GPIO 27 是第一個指向特定腳位上特定 HAT 裝置的電氣證據
+
+有三條線在 pull-**down** 的情況下讀到高電位，代表有外部的東西在把它們拉高：
+
+| 腳位 | 狀態 | 解釋 |
+|---|---|---|
+| 5 | `INPUT pull=DOWN level=1` | Morse 的 IRQ |
+| 9 | `alt0 pull=DOWN level=1` | SPI0_MISO |
+| **27** | **`INPUT pull=DOWN level=1`** | **沒有任何東西能解釋** |
+
+一條平時被外部上拉維持在高電位、被短路時拉低的輸入，正是按鈕的標準接法。**GPIO 27
+把二十支候選腳位收斂成一條線索**，而且這是本專案第一次有東西指向特定腳位上的特定
+HAT 裝置。
+
+**未確立：它是不是按鈕。** 確認的代價是零、風險也是零——在有人按下面板按鈕的同時取
+樣 GPIO 27。那是純讀取，即使在 soak 節點上也安全。之所以還沒做，是因為它需要一個人
+在機器旁邊。
+
+### 溫度，以及它能解決的那一點點事
+
+| | idle 溫度 |
+|---|---|
+| station（M1、RPi OS） | 41.3 °C |
+| AP（M1、OpenMANET） | 51.1 °C |
+| `dkmstest`（RAK 機殼） | 41.8 °C |
+
+兩台 Pi 在 22 天後都回報 `throttled=0x0`，從未降頻過。兩個同款機殼差十度是個提示，但
+**不足以定論**：AP 跑著 hostapd、NAT 與路由，作業系統不同、房間不同，環境溫度也沒有
+控制。能定論的遠端測法是熱階躍響應——加 CPU 負載，看平台值與降溫尾巴，因為密閉無氣
+流的盒子平台值會高很多、降得也慢。未執行：那要對 soak 節點或生產中的 AP 加負載。
+
+### 候選腳位集，留給真正動手的那一天
+
+排除：**5、7、8、17、18、23、24**（device tree 宣告的 HaLow，其中 17 是 RESET_N）；
+**9、10、11**（SPI0）；**0、1**（HAT ID EEPROM）；**27**（被外部驅動，驅動它會電流
+對衝）；**14、15**（UART，若要保留序列 console）。
+
+剩下：**2、3、4、6、12、13、16、19、20、21、22、25、26**——這十三支目前都是輸入，且
+電平與自身的 pull 一致，代表沒有外部驅動，對衝風險低。
+
+`dtoverlay -h gpio-fan` 的預設是 `gpiopin=12`，而 AP 的 device tree 把 GPIO 12 命名為
+`gps-wm1302`。那是一個預設值恰好撞上一個 LoRa 殘留，不是證據——但 12 值得排第一個
+試。`pinctrl`、`raspi-gpio` 與 `dtoverlay` 在 station 上都有，所以可還原的測試形式
+（`pinctrl set N op dh` … `ip`）不需要安裝任何東西。
+
+### 三則儀器筆記
+
+**`find` 不會跟進 `/proc/device-tree` 這個符號連結。**
+`find /proc/device-tree -name reset-gpios` 回傳空結果、**rc=0**，而那個屬性從頭到尾
+都在——`/proc/device-tree` 指向 `/sys/firmware/devicetree/base`，`find` 需要 `-L`。
+**`find` 安靜的空結果不是一個否定結果。**
+
+**`xxd` 不在 Raspberry Pi OS Lite 上。** 可攜的形式是 `od -An -tx4`，但要記得它會在
+這台主機上把大端的 DT cell 逐位元組反轉：`11000000` 是 17。
+
+**而且上面那個 `find` 第一次是帶著 `2>/dev/null` 跑的**——就是那個藏起 2026-08-26
+checkpoint 失效、以及 2026-09-02 時鐘探測失敗的同一個重導向。第三次了。規則早就寫下
+來了，沒養成的是習慣。
+
+### 產出
+
+`logs/2026-09-18-m1-hat-fan-button-pin-state.txt`——完整的 `raspi-gpio get`、device
+tree 解碼、debugfs 對照、溫度與候選腳位集。
+
 ## 2026-09-18 —— 兩個超過十天的關聯，以及一種和上次完全相反的共模事件
 
 距上次擷取十五天。這中間沒有任何東西重啟過：AP 已開機 23 天 5 小時，兩台 station 都
@@ -563,7 +686,12 @@ awk 把空字串當成 0，於是表格印出了十一個 `outage 0 s`，而 std
 幾小時前記下的那條回憶 —— Seeed 的 `reset_lgw.sh` 用 GPIO 17／18／5，而 HaLow
 overlay 若重用其中一條就是衝突 —— **對了一半，而錯的正是有意義的那一半**。18 和 5
 確實在用，有意思的是**用法**：Seeed 原本給 LoRa 的插槽電源致能與中斷線，被插在同一個
-插槽裡的 HaLow 模組直接繼承了。**GPIO 17 沒有任何人佔用，不存在衝突。** 記下來是
+插槽裡的 HaLow 模組直接繼承了。**GPIO 17 沒有任何人佔用，不存在衝突。**（**2026-09-18 撤回：GPIO 17 就是
+RESET_N，並非空著。** 實機 device tree 讀到 `reset-gpios = <&gpio 17 1>`，這也是
+`HARDWARE.md` 一直以來的說法。它在 debugfs 裡沒有 consumer，是因為
+`morse_driver` 2.0.1 完全沒有 `gpiod_` 呼叫，走的是舊版整數 GPIO API，而
+`morse_hw_reset()` 在釋放時把線腳留成浮接的輸入。**建立在 debugfs 上的 survey 看不
+見舊版 API 的使用者，會把一支要命的腳位判成空的。** 見 2026-09-18（晚間）條目。）記下來是
 因為一條「對了一半」的猜測，正是下次會被當成事實的那種。
 
 `config.txt` 也順帶佐證了 2026-08-26 修正過的事：`otg_mode=1` 在 `[cm4]` 底下、

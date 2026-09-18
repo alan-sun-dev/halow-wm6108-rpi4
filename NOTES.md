@@ -2,6 +2,147 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-18 (evening) — the fan cannot be read, the button has a pin, and GPIO 17 was never free
+
+`HARDWARE.md` has carried a TBD row for the HAT's button, fan and LED pins since
+it was written. The 2026-08-27 survey established that all four HAT devices are
+**undeclared in software** and stopped there. This capture asks a different
+question — not what software declares, but **what the pins are actually doing** —
+and it answers two thirds of the row while correcting something the earlier
+survey got wrong.
+
+Read-only on the station throughout: no GPIO written, no overlay loaded, no
+reboot, and the soak untouched.
+
+### GPIO 17 is RESET_N, and the 2026-08-27 entry saying otherwise is withdrawn
+
+That entry reads: *"**GPIO 17 is claimed by nothing. There is no conflict.**"* It
+was recorded precisely because it contradicted a recollection — and it is wrong.
+
+The live device tree at `/proc/device-tree/soc/spi@7e204000/mm610x@0/`:
+
+```
+reset-gpios   = <&gpio 17 1>      RESET_N, active low
+spi-irq-gpios = <&gpio  5 0>
+power-gpios   = <&gpio 23 0>, <&gpio 24 0>
+cs-gpios      = <&gpio  8 1>, <&gpio  7 1>
+```
+
+`HARDWARE.md` has said `reset-gpios = <&gpio 17 1>` all along, so the repository
+has been contradicting itself for three weeks.
+
+Both readings are explicable. `raspi-gpio` shows pin 17 as `INPUT pull=UP
+level=1`, and debugfs shows no consumer on it — which is exactly what this
+project already established about the driver: **`morse_driver` 2.0.1 contains no
+`gpiod_` call at all**. It drives RESET_N through the legacy integer API
+(`gpio_direction_output` / `_input`), which registers no named consumer, and
+`morse_hw_reset()` floats the line on release, leaving the overlay's pull-up to
+hold it high.
+
+**So a pin survey built on debugfs cannot see a legacy-API user, and will report
+a load-bearing pin as free.** The 08-27 conclusion was not a careless reading; it
+was a correct reading of an instrument that cannot answer the question. Assigning
+GPIO 17 to a fan, button or LED would drive the radio into reset.
+
+### The fan is not observable from software, and that is the obstacle
+
+The only lines driven as **outputs** on the station are four, all accounted for:
+
+```
+GPIO  7  OUTPUT hi   spi0 CS1
+GPIO  8  OUTPUT hi   spi0 CS0
+GPIO 18  OUTPUT hi   halow-slot-power   (hogged by gpio=18=op,dh)
+GPIO 23  OUTPUT hi   morse-wakeup-ctrl
+```
+
+Every other line is an input. **Nothing drives a fan, and no line is configured
+as a tachometer input.** The AP — the other SenseCAP M1, same chassis, a
+different image entirely — declares no fan, button or HAT LED either; its only
+extra named pins are `gps-wm1302` on GPIO 12 and 25, a WM1302 LoRa leftover.
+
+So if the fan turns, it turns because the HAT wires it to a rail, not because the
+Pi asks, and **its state cannot be read from software on either M1**.
+
+That reframes the open item. It is not that pin-hunting for the fan is risky —
+it is that **the fan is its own readout**. Driving a candidate pin proves nothing
+from here, because nothing here can tell whether the fan started. The hunt needs
+a person at the box, regardless of which board it runs on.
+
+### GPIO 27 is the first electrical evidence of a HAT device on a pin
+
+Three lines read high against a pull-**down**, which means something external is
+holding them up:
+
+| pin | state | explanation |
+|---|---|---|
+| 5 | `INPUT pull=DOWN level=1` | the Morse IRQ |
+| 9 | `alt0 pull=DOWN level=1` | SPI0_MISO |
+| **27** | **`INPUT pull=DOWN level=1`** | **nothing accounts for this** |
+
+An input held high at rest by an external pull-up, going low when shorted, is
+exactly how a button is wired. **GPIO 27 narrows a twenty-pin candidate set to
+one lead**, and it is the first thing in this project to point at a specific HAT
+device on a specific pin.
+
+**Not established: that it is the button.** The confirmation costs nothing and
+risks nothing — sample GPIO 27 while somebody presses the panel button. It is a
+pure read, safe even on the soak node. It has not been done because it needs a
+person at the box.
+
+### Thermal, for what little it settles
+
+| | idle temperature |
+|---|---|
+| station (M1, RPi OS) | 41.3 °C |
+| AP (M1, OpenMANET) | 51.1 °C |
+| `dkmstest` (RAK chassis) | 41.8 °C |
+
+Both Pis report `throttled=0x0` after 22 days — neither has ever been throttled.
+Ten degrees between two identical chassis is suggestive and **not conclusive**:
+the AP runs hostapd, NAT and routing, on a different OS, in a different room,
+with ambient uncontrolled. The decisive remote test is a thermal step response —
+load the CPU, watch the plateau and the cooling tail, since a sealed box with no
+airflow plateaus far higher and cools slowly. Not run: it means loading either
+the soak node or the production AP.
+
+### The candidate set, for whenever the hunt happens
+
+Excluded: **5, 7, 8, 17, 18, 23, 24** (DT-claimed HaLow, 17 being RESET_N);
+**9, 10, 11** (SPI0); **0, 1** (HAT ID EEPROM); **27** (externally driven —
+driving it would contend); **14, 15** (UART, if a serial console is wanted).
+
+Remaining: **2, 3, 4, 6, 12, 13, 16, 19, 20, 21, 22, 25, 26** — all thirteen
+currently read as inputs sitting at the level of their own pull, so none is
+externally driven and contention risk is low.
+
+`dtoverlay -h gpio-fan` defaults to `gpiopin=12` and the AP's device tree names
+GPIO 12 `gps-wm1302`. That is a coincidence of defaults next to a LoRa leftover,
+not evidence — but 12 is worth trying first. `pinctrl`, `raspi-gpio` and
+`dtoverlay` are all present on the station, so the reversible test form
+(`pinctrl set N op dh` … `ip`) needs nothing installed.
+
+### Three instrument notes
+
+**`find` does not follow the `/proc/device-tree` symlink.**
+`find /proc/device-tree -name reset-gpios` returned nothing with **rc=0**, and
+the property was there the whole time — `/proc/device-tree` points at
+`/sys/firmware/devicetree/base`, and `find` needs `-L`. A silent empty result
+from `find` is not a negative result.
+
+**`xxd` is not on Raspberry Pi OS Lite.** `od -An -tx4` is the portable form,
+remembering that it byte-swaps each big-endian DT cell on this host: `11000000`
+is 17.
+
+**And the `find` above was first run with `2>/dev/null` attached** — the same
+redirect that hid the 2026-08-26 checkpoint failure and the 2026-09-02 clock
+probe. Third time. The rule is already written down; it is the habit that is not.
+
+### Artefact
+
+`logs/2026-09-18-m1-hat-fan-button-pin-state.txt` — the full `raspi-gpio get`,
+the device-tree decode, the debugfs comparison, temperatures and the candidate
+set.
+
 ## 2026-09-18 — two ten-day associations, and a common-mode event that is nothing like the last one
 
 Fifteen days since the last capture. Nothing restarted in between: the AP has
@@ -658,6 +799,15 @@ and the interesting part is *how*: Seeed's LoRa slot power-enable and interrupt
 lines were inherited by the HaLow module in the same socket. **GPIO 17 is
 claimed by nothing. There is no conflict.** Recorded because a guess that half
 survives contact is the kind that gets trusted next time.
+
+> **WITHDRAWN 2026-09-18. GPIO 17 is RESET_N and is not free.** The live device
+> tree reads `reset-gpios = <&gpio 17 1>`, which is also what `HARDWARE.md` has
+> said all along. It carries no consumer in debugfs because `morse_driver` 2.0.1
+> has no `gpiod_` call at all and drives the pin through the legacy integer API,
+> and `morse_hw_reset()` leaves it floating as an input on release. **A survey
+> built on debugfs cannot see a legacy-API user and will report a load-bearing
+> pin as free.** See the 2026-09-18 (evening) entry.
+
 
 `config.txt` also confirms in passing what was corrected on 2026-08-26:
 `otg_mode=1` sits under `[cm4]` and `dtoverlay=dwc2,dr_mode=host` under `[cm5]`,

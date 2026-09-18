@@ -156,7 +156,7 @@ counter 離開 0，表示封包已抵達 AP，剩下的問題在它的上游；c
 | RESET_N | **GPIO 17**，低態有效，`reset-gpios = <&gpio 17 1>`。overlay 必須強制**上拉**：`morse_hw_reset()` 釋放時是讓線浮接而不是驅動為高，而 BCM2711 的 GPIO 9–27 預設下拉，會讓無線電永遠停在 reset | **GPIO 5**，`reset-gpios = <&gpio 5 0>`，停在**浮接輸入、不加 bias**——上拉由 HAT 自己提供，逐位元組比對可運作的 OpenWrt 板 |
 | IRQ | **GPIO 5**——實機 consumer 為 `mm610x_spi_irq_gpio` | **GPIO 25**，level-low——實機 IRQ 55 `Morse SPI IRQ`，`pinctrl-bcm2835 25 Level` |
 | WAKE／BUSY | **GPIO 23／GPIO 24**——`morse-wakeup-ctrl` 與 `morse-async-wakeup-ctrl` | **GPIO 3／GPIO 7**——`power-gpios = <&gpio 3 0>, <&gpio 7 0>`；不是電源軌 |
-| 其他載板腳位 | **GPIO 18** `halow-slot-power`，M1 自己的 mPCIe 插槽電源致能，以 hog 拉高，並由 `gpio=18=op,dh` 再強制一次 | **GPIO 4** JTAG reset，以 hog 驅動為低（Heltec 的 `morse-ps.dtbo`） |
+| 其他載板腳位 | **GPIO 18** `halow-slot-power`，M1 自己的 mPCIe 插槽電源致能，以 hog 拉高，並由 `gpio=18=op,dh` 再強制一次。**GPIO 27** 在自身 pull 為 down 的情況下仍被 HAT 上的某個東西拉高——未宣告，也是全板唯一無法解釋的線（2026-09-18）。另注意 **GPIO 17 雖然就是 RESET_N，在 debugfs 裡卻沒有任何 consumer**：2.0.1 透過舊版整數 GPIO API 驅動它，所以以 debugfs 為基礎的 survey 會把它報成空的 | **GPIO 4** JTAG reset，以 hog 驅動為低（Heltec 的 `morse-ps.dtbo`） |
 | BCF | `morse/bcf_fgh100mhaamd.bin`——1251 B，md5 `4e128ad574304d1aec778c5ba5611f8f`，crc32 `0x941b2a82` | `morse/bcf_HC01_V2_H.bin`——1170 B，crc32 `0x389a48c4`。**原廠映像用錯了檔案**：`bcf_mf08551.bin` 是 Morse EKH01-03 評估板的 BCF，在 2026-08-24 換掉之前，它讓這顆模組的發射器形同失效 |
 | 韌體 | `morse/mm6108.bin`，468304 B，crc32 `0xbe7b5c8f` | **逐位元組相同**：`morse/mm6108.bin`，468304 B，crc32 `0xbe7b5c8f` |
 | MAC 供給行為 | **不需任何參數就保有自己的位址。** `options morse country=SG bcf=bcf_fgh100mhaamd.bin`，`wlan1` 穩定為 `9c:04:b6:ff:df:fe` | **必須有 `macaddr_suffix=40:8e:91`。** 沒有它，驅動每次載入都會**隨機**產生一個 MAC（第一次探測出現的是 `c2:d2:3d:87:dd:cd`），會把 AP 的 station 表和 DHCP 租約每次開機都攪動一次 |
@@ -210,7 +210,7 @@ counter 離開 0，表示封包已抵達 AP，剩下的問題在它的上游；c
 | 序號 | 3、4 | 未從板子上記錄 |
 | A1 在 6.12.96 | 2、3 | 從未跑過；節點 2 只有 6.6.51 的核心 |
 | 乙太網路救援程序 | 2、5 | 能力是真的，程序沒有寫下來 |
-| HAT 按鈕／風扇／LED 腳位 | 1–4 | 軟體上未宣告；需要一片不是 soak 節點的板子 |
+| HAT 按鈕／風扇／LED 腳位 | 1–4 | **2026-09-18 收斂，但未結案。** 風扇不在任何一支 Pi 驅動的 GPIO 上，也沒有轉速輸入，所以**它的狀態在軟體上完全讀不到**——風扇自己就是讀數，無論在哪片板子上做，這個試錯都需要一個人在機器旁邊。**GPIO 27 是按鈕的線索**：一支自身 pull 是 down 卻讀到高電位的輸入，也就是被外部拉高——正是按鈕平時為高的標準接法，也是全板唯一無法解釋的線。確認它只需要按一下加取樣一次，在 soak 節點上也安全。排除後的候選：2、3、4、6、12、13、16、19、20、21、22、25、26 |
 | 共模斷線的成因 | 1、2、5 | 截至 2026-09-18 的十五天內有四次事件讓**兩台** station 在同一秒同時掉線，訊號健康，而 AP 在每一次之前都沒有任何紀錄。一台不聲不響停止發射的 AP 發射機，與通道上的外部干擾，從這裡看起來完全相同；要分開需要頻譜擷取或第三個位置上的第三台 station |
 | 從 `192.168.200.0/24` 與 `192.168.101.0/24` 的可達性 | 2 | **節點 1 與 5 已結案**——2026-09-03 從兩個網段內部各以 ping 與 SSH 確認。**節點 2 仍開放中**：`10.41.0.0/16` 的封包從未離開 VLAN 閘道，因此在各自路徑上的 `192.168.0.0/24` 路由器（`.200` 網段是 `.1`、`.101` 網段是 `.3`）持有 `10.41.0.0/16 → 192.168.108.5` 之前，station 只能經 AP 跳板進入 |
 | ATECC608A 加密晶片 | 1–4 | header I²C 是關的；掃描它的代價是一次重開機 |
