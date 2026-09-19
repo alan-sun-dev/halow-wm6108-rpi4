@@ -2,6 +2,345 @@
 
 *[English](NOTES.md)*
 
+## 2026-09-19（晚間）—— 第二台 OpenMANET、一個能動的 mesh，以及實驗室頻道上多出來的同頻鄰居
+
+一片新的 SenseCAP M1 刷上 OpenMANET 1.8.0，加上第二片板子，組成一個兩節點的
+802.11s mesh。這是探索性的、不是專案工作——但它產生了值得留下的量測，也以一種會影
+響下次判讀 soak 的方式改變了實驗室的 RF 環境。
+
+### 出廠預設和 OpenWrt 的慣例不同，其中兩個是陷阱
+
+從運行中 AP 的 `/rom` 讀出來的，不是猜的：
+
+| | 值 | 來源 |
+|---|---|---|
+| LAN 位址 | **`10.41.254.1/16`** | `/rom/etc/board.d/99-lan-ip`，無條件套用——**不是** 192.168.1.1 |
+| LAN 介面 | **eth0** | `99-default_network` 這支兜底腳本：`02_network` 和 `03_openmanet_eth` 都不匹配 `bcm2711,mm6108-spi`，而且都沒有 `*)` 分支，所以由它接手 |
+| 主機名／SSID | `BCM2711-<MAC 尾碼>` | `00_system` 呼叫 `morse_generate_default_hostname`——每片板子自動不同 |
+| root 密碼 | **沒有** | 見下 |
+
+**陷阱一：網路孔是一台 DHCP 伺服器。** `eth0` 位於 `br-lan` 內，dnsmasq 服務 `lan`，
+所以剛刷好的機器接上家用交換器，會往整個網路發 `10.41.0.100–249`。檢查時租約表是空
+的，沒有任何裝置拿到。這是這個專案第二次記錄同一個警告，第一次是 2026-08-23。
+
+**陷阱二：`country=US`、`channel=42`、沒有 `s1g_chanbw`（即 2 MHz）、發射 27 dBm**，
+而實驗室是 SG / 40 / 4 MHz / 22 dBm。兩個法規域都定義了 4 MHz 的頻道 40 在
+**922.0 MHz**——同一個頻率——但 op class 不同（3 對 21），功率上限差很多：**US 是
+36 dBm，SG 是 22.15**。US 其餘的 4 MHz 頻道是 906、910、914、918、926 MHz，全部落在
+這個實驗室所在的 920–925 頻段之外。
+
+### root 沒有密碼的成因，追到了
+
+`/rom/etc/uci-defaults/31_password` 會從持久化儲存讀一個 `device_password` 並拿它執行
+`passwd root`。但它用的那支命令 `persistent_vars_storage.sh` **在整個映像裡根本不存
+在**——而腳本自己的註解就寫著它的缺席「是預期的」、不會有輸出。所以那個變數是空的、
+`passwd` 從未被呼叫，**空的 root 密碼是這個映像出廠的狀態**，不是誰忘了設。這同時解
+釋了兩台機器，以及 AP 日誌裡那些 `Auth succeeded with blank password for 'root'`。
+
+Wi-Fi 的 PSK 則是每台不同：由 `openmanetd` 生成，存在 `/etc/config/system` 的
+`option default_wifi_key`。兩台的金鑰雜湊不同，所以不是共用的出廠常數。
+`/lib/wifi/morse.sh` 裡確實有一組寫死的後備值（`ssid=MorseMicro`、`key=12345678`），
+但兩片板子都沒有在用它。
+
+### Mesh Point 與 Mesh Gate 的差別，用精靈自己的話
+
+> **Mesh Gate**：「提供一個 Mesh Point 加上一個並存的非 mesh 網路（例如一個 AP、一條
+> 上行乙太網路等）。它會廣播 mesh gate announcements 來幫助 mesh 節點對齊，讓流量更
+> 容易抵達那個非 mesh 網路。」
+
+Point 是成員，Gate 是出口。一個 mesh 一到兩個 Gate，其餘都是 Point。
+
+值得替後來的人記一筆：**這台機器開機就已經是 AP**，所以要一台 AP 根本不需要跑任何精
+靈。mesh 精靈的存在是為了把它改成別的東西。
+
+**選 Gate 同時解掉了陷阱一。** 精靈會把上行設成 `proto dhcp`——eth0 變成 DHCP **客戶
+端**——並把 dnsmasq 移到 mesh 那一側。產生出來的設定裡明文帶著
+`no-dhcp-interface=eth0`，機器就可以安全接進家用交換器。事後驗證確認：eth0 從家用路
+由器拿到 `192.168.108.23`，而且什麼位址都沒發。
+
+### 改 mesh 的一端，就是改了它的一半
+
+精靈把 `br-ahwlan` 配在 **`10.41.0.1/16`**——和實驗室 HaLow 網段同一個 /16，而那個網
+段的閘道是 `10.41.254.1`、DHCP 池是 `10.41.0.100–249`。新機器的池是
+`10.41.0.100–115`：兩個獨立網路的池直接重疊，而且 UniFi 上還有一條把整個
+`10.41.0.0/16` 送去節點 1 的靜態路由。
+
+把 gate 改到 `10.42.0.1/16`。dnsmasq 自動跟上
+（`dhcp-range=set:ahwlan,10.42.0.100,10.42.0.115`），而用來下這個變更的 eth0 連線沒
+有受影響，因為 `reload` 只套用有變動的介面。
+
+**但這樣就切斷了到第二台的 IPv4**——精靈把它放在 `10.41.254.103/16`。mesh 本身沒事：
+L2 配對和 IPv6 link-local 全程正常，但兩端落在不同網段，gate 的鄰居表裡因此出現一筆
+`10.42.0.112 FAILED`。修法是把第二台改到 `10.42.254.103`，而我是**經由 mesh 走 IPv6
+link-local** 進去改的。**整個重新設定過程中，mesh 的 plink 一直維持 `ESTAB`。**
+
+教訓很小但通用：**改 mesh gate 的位址不是一個局部變更。**
+
+### mesh 的實測
+
+兩個節點、batman-adv `BATMAN_V`、plink `ESTAB`。第二台的 `eth0` 是 **DOWN**——所有到
+得了它的東西都走 900 MHz。
+
+```
+延遲    batctl ping x20    2.626 / 3.184 / 5.175 ms，0% 丟包
+吞吐    batctl tp          10.69 秒內 9,638,280 bytes = 7.21 Mbit/s
+```
+
+其中兩件值得留下：
+
+**7.21 Mbit/s 就是這個硬體的天花板，而且是由另一條路徑達到的。** 這個專案先前的最佳
+數字是 7.4 Mbit/s，用 iperf、走 AP／STA、4 MHz 空中加 50 MHz SPI 時脈量到的。這次是
+batman-adv 自己的量測器、走 802.11s mesh——完全不同的軟體路徑——落在 3% 以內。兩條獨
+立的路撞到同一個數字，說明那是無線電與空中介面的極限，不是某一層軟體。**mesh 這層幾
+乎沒有代價。**
+
+**batman-adv 自己的估計值是 14.9 Mbit/s，約為實測的兩倍。** 它加入了
+`ap_expected_thr` 和閒置 MCS 的行列：這顆無線電回報的、不能當量測值用的數字。那是路
+由演算法選路徑的輸入，不是吞吐量。
+
+3.18 ms 的延遲**不代表** mesh 比 AP／STA 快：這兩片板子就在彼此旁邊、−19 dBm、單跳，
+而 soak station 的 6–141 ms 是隔著距離量的。
+
+### 這件事對 soak 的影響，而且不是沒有影響
+
+這個新 mesh 在 **922.0 MHz、4 MHz、SG——和節點 1 同一個頻道**，而且從 mesh 這邊掃描看
+得到節點 1 的 SSID，訊號 **−14 dBm**。從今天起，實驗室的量測頻道上有一個同頻鄰居，
+而且不是安靜的那種：兩個節點正在跑 batman-adv 的週期性廣播。
+
+吞吐測試是**帶著節點 1 的前後快照**跑的，因為把共用頻道塞滿十秒，正是那種可能讓 station
+掉線的事。結果沒有：兩個關聯都只前進了 11 秒，沒有歸零。
+
+但 2026-09-18 留下的那個未解問題——十五天內四次共模斷線、原因不明、AP 事前毫無記錄
+——**從 2026-09-19 起多了一個先前不存在的候選原因**。之後模式若有變化，判讀時必須把
+這件事放進去。反過來說也成立：一個**受我們控制**的同頻鄰居，是先前做不到的實驗。
+
+### mesh point 的網路孔是功能，而兩台 DHCP 伺服器不是
+
+被問到筆電插進 mesh point 的 `eth0` 能不能上網。可以，而且那台節點自己已經在上：
+
+```
+br-ahwlan 成員      bat0、eth0、phy1-ap0
+預設路由            via 10.42.0.1 dev br-ahwlan
+ping 1.1.1.1        0% 丟包，23–45 ms（筆電 → mesh → gate → 家用網路 → 網際網路）
+DNS                 解析正常
+```
+
+所以 mesh point 的乙太網路孔上跑 DHCP，是這個產品**刻意的**行為：把節點帶到現場、筆
+電插上去、流量從 HaLow 出去。我先前把它講成危險是片面的——**危險只存在於「把那個孔插
+進一個已經有 DHCP 的網路」。**
+
+**真正的毛病更嚴重，而且早就在發生。** 兩台都在發
+`dhcp-range=10.42.0.100,10.42.0.115`——**完全相同的池**——而 batman-adv 把兩邊的
+`br-ahwlan` 橋成**同一個 L2**。同一個網段上兩台 DHCP 伺服器搶答同一段位址，這正是兩個
+client 拿到同一個位址的成因。這不是潛在風險：從第二台加入 mesh 起就已經成立。
+
+依橋接式 mesh 的標準做法修正——整個 mesh 只留一台伺服器，放在 gate：在 mesh point 上設
+`dhcp.ahwlan.ignore=1`。兩側都驗證過：mesh point 產生的設定現在是
+`no-dhcp-interface=br-ahwlan` 且完全沒有 `dhcp-range`，gate 仍在服務，而 mesh point 的
+ARP 表裡有 `10.42.0.1` 的條目——證明廣播確實跨得過 mesh，所以筆電插在 mesh point 的
+`eth0` 上依然拿得到位址，只是由 gate 發。備份 `/etc/config/dhcp.bak-20260919`。
+
+**當日第三則儀器筆記。** 這個修正最初提的指令是 `uci set dhcp.lan.ignore=1`，那是照
+gate 的結構抄來的。**mesh point 上根本沒有 `dhcp.lan`**，服務中的是 `dhcp.ahwlan`。那
+行指令會回報成功而什麼都沒改。連同 dropbear 的路徑、以及那個無效的金鑰驗證，今天有三
+次失誤都來自「套用假設的名字，而不是在眼前那台機器上先讀一遍」。
+
+### 收工時的狀態
+
+| | gate | mesh point |
+|---|---|---|
+| hostname | `BCM2711-3e60` | `BCM2711-ca89` |
+| `br-ahwlan` | `10.42.0.1/16` | `10.42.254.103/16` |
+| 5 GHz AP | `HalowGW-3e60` | `Mesh01-ca89` |
+| mesh | `Sun` / ch 40 / SG / SAE | 完全相同 |
+| eth0 | `192.168.108.23`，DHCP 客戶端 | DOWN |
+
+進入方式：`ssh -J root@192.168.108.23 root@10.42.254.103`。兩台現在都有這台筆電的金鑰
+和 root 密碼了——而這件事付出了一次被鎖在門外的代價，見下。
+
+### 關掉空密碼學到的兩件事，第二件是我自己的錯
+
+**OpenWrt 的 dropbear 讀的是 `/etc/dropbear/authorized_keys`，不是
+`/root/.ssh/authorized_keys`。** 這是它和 OpenSSH 的差異，而這個專案先前沒有記錄過。
+兩台的金鑰都被裝到了錯的位置。
+
+**而空密碼會把這個差異完全遮蔽掉。** 在沒有密碼的狀態下，dropbear 不管客戶端提供什
+麼都放行，所以金鑰放錯檔案照樣「看起來能用」。它只會在密碼設好之後才爆出來——而那正
+好是後路消失的那一刻。兩台都在那個瞬間被鎖住，只能用密碼互動式登入救回來。
+
+**更糟的是，那個本該攔住這件事的驗證，根本不可能攔得住。** 設密碼之前跑的檢查是
+`ssh -o PreferredAuthentications=publickey … 'echo KEY-AUTH-OK'`，它回傳了 OK。那什麼
+也沒證明：對一個無密碼的帳號，這個指令**在金鑰可讀與不可讀的兩種狀態下都會成功**，
+也就是在壞掉的狀態和正常的狀態下給出一樣的答案。這份筆記從 2026-08-26 起就記著這條
+規則——*控制組必須在「它應該失敗」的狀態下被檢查過*——而這次是寫下它的人自己違反了。
+
+所以正確的順序比先前寫的「先裝金鑰、再設密碼」更嚴格：
+
+```
+1. 把金鑰裝進 /etc/dropbear/authorized_keys
+2. 設定 root 密碼
+3. 「然後」才驗證只用金鑰能否登入 —— 在第 2 步之前，這個測試沒有意義
+```
+
+救回之後重新驗證過，這次密碼已存在、測試是真的：兩台的純公鑰登入都回 OK，
+`/etc/dropbear/authorized_keys` 各為 600 權限、93 bytes，root 的 shadow 欄位是 63 字元
+的雜湊，而 mesh 的 plink 全程維持 `ESTAB`。
+
+清理：gate 上失效的 `network.lan.ipaddr='10.41.254.1'` 與 `netmask` 已刪除（`proto`
+是 `dhcp`，兩者本來就不生效，但若有人把 proto 改回 static 就會突然冒出一個和節點 1
+HaLow 閘道同位址的介面）。`network.lan.dns='1.1.1.1'` 保留，那個在 dhcp 下仍然有作
+用。備份 `/etc/config/network.bak-20260919-2`。
+
+## 2026-09-19 —— 這塊板子當 AP 的實際代價，以及版本問題由架上的機器回答
+
+先被問到第二台 HaLow AP 該用哪個 OpenWrt，接著被問到當 AP 有哪些問題。兩題都能從節點
+1 回答而不必靠記憶：它替這個網段當了 23 天的 AP。以下全部是今天從運行中的系統讀出來
+的。
+
+### 這塊板子當 AP 的問題
+
+集中寫在這裡，因為它們散落在八個月的條目裡，而現在正在規劃第二台 AP。這些都不是泛用
+的 OpenWrt 建議——每一條都是在這張工作檯上量到的。
+
+**一、它會讓兩台 client 同時掉線，而且沒有人知道為什麼。** 截至 09-18 的十五天內發生
+四次，兩台 station 在同一秒斷開、約十秒後恢復。AP 在每一次之前的十分鐘內**什麼都沒記
+錄**。未解：一台不聲不響停止發射的發射機，和通道干擾，從我們現有的兩個位置看起來完
+全相同。十秒斷線對 console server 可以接受；**成因不明則不行，因為沒有任何東西保證它
+會停在十秒。**
+
+**二、有一種卡死只有一個復原步驟救得回來。** 2026-08-23 試出來的階梯：
+`wifi reload` ✗ → debugfs `restart` ✗ → debugfs **`reset` ✓** → 重開機 ✓。也就是說，
+有一種故障，唯一有效的那一招**要求你已經能登入那台 AP**。
+
+**三、它是單點故障，而它掛掉時你也失去了進去的路。** 兩台 station 的預設路由都走
+HaLow，AP 是它們唯一的出口。A1 station 在家用網段上根本沒有位址——`wlan0` dormant、
+`eth0` down。AP 一掛，兩台 client 的所有遠端路徑同時消失，只剩實體接觸。2026-08-27
+的檢討把這條列為最大的部署風險，至今仍未解決。
+
+**四、頻寬低，而且在 SG 沒有第二個頻道可以搬。** 實測 2 MHz 時下行 1.3–1.5 Mbit/s、
+上行 0.2–0.9，把 SPI 時脈拉到 50 MHz、空中 4 MHz 之後約 7.4 Mbit/s。跑文字 console 綽
+綽有餘，跑任何大量傳輸都痛苦。而且根據 regdb，**SG 只有一個 4 MHz 頻道**——922.0 MHz。
+那裡出現干擾源時你搬不走，1 MHz 與 2 MHz 的頻道都疊在同一段裡。詳見 `HARDWARE.md` 的
+「SG 的頻道規劃」。
+
+**五、它回報的數字有幾個不能當量測值。** RSSI 會飽和，不追蹤距離也不追蹤品質。
+`ap_expected_thr` 與閒置 MCS 曾被證實變動 5.6 倍而對實際重傳成本毫無影響。AP 上的幽
+靈 station 條目看起來和正常 client 一模一樣。而 AP 的日誌是 UTC、兩台 Pi 是本地時間，
+差 8 小時——很容易把時間軸讀錯。
+
+**三個刷機之後會咬人的設定陷阱**，節點 1 目前都設對了，而且都很容易在重刷時跑回去：
+
+| 陷阱 | 症狀 |
+|---|---|
+| 國碼不一致 | 兩端就是看不到彼此，掃描一片空白，沒有任何訊息說明原因（US 對 SG，2026-08-23） |
+| station 開省電 | 進來的流量消失、出去的正常——看起來像掉封包，其實不是 |
+| `openmanetd` 開著 | 大量傳輸在**單一方向**壞掉而 ping 照通：MTU 黑洞 |
+
+**還有一個屬於映像而非板子的：** OpenMANET 映像**出廠沒有 root 密碼、且開著密碼登
+入**，所以剛刷好的節點會把 root 交給任何連得到 22 埠的東西。那是廠商映像的性質、刷一
+次就能驗證，而關掉它是任何要部署（而非放在工作檯上）的節點的第一步。
+
+平心而論：**當 AP 這件事它做得很稱職**——23 天、`errors 0`、WPA3-SAE 加 PMF、DHCP、
+NAT。**問題不在它能不能當 AP，而在它偶爾會出事、成因不明，且事後沒有第二條路進去修
+它**——這也正是為什麼「無人值守復原」的優先度高於再加一台 AP。
+
+### 版本問題：OpenMANET 1.8.0，而節點 1 已經在跑它
+
+發布在 `OpenMANET/firmware`，不是 `OpenMANET/openwrt`（後者沒有任何 release）。最新是
+**1.8.0，2026-08-16**——而節點 1 回報 `OpenMANET 24.10 1.8.0`，所以參考 AP 本來就是最
+新的。
+
+```
+openmanet-1.8.0-rpi4-mm6108-spi-squashfs-sysupgrade.img.gz   62 MB
+sha256 461aea8cc2805f64e83e68d1f45acdedad7bef5560861926a5de79a3489d8316
+```
+
+三個欄位都要對：`rpi4`、`mm6108`、**`spi`**。它的板型是 `RPI RPI4-MM6108 (SPI)` /
+`bcm2711,mm6108-spi`——M1 在這個映像裡是一級目標，這就是選它的理由。它帶著讓 Morse 初
+始化序列能work的 SPI 核心 patch，也正因如此，OpenMANET 從來沒踩到這個專案在 Raspberry
+Pi OS 上非修不可的那三個缺陷。
+
+1.8.0 自己的更動幾乎全在 `openmanetd`——MAVLink、CoT、RTP、音訊、WebUI。**對一台單純的
+AP 而言，主打功能一項都用不到**，這又是把那個 daemon 停著的另一個理由。
+
+### 一個該加進 2026-08-29 清單的命名陷阱
+
+`spi` 版的映像只帶一個 Morse 模組，而它叫
+**`/lib/modules/6.6.138/mm6108_sdio.ko`**。它註冊的是 `morse_spi` 驅動，
+`/sys/bus/spi/devices/spi0.0/driver` 解析到 `.../drivers/morse_spi`。所以在一塊完全沒
+有 SDIO HaLow 的板子上，`lsmod` 會顯示 `mm6108_sdio`。2026-08-29 的條目列了三個造成
+「這個實驗室跑 SDIO」錯誤印象的來源；**這是第四個，而且最會誤導，因為它就坐在 SPI 的
+AP 上。** 要看匯流排綁定，永遠不要看模組名稱。
+
+（同樣的理由，本次 session 稍早說「驅動編進核心」是錯的——它是可載入模組。當時的
+grep 過濾 `morse`，而模組名不含這個字。）
+
+### Seeed 建議的 fork 確實能跑在 Pi 4 上，以及它怎麼繞過 SPI 問題
+
+`Wvirgil123/openwrt`，分支 `seeed`，只有一個 release：v2.7-dev（2025-01-09），最後
+push 2025-08-13。唯一的映像是 `morse-micro-ekh01`，而在
+`target/linux/bcm27xx/image/Makefile` 裡：
+
+```make
+define Device/morse_ekh01
+  $(Device/rpi-4)          # 整個繼承 Pi 4 的裝置定義
+  SUPPORTED_DEVICES := morse,ekh01 morse,ekh01-05us
+  DEVICE_PACKAGES += kmod-morse netifd-morse
+endef
+ifeq ($(SUBTARGET),bcm2711)
+  TARGET_DEVICES += morse_ekh01
+endif
+```
+
+所以它**就是**一個 Pi 4 映像——`kernel8.img`、`bcm2711-rpi-4-b` 的 DTB、只建 bcm2711。
+注意它覆寫了 `SUPPORTED_DEVICES` 並拿掉 `raspberrypi,4-model-b`：對燒 SD 卡無關緊要，
+對 `sysupgrade` 有關，因為那會做相容性檢查。
+
+它怎麼繞過 chip-select 問題才是有意思的地方：
+`999-001-morse-spi-fix-spi-bcm2835-driver-v5.3.patch`，**1139 行**，把
+`spi-bcm2835.c` 整個退回 v5.3 時代的實作，把 gpio descriptor API 換回 `of_gpio.h`。沒
+有 descriptor 就不會有 `spi_setup()` 強制 `SPI_CS_HIGH`，缺陷 2 也就無從發生——但它是
+用整支控制器驅動回退達成的，而不是 Morse 後來那個外科手術式的 `991-0007` 旗標。5.3 到
+5.15 之間 `spi-bcm2835` 的所有修正也一併放棄。
+
+對比 OpenMANET 1.8.0：kernel 5.15 對 6.6.138、驅動 2.7-dev 對 2.0.x，而且沒有 M1 板
+型——overlay 要換成 WM1302 腳位，BCF 要改成 `bcf_fgh100mhaamd.bin`。最後這點不是註腳：
+HC01P 出廠就指向 EKH01-03 的 `bcf_mf08551.bin`，害那顆模組的發射器失效到 2026-08-24。
+以上全部是讀樹讀出來的，**沒有實際跑過**。
+
+### 第二台 AP 才是 09-18 那個問題該用的儀器
+
+不是第三台 station。三台 station 仍然都聽同一台 AP，共模事件依舊分不出成因。兩台 AP
+才分得開：一個事件若打掉其中一台的 client 而沒打掉另一台，成因就鎖定在 AP；兩台都中，
+就是通道或環境。
+
+因為 SG 只有那一個 4 MHz 頻道，第二台 AP 必須**同頻**——而對這個實驗來說那是正確的設
+計而非妥協，因為同頻把 RF 環境固定住了。
+
+四個條件，缺一就不算對照組：它需要**自己的 station**；**不同的 SSID**（同名會讓
+station 漫遊，指派就沒了）；**兩邊都要 NTP**（整套交叉比對是秒級的）；以及**不可以搬
+動現有的 station**，因為節點 1 上的 A1／A2 這一組，正是產生 09-02 與 09-18 兩個發現的
+儀器本身。
+
+這顆 phy 支援 IBSS、managed、AP、AP/VLAN、**monitor** 與 mesh point，限制是
+`#{managed, AP, mesh point} <= 2, total <= 2, #channels <= 1`。兩個推論：一片板子可以
+同時是 AP-2 和第三台 station，但共用一顆無線電會讓「無線電故障」和「通道事件」變得無
+法區分，那會毀掉它作為對照組的價值；以及 **monitor 模式可能就是 TBD 那列所要求的頻譜
+擷取的廉價替代品**——一片板子停在該頻道上持續錄 beacon，就能直接顯示節點 1 的 beacon
+是否在通道仍然安靜時消失。未測試：phy 宣告支援 monitor 和驅動確實實作得堪用是兩回
+事，而這個專案已經被這種落差咬過。
+
+### LuCI
+
+OpenMANET 帶完整的 LuCI，外加 `luci-app-morseconfig`（用網頁表單設 HaLow）、
+`luci-app-ekhwizards`、`luci-app-ttyd`（瀏覽器終端機）、`luci-app-statistics` 以及
+OpenMANET 佈景。`uhttpd` 監聽 `0.0.0.0:80` 與 `:443`，但 `wan` zone 在今天之前兩個都
+拒絕。
+
+`Allow-LuCI-mgmt` 現在只放行 **TCP 443**，來源是 `192.168.108.0/24` 與兩個管理網段；
+80 埠刻意不開。驗證方式是實際請求而非讀設定檔：`https://192.168.108.5/` 回 HTTP 200、
+`http://` 沒有回應。備份 `/etc/config/firewall.bak-20260919`。細節在 `HARDWARE.md`。
+
 ## 2026-09-18（晚間）—— 風扇讀不到、按鈕有腳位了，而 GPIO 17 從來就不是空的
 
 `HARDWARE.md` 從寫下那天起就掛著一列 TBD：HAT 的按鈕、風扇與 LED 腳位。2026-08-27

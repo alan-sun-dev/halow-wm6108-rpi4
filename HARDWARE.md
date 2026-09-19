@@ -53,6 +53,39 @@ here until the boards report one themselves.
 Node 5 is one machine with two names in the older notes: `dkmstest` and
 `hc01p` are the same RAK chassis carrying the Heltec HAT and module.
 
+## The SG channel plan, and the one 4 MHz channel
+
+From `/usr/share/morse-regdb/channels.csv` on the AP — the table the driver
+itself consults, not a recollection. Country **SG**:
+
+| sub-band | bw | s1g chan | centre MHz | mapped 5 GHz | duty cycle | tx max |
+|---|---|---|---|---|---|---|
+| 920–925 | 1 MHz | 37 / 39 / 41 / 43 / 45 | 920.5 / 921.5 / 922.5 / 923.5 / 924.5 | 149 / 153 / 157 / 161 / 165 | 100 % | 22.15 dBm |
+| 920–925 | 2 MHz | 38 / 42 | 921.0 / 923.0 | 151 / 159 | 100 % | 22.15 dBm |
+| 920–925 | **4 MHz** | **40** | **922.0** | **155** | 100 % | 22.15 dBm |
+| 866–869 | 1 MHz | 7 / 9 / 11 | 866.5 / 867.5 / 868.5 | 40 / 44 / 48 | **2.77 %** | 29.14 dBm |
+| 866–869 | 2 MHz | 10 | 868.0 | 46 | **2.77 %** | 29.14 dBm |
+
+Node 1 runs `channel 40`, `s1g_chanbw 4`, `country SG` — 922.0 MHz, 4 MHz wide.
+
+**SG has exactly one 4 MHz channel.** A second AP at the same bandwidth has to be
+co-channel: 2 MHz channels 38 (920–922) and 42 (922–924) both sit *inside* 4 MHz
+channel 40 (920–924), so nothing in the 920–925 sub-band is non-overlapping
+except 1 MHz channel 45. The 866–869 sub-band is genuinely separate but
+duty-cycle limited to **2.77 %**, and it is where the wrong-SKU HT-H7608 lived.
+
+For a **control** AP that is not a limitation but the correct design: co-channel
+holds the RF environment constant, so a common-mode event that drops one AP's
+stations and not the other's isolates the AP rather than the channel — which is
+the discriminator the 2026-09-18 finding lacks.
+
+**Reading `iw` on a morse phy.** The dot11ah shim reports mapped 5 GHz numbers,
+never the real S1G frequency. Node 1 on S1G channel 40 at 4 MHz appears as an
+80 MHz VHT block with primary channel 153 (5765 MHz) and centre 5775 MHz — 5775
+being mapped channel 155, the `map_5g_chan` the table gives for S1G 40. Every
+`80MHz`, `VHT-MCS` and `freq 57xx` in this repo's captures is that shim, not the
+radio.
+
 ## Reaching the nodes from another subnet
 
 The lab answers on three address families and each one is governed by something
@@ -92,14 +125,22 @@ rules on the AP, backup at `/etc/config/firewall.bak-20260902`:
 | `Allow-SSH-mgmt-subnets` | `wan` input | TCP 22 to the AP itself |
 | `Allow-mgmt-subnets-ping-halow` | `wan → lan` | ICMP echo-request into `10.41.0.0/16` |
 | `Allow-mgmt-subnets-ssh-halow` | `wan → lan` | TCP 22 into `10.41.0.0/16` |
+| `Allow-LuCI-mgmt` *(added 2026-09-19)* | `wan` input | **TCP 443 to the AP itself**, from `192.168.108.0/24` as well as the two management subnets. Backup `/etc/config/firewall.bak-20260919` |
 
 plus two static routes on node 5, live and persisted:
 `192.168.200.0/24` and `192.168.101.0/24` `via 192.168.108.1 dev wlan0`.
 
 The pre-existing `192.168.108.0/24` rules are unchanged. Note the asymmetry:
 the house LAN has `Allow-house-to-halow` with `proto all`, while the two new
-subnets are restricted to ICMP echo and TCP 22 — anything else, `iperf`
-included, will be dropped.
+subnets are restricted to ICMP echo, TCP 22 and TCP 443 — anything else,
+`iperf` included, will be dropped.
+
+**Port 80 is deliberately not open.** `uhttpd` listens on `0.0.0.0:80` and
+`0.0.0.0:443`, and only 443 is permitted: LuCI sits in front of the root
+password on the gateway for the whole HaLow segment. Verified by request, not
+by config — `https://192.168.108.5/` returns **HTTP 200** and `http://` returns
+nothing. To withdraw it: `uci delete firewall.cfg1492bd && uci commit firewall
+&& /etc/init.d/firewall reload`.
 
 ### Measured from inside both subnets, 2026-09-03
 
