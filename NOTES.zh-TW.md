@@ -58,10 +58,12 @@ uci set openmanetd.config.dhcpconfigured='0' && uci commit openmanetd
 /etc/init.d/openmanetd restart
 ```
 
-**重啟 daemon 把整台機器重開了。** 這不在預期內——當初選這個做法而不是重開機，正是
-為了避免彈一個與 soak 共用頻道 40 / 922.0 MHz 的無線電。openmanetd 提交了新的 DHCP
-設定，然後把整台帶下去：ssh 在指令中途斷線，batman-adv 有約 70 秒看不到鄰居，回來時
-是 `up 1 min`。任何 `dhcpconfigured` 的變更都要當成「會重開機」來規劃，不是重啟服務。
+**重啟 daemon 把整台機器重開了。** ssh 在指令中途斷線，batman-adv 有約 70 秒看不到
+鄰居，回來時是 `up 1 min`。這在當下不在預期內——當初選這個做法而不是重開機，正是為
+了避免彈一個與 soak 共用頻道 40 / 922.0 MHz 的無線電——但**這是文件寫明的廠商行為，
+沒讀到是我們的疏漏**：openmanet.github.io/docs/networking 明確寫著，協調位址之後
+「The node will reboot to apply the reserved settings.」任何 `dhcpconfigured` 的變更
+都要當成「會重開機」來規劃，不是重啟服務。
 
 結果，從運行中的 dnsmasq 設定讀出來而不是讀 uci：
 
@@ -88,10 +90,30 @@ gate:        dhcp-range=set:ahwlan,10.41.0.116,10.41.0.131,255.255.0.0,12h
 是「發生了什麼」，不是「冒了多少風險」：無線電確實彈了，soak 活下來是因為 HaLow 重新
 關聯夠快，不是因為我們避開了那一下。
 
+### 官方文件涵蓋了什麼、沒涵蓋什麼
+
+事後對照 openmanet.github.io。機制是有文件的，而且觀察到的行為與文件相符：openmanetd
+「向其他節點詢問各自宣告的 IP／DHCP 範圍，然後保留一個沒被使用的靜態 IP（與 DHCP
+範圍）」、每個 mesh point 各自跑 DHCP 伺服器、保留之後會重開機。兩處分歧：
+
+- **文件寫的預設是 `start 351, limit 16`。** 這兩片板子上（OpenMANET 1.8.0 /
+  openmanetd 1.3.10）limit 相符，start 卻是 **116**。
+- **文件完全沒有涵蓋本則紀錄講的這個故障。** 它說協調發生在「初次精靈之後」，但從未
+  說那是一次性的；`dhcpconfigured` 在任何一頁都沒出現；沒有任何一句話說「重跑精靈會
+  覆蓋 DHCP 設定卻讓旗標留著」；也沒有描述兩台節點發出相同範圍時會怎樣。設計是好的、
+  也是有文件的——缺口在精靈與旗標之間的那道縫。
+
+### 同一次作業順手清掉的
+
+兩台資料庫裡 10.42 時期的 `BCM2711-*` 舊列都已移除，各自只剩下對方那一列的最新資料。
+做法（板子上沒有 `sqlite3`）：停 openmanetd（乾淨關閉會把 WAL checkpoint 進主檔並刪除
+`-wal`/`-shm`，所以只需搬一個檔）、把 `.db` 複製回筆電、`DELETE` + `VACUUM` +
+`pragma integrity_check`、寫回、啟動。原始檔保留在各板的 `/root/dbbak-<時間戳>/`。
+兩台都沒有重開機，兩邊的 DHCP 範圍都沒有移動，兩分鐘後各自透過 alfred 重新學到對方、
+時間戳是新的，舊列沒有長回來。
+
 ### 仍未處理
 
-- 兩台的資料庫都還留著 10.42 時期的 `BCM2711-*` 舊列，其中一筆的位址還是 `10.42.x`。
-  無害，但讓表變得難讀。
 - gate 曾從自己的池發了一個租約給 mesh point（`f2:75:4b:bf:33:f3 → 10.41.0.123`），
   而這個租約早於本次變更。
 - 兩台的 `force=1` 都還在。範圍已不重疊，現在這個設定是正確的。

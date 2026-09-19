@@ -68,11 +68,13 @@ uci set openmanetd.config.dhcpconfigured='0' && uci commit openmanetd
 /etc/init.d/openmanetd restart
 ```
 
-**The daemon restart rebooted the whole node.** This was not expected — the
-change was chosen over a reboot specifically to avoid bouncing a radio that
-shares channel 40 / 922.0 MHz with the soak. openmanetd committed the new DHCP
-config and took the box down with it: ssh dropped mid-command, batman-adv lost
-the neighbour for about 70 s, and it came back with `up 1 min`. Plan any
+**The daemon restart rebooted the whole node.** ssh dropped mid-command,
+batman-adv lost the neighbour for about 70 s, and it came back with `up 1 min`.
+This was not expected here — the approach had been chosen over a reboot
+specifically to avoid bouncing a radio that shares channel 40 / 922.0 MHz with
+the soak — but **it is documented vendor behaviour, and the gap was ours**:
+openmanet.github.io/docs/networking states plainly that after reconciling
+addresses "The node will reboot to apply the reserved settings." Plan any
 `dhcpconfigured` change as a reboot, not as a service restart.
 
 Result, read from the running dnsmasq config rather than from uci:
@@ -103,11 +105,38 @@ across the co-channel reboot — but note that this is a measurement of what
 happened, not of what was risked: the radio did bounce, and the soak survived it
 because HaLow reassociation is fast, not because the bounce was avoided.
 
+### What the official documentation does and does not cover
+
+Checked against openmanet.github.io after the fact. The mechanism is documented
+and what was observed matches it: openmanetd "reconciles addressing by asking
+other nodes to announce their IP/DHCP ranges, then reserves a static IP (and
+DHCP range) that is not in use", every mesh point runs its own DHCP server, and
+the reservation is followed by a reboot. Two things diverge:
+
+- **The default is documented as `start 351, limit 16`.** On these boards
+  (OpenMANET 1.8.0 / openmanetd 1.3.10) the limit matches but the start is
+  **116**.
+- **Nothing in the docs covers the failure this entry is about.** They say the
+  reconciliation happens "after the initial wizard" but never that it is
+  one-shot; `dhcpconfigured` is not mentioned anywhere; there is no statement
+  that re-running the wizard overwrites the DHCP config while leaving the flag
+  set; and there is no description of what happens when two nodes end up
+  serving the same range. The design is sound and documented — the gap is the
+  seam between the wizard and the flag.
+
+### Cleaned up in the same session
+
+The stale `BCM2711-*` rows were removed from both databases, leaving each node
+with exactly the one current row for its neighbour. Procedure, since the boards
+have no `sqlite3`: stop openmanetd (a clean shutdown checkpoints the WAL and
+removes `-wal`/`-shm`, so only one file needs moving), copy the `.db` to the
+laptop, `DELETE` + `VACUUM` + `pragma integrity_check`, copy back, start. The
+originals are kept on each board under `/root/dbbak-<timestamp>/`. Neither node
+rebooted, neither DHCP range moved, and two minutes later each had re-learned
+the other over alfred with a fresh timestamp and no stale row returning.
+
 ### Left open
 
-- Both databases still carry stale `BCM2711-*` rows from the 10.42 era, one of
-  them with a `10.42.x` address. Harmless, but they make the tables harder to
-  read.
 - The gate handed the mesh point a lease from its own pool
   (`f2:75:4b:bf:33:f3 → 10.41.0.123`) and that lease predates the change.
 - `force=1` remains set on both. With the ranges now disjoint it is correct.
