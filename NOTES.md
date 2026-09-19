@@ -2,6 +2,142 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-19 (late evening, second entry) — what OpenMANET is actually for, and which kind of OOB this project is building
+
+Two clarifications arrived on the same evening. Neither changes a measurement,
+but together they change which open risk is the one blocking the product.
+
+### OpenMANET's design centre is ATAK
+
+Read off the running gate, not inferred. `/etc/openmanetd/config.yml` ships a
+`gnss` section with `sendAsExternalGNSSSource.sendAsCoT` and a `comms` section
+for push-to-talk; the binary carries `cotproto.CotEvent` and the UI string
+`EUD (ATAK) VIA COT`; the running services are `gpsd` (plus `gpsboard.init`),
+`alsa-utils`, `camera-onvif-server`, `rpi-camera-services`, `mediamtx`,
+`mesh11sd`, `alfred`, `tailscale`, `ttyd` and `radius`.
+
+**ATAK does not run on the node.** It is an Android application on the EUD —
+the tablet. The node is infrastructure: it provides the 2.4/5 GHz AP the tablet
+associates to, the mesh backhaul, and a CoT feed of its own position. There is
+no Docker, no containerd, no Java and no database server anywhere on the box;
+CoT is compiled into a single static Go binary, which is why the whole stack
+fits on OpenWrt against musl.
+
+This retroactively explains several things this log has been treating as
+puzzles:
+
+- **The one-shot `dhcpconfigured` flag and the reboot that follows a
+  reservation** are correct behaviour for a field device configured once and
+  then deployed. Re-running the setup wizard is not on that happy path — which
+  is precisely the seam this lab fell into, because it reconfigures these
+  boards repeatedly.
+- **`10.41.0.0/16` being structural, and every node running its own DHCP
+  server**, follow from a tablet needing an address from whichever node it can
+  still reach during disconnected operation. Backup, not load sharing.
+- **openmanetd rewriting MTUs** — the source of the MTU black hole recorded
+  earlier — follows from CoT and video riding on batman-adv.
+- The tablet takes its address from the very `ahwlan` pool whose collision was
+  fixed earlier this evening. **That defect sat exactly on this platform's core
+  failover scenario**: the gate down, the tablet reassociating to the mesh
+  point, and both nodes handing out the same sixteen addresses.
+
+The consequence for this project is that **we are a non-target user**. The
+overlap is real — disconnected operation, autonomous addressing, low bandwidth,
+long unattended runtime are wanted by both — but what we need and they have no
+reason to test is unattended recovery and long-lived interactive sessions
+across reconnects. A console-server appliance would also carry
+camera/ONVIF/mediamtx/gpsd/alsa/radius/ttyd/tailscale that it does not need.
+**Open strategic fork, not decided:** stay on OpenMANET, or take only HaLow and
+batman-adv onto a clean OpenWrt.
+
+**TAK Server cannot be installed on a node**, and the reason is worth recording
+because it generalises. There is no Java of any kind in the feeds; PostgreSQL
+appears only as client libraries (`libpq`, `libpqxx`) with no server and no
+PostGIS; libc is musl 1.2.5; and 3.8 GB of RAM and 3.8 GB of free overlay are
+shared with the radio stack. Docker could host it in principle — dockerd 27.3.1
+resolves cleanly, and the kmods come from OpenMANET's own package repo so they
+match the custom kernel ABI — but x86_64 images, the memory budget and the
+unresolved overlay2-on-f2fs storage driver make it a bad trade. **A central
+server belongs at the back of the network, not on a node.** The same applies to
+this project's AI diagnosis server.
+
+### This is OOB management, not OOB backup
+
+Stated by Alan, and it corrects an assumption this log has carried since
+2026-08-26: the console server is for **out-of-band configuration and
+debugging management** — a daily-use working interface — **not** an emergency
+failover path.
+
+| | OOB backup (the old assumption) | OOB management (what is being built) |
+|---|---|---|
+| frequency | rare, only when the primary path is down | daily; it *is* the working interface |
+| sessions | short, urgent | long, interactive, left open |
+| worst case | it is also dead when you finally need it | the link drops mid-keystroke |
+| how failure is noticed | **silently**, possibly months later | immediately, because it is in use |
+
+Three things follow:
+
+1. **`conserver` is the service, not `ser2net`.** Multi-user viewing, write-
+   token handoff and logging everything are the primary features for
+   interactive debugging rather than nice-to-haves, and those logs are already
+   the artefact the central AI diagnosis server needs — there is no separate
+   collection layer to build.
+2. **"No unattended recovery has ever been tested" is downgraded** from the
+   biggest risk recorded in the 2026-08-27 maturity review. A backup path fails
+   silently and can be dead for months; an interface someone uses every day
+   cannot. The risk is still real, but it no longer blocks.
+3. **The unresolved common-mode disconnect becomes the blocking risk.** Six
+   disconnects in fifteen days with a 426 s longest outage reads as good uptime
+   and as a product defect, depending only on whether someone was
+   mid-configuration on a switch at the time. It is now on the product path.
+
+### The measurement this project has never taken
+
+Interactive typing makes **latency and jitter** matter for the first time.
+Throughput still does not: a console runs at 9600–115200 baud, which is
+1–14 KB/s against a link measured at 7.4 Mbit/s.
+
+This log has measured throughput, RSSI, retry cost and association time. It has
+**never measured the HaLow link's RTT distribution**, and the mean would not be
+the interesting number if it had — the tail is. A p99 or a maximum in the
+hundreds of milliseconds makes an interactive session unpleasant regardless of
+how good the average looks, and whether that tail correlates with the retry
+cost already recorded in `mmrc_table` is an open and cheap question. It needs
+no configuration change on the soak fleet.
+
+**Proposed sequence, nothing started:** measure the RTT distribution first,
+because it can confirm or kill the interactive approach outright; then solve
+the common-mode disconnect, now that it is on the product path; attach a
+USB-serial adapter and confirm `/dev/ttyUSB*` appears whenever convenient,
+since it depends on neither.
+
+### Console-gateway capability, verified read-only on the gate
+
+Nothing was installed. **Docker is not needed for any of this.**
+
+| package | version | role |
+|---|---|---|
+| `conserver` | 8.2.6 | multi-user console server with logging; depends only on `libopenssl3` |
+| `ser2net` | 4.6.2 | one TCP port per serial port, RFC2217 |
+| `socat`, `remserial` | — | ad-hoc bridging |
+
+The full set of USB-serial kmods is available (`ftdi`, `cp210x`, `pl2303`,
+`ch341`) along with `kmod-usb-acm` for the USB console ports on current Cisco
+hardware — and **`cdc-acm.ko` and `ch341.ko` are already on disk** in
+`/lib/modules/6.6.138/`, so those two need nothing installed. xHCI is present
+and the USB ports are free apart from an internal hub.
+
+One correction to an earlier reading: **`/dev/ttyAMA0` is not available.** gpsd
+holds it (`/usr/sbin/gpsd -N -n ... /dev/ttyAMA0`), and its counters show
+`tx:125026 rx:0` — transmitting into a GPS board that is not attached.
+`ttyAMA5` is unused, but the M1's GPIO header is partly taken by the HaLow HAT.
+Use USB-serial, not the Pi's own UART.
+
+A detail worth keeping from the same probe: `cgroup_disable=memory` is on the
+kernel command line, which is why the memory cgroup controller is missing. It
+is disabled at boot, not compiled out — `/proc/cgroups` lists `memory` with
+`enabled=0`. Removing it from `/boot/cmdline.txt` would restore it.
+
 ## 2026-09-19 (late evening) — the duplicate DHCP pool, and a premise that was wrong before the experiment started
 
 The open defect from earlier in the day: both OpenMANET nodes served the
