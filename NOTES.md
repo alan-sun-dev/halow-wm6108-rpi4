@@ -2,6 +2,116 @@
 
 *[中文版](NOTES.zh-TW.md)*
 
+## 2026-09-19 (late evening) — the duplicate DHCP pool, and a premise that was wrong before the experiment started
+
+The open defect from earlier in the day: both OpenMANET nodes served the
+**identical** pool `10.41.0.116–131` with `force=1`, although openmanetd ran on
+both. Harmless while the gate wins every race, dangerous in exactly the
+situation the mesh point exists for — the gate down and the mesh point
+answering.
+
+The planned experiment was to **restart the mesh point while the mesh was up**,
+so that openmanetd would hear the gate's announcement and re-coordinate. That
+experiment was never run, because reading the state first disproved its premise.
+
+### The two nodes were already talking, continuously
+
+openmanetd keeps a SQLite database at `/etc/openmanetd/openmanetd.db`, table
+`mesh_nodes`, with a column pair `uci_dhcp_start` / `uci_dhcp_limit` per
+neighbour. The binary carries `GetAlfredDataTypeAddressReservation` and an
+`addressReservationWorkerReserveInterval`, so the ranges are exchanged over
+alfred, on a timer. There is no sqlite3 on the box; both databases were copied
+to the laptop (`.db`, `-wal` and `-shm` together, or the read is not consistent)
+and read there.
+
+Both sides already held the other's row, and **both rows' `updated_at` was the
+minute of the probe**:
+
+| read on | hostname | ip | start | limit | updated_at |
+|---|---|---|---|---|---|
+| mesh point | HalowGW-3e60 | 10.41.0.1 | **116** | 16 | 13:51:30 — live |
+| gate | Mesh01-ca89 | 10.41.1.1 | **116** | 16 | 13:52:26 — live |
+
+So the collision was visible to both nodes, continuously, and neither acted.
+"They cannot hear each other" was false.
+
+### The cause is a one-shot flag that survives reboots
+
+`/etc/config/openmanetd` carries `option dhcpconfigured '1'`, and the binary
+exports `network.IsDHCPConfiguredWithReader` and
+`network.SetDHCPConfiguredWithReader`. The worker checks the flag and skips.
+The flag is on disk, so a reboot does not clear it.
+
+The mechanism itself is sound, and the stale rows prove it ran correctly once:
+three older records, from the reverted 10.42 era and under the pre-wizard
+`BCM2711-*` hostnames, all show **`start=100`** for the non-gate node — a
+non-colliding range openmanetd chose by itself. What broke it was the setup
+wizard: it rewrote the DHCP config back to the default 116 **and left the flag
+at 1**. The configuration was overwritten while the system still believed it was
+configured.
+
+### Why the planned experiment would have produced a lie
+
+A plain restart leaves the flag at 1, the worker skips, the pool stays at 116 —
+and the obvious reading of that null result is "openmanetd will not coordinate
+duplicate pools". It would have been wrong. It never tried. This is the same
+shape as every other entry under the instrument rule: a result that looks like
+an answer because the thing being measured never ran.
+
+### What was actually done, and what it cost
+
+On the mesh point only, after backing up `/etc/config/dhcp` and
+`/etc/config/openmanetd` and verifying the copies with `cmp`:
+
+```
+uci set openmanetd.config.dhcpconfigured='0' && uci commit openmanetd
+/etc/init.d/openmanetd restart
+```
+
+**The daemon restart rebooted the whole node.** This was not expected — the
+change was chosen over a reboot specifically to avoid bouncing a radio that
+shares channel 40 / 922.0 MHz with the soak. openmanetd committed the new DHCP
+config and took the box down with it: ssh dropped mid-command, batman-adv lost
+the neighbour for about 70 s, and it came back with `up 1 min`. Plan any
+`dhcpconfigured` change as a reboot, not as a service restart.
+
+Result, read from the running dnsmasq config rather than from uci:
+
+```
+mesh point:  dhcp-range=set:ahwlan,10.41.0.132,10.41.0.147,255.255.0.0,12h
+gate:        dhcp-range=set:ahwlan,10.41.0.116,10.41.0.131,255.255.0.0,12h
+```
+
+Adjacent and disjoint. The gate learned the new value over alfred about two to
+three minutes later (`Mesh01-ca89 … 132 … 14:04:26`), so the propagation is
+bidirectional and the two ends agree. The flag is back at `1`, this time
+marking work that was actually done.
+
+### The soak was not harmed, and it was measured rather than assumed
+
+Node 1's association counters, before the change and after the mesh point's
+reboot:
+
+| | station A1 `9c:04:b6:ff:df:fe` | station `0c:bf:74:40:8e:91` |
+|---|---|---|
+| 13:49:48 | 345912 s | 345862 s |
+| 14:04:55 | 346818 s | 346768 s |
+| delta | **906 s** | **906 s** |
+
+Wall clock over the same interval is **907 s**. The associations are continuous
+across the co-channel reboot — but note that this is a measurement of what
+happened, not of what was risked: the radio did bounce, and the soak survived it
+because HaLow reassociation is fast, not because the bounce was avoided.
+
+### Left open
+
+- Both databases still carry stale `BCM2711-*` rows from the 10.42 era, one of
+  them with a `10.42.x` address. Harmless, but they make the tables harder to
+  read.
+- The gate handed the mesh point a lease from its own pool
+  (`f2:75:4b:bf:33:f3 → 10.41.0.123`) and that lease predates the change.
+- `force=1` remains set on both. With the ranges now disjoint it is correct.
+
 ## 2026-09-19 (evening) — a second OpenMANET box, a working mesh, and a co-channel neighbour on the lab's own frequency
 
 A new SenseCAP M1 was flashed with OpenMANET 1.8.0 and, with a second board,

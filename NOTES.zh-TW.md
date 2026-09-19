@@ -2,6 +2,100 @@
 
 *[English](NOTES.md)*
 
+## 2026-09-19（深夜）—— 重複的 DHCP 池，以及一個在實驗開始前就已經錯掉的前提
+
+當天稍早留下的未解缺陷：兩台 OpenMANET 節點都在發**完全相同**的池
+`10.41.0.116–131`，而且 `force=1`，儘管兩台上的 openmanetd 都在跑。在 gate 每次都
+搶贏的情況下無害，但危險正好埋在 mesh point 存在的理由裡——gate 掛掉、由 mesh point
+接手應答的那個情境。
+
+原訂的實驗是**在 mesh 已建立的狀態下重啟 mesh point**，讓 openmanetd 聽到 gate 的宣
+告後重新協調。這個實驗從未執行，因為先讀狀態就推翻了它的前提。
+
+### 兩台一直在講話，而且沒有停過
+
+openmanetd 在 `/etc/openmanetd/openmanetd.db` 有一個 SQLite 資料庫，表 `mesh_nodes`，
+每個鄰居都存一組 `uci_dhcp_start` / `uci_dhcp_limit`。二進位檔裡有
+`GetAlfredDataTypeAddressReservation` 和 `addressReservationWorkerReserveInterval`，
+所以範圍是透過 alfred 交換、由計時器驅動的。盒子上沒有 sqlite3；兩台的資料庫都複製
+回筆電（`.db`、`-wal`、`-shm` 三個要一起拿，否則讀出來的狀態不一致）再讀。
+
+雙方本來就都持有對方那一列，而且**兩列的 `updated_at` 都是探測的當下那一分鐘**：
+
+| 讀取自 | 主機名 | ip | start | limit | updated_at |
+|---|---|---|---|---|---|
+| mesh point | HalowGW-3e60 | 10.41.0.1 | **116** | 16 | 13:51:30 —— 即時 |
+| gate | Mesh01-ca89 | 10.41.1.1 | **116** | 16 | 13:52:26 —— 即時 |
+
+也就是說，這個衝突對兩台節點都是持續可見的，而兩台都沒有動作。「它們聽不到對方」是
+錯的。
+
+### 成因是一個能撐過重開機的一次性旗標
+
+`/etc/config/openmanetd` 裡有 `option dhcpconfigured '1'`，而二進位檔匯出了
+`network.IsDHCPConfiguredWithReader` 和 `network.SetDHCPConfiguredWithReader`。
+worker 會檢查這個旗標然後跳過。旗標寫在磁碟上，所以重開機也不會清掉。
+
+機制本身是好的，舊資料列證明它正確運作過一次：三筆較舊的紀錄，來自已被還原的 10.42
+時期、以及精靈重跑前的 `BCM2711-*` 主機名，非 gate 的節點全都是 **`start=100`**——
+一個 openmanetd 自己挑出來、不衝突的範圍。把它弄壞的是設定精靈：它把 DHCP 設定改回
+預設的 116，**卻把旗標留在 1**。設定被覆蓋了，而系統仍然認為自己已經設定完成。
+
+### 為什麼原訂的實驗會給出一個謊
+
+單純重啟會讓旗標維持 1，worker 跳過，池停在 116——而這個 null result 最自然的讀法
+是「openmanetd 不會協調重複的池」。那會是錯的。它根本沒有試。這和「驗證儀器」這條
+規則下的每一則紀錄是同一個形狀：一個看起來像答案的結果，只因為被量測的東西從來沒有
+執行過。
+
+### 實際做了什麼，代價是什麼
+
+只在 mesh point 上，先備份 `/etc/config/dhcp` 和 `/etc/config/openmanetd` 並用 `cmp`
+驗過副本之後：
+
+```
+uci set openmanetd.config.dhcpconfigured='0' && uci commit openmanetd
+/etc/init.d/openmanetd restart
+```
+
+**重啟 daemon 把整台機器重開了。** 這不在預期內——當初選這個做法而不是重開機，正是
+為了避免彈一個與 soak 共用頻道 40 / 922.0 MHz 的無線電。openmanetd 提交了新的 DHCP
+設定，然後把整台帶下去：ssh 在指令中途斷線，batman-adv 有約 70 秒看不到鄰居，回來時
+是 `up 1 min`。任何 `dhcpconfigured` 的變更都要當成「會重開機」來規劃，不是重啟服務。
+
+結果，從運行中的 dnsmasq 設定讀出來而不是讀 uci：
+
+```
+mesh point:  dhcp-range=set:ahwlan,10.41.0.132,10.41.0.147,255.255.0.0,12h
+gate:        dhcp-range=set:ahwlan,10.41.0.116,10.41.0.131,255.255.0.0,12h
+```
+
+相鄰且不重疊。gate 在大約兩到三分鐘後透過 alfred 學到新值
+（`Mesh01-ca89 … 132 … 14:04:26`），所以傳播是雙向的，兩端一致。旗標回到 `1`，這次
+標記的是真正做完的工作。
+
+### soak 沒有受損，而且這是量出來的不是假設的
+
+節點 1 的關聯計數器，變更前與 mesh point 重開之後：
+
+| | station A1 `9c:04:b6:ff:df:fe` | station `0c:bf:74:40:8e:91` |
+|---|---|---|
+| 13:49:48 | 345912 s | 345862 s |
+| 14:04:55 | 346818 s | 346768 s |
+| 差 | **906 s** | **906 s** |
+
+同一區間的牆上時間是 **907 秒**。關聯在這次同頻重開中全程連續——但要注意，這量到的
+是「發生了什麼」，不是「冒了多少風險」：無線電確實彈了，soak 活下來是因為 HaLow 重新
+關聯夠快，不是因為我們避開了那一下。
+
+### 仍未處理
+
+- 兩台的資料庫都還留著 10.42 時期的 `BCM2711-*` 舊列，其中一筆的位址還是 `10.42.x`。
+  無害，但讓表變得難讀。
+- gate 曾從自己的池發了一個租約給 mesh point（`f2:75:4b:bf:33:f3 → 10.41.0.123`），
+  而這個租約早於本次變更。
+- 兩台的 `force=1` 都還在。範圍已不重疊，現在這個設定是正確的。
+
 ## 2026-09-19（晚間）—— 第二台 OpenMANET、一個能動的 mesh，以及實驗室頻道上多出來的同頻鄰居
 
 一片新的 SenseCAP M1 刷上 OpenMANET 1.8.0，加上第二片板子，組成一個兩節點的
